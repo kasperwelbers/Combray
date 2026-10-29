@@ -151,3 +151,15 @@ describe('compareShape', () => {
     expect(compareShape(tree, extractShape(watchHistory))).toEqual({ unknown: [], missing: [] });
   });
 });
+
+describe('lifters', () => {
+  it('make an inner node a leaf whose one decision covers its output', () => {
+    let tree = base();
+    tree.children![0]!.children!.find((c) => c.name === 'subtitles')!.lifter = '(node) => ({})';
+    tree = setDecision(tree, ['[*]', 'subtitles'], 'donate');
+    const states = effectiveStates(tree);
+    expect(states.get(getNode(tree, ['[*]', 'subtitles'])!)).toBe('donate');
+    expect(states.get(getNode(tree, ['[*]', 'subtitles', '[*]', 'name'])!)).toBe('ignore');
+    expect(state(tree, ['[*]'])).toBe('donate');
+  });
+});

@@ -2,7 +2,7 @@ export * from './tree';
 export { inferType } from './infer';
 export { parsePath, findPath, globMatch, PathError } from './path';
 export type { Path, PathMatch, Segment, NamePattern, ElementSelector } from './path';
-export { extractShape, screenName, countBucket, mergeAll, shapeSize, ITEM_NAME, COLLAPSED_NAME } from './shape';
+export { extractShape, screenName, elementName, countBucket, mergeAll, shapeSize, ITEM_NAME, COLLAPSED_NAME } from './shape';
 export type { Shape, CountBucket } from './shape';
 export { parseFile, parseEntries, parseZip, mergeDirs, decodeText, jsonToTree } from './parse';
 export type { ParseOptions, FileEntry } from './parse';
@@ -33,3 +33,5 @@ export type {
   MergeConflict,
   ShapeComparison,
 } from './decisions';
+export { deriveTables, deriveRows } from './derive';
+export type { TableDef, ColumnDef, DerivedRow } from './derive';

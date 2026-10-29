@@ -25,6 +25,16 @@ export interface ProjectNode {
   decision?: Exclude<LeafDecision, 'undecided'>;
   /** Inner nodes only: rows below this node form a table. */
   table?: true;
+  /**
+   * Inner nodes only: a sandboxed function from this node's subtree to a map. The node then
+   * counts as a leaf: its children are hidden from decisions and its one decision covers
+   * every key the lifter outputs.
+   */
+  lifter?: string;
+  /** Repeated inner nodes only: how a list below a table's rows is shown by default. */
+  unnest?: 'count' | 'longer' | 'wider';
+  /** Donated leaves only: donate the value as in the file instead of transformed. */
+  raw?: true;
   label?: Localized;
   /** One participant-facing sentence, for donated leaves. */
   description?: Localized;
@@ -48,8 +58,9 @@ export class DecisionError extends Error {
 
 const LEAF_KINDS = new Set<NodeKind>(['value', 'text', 'blob']);
 
-export function isLeaf(node: { kind: NodeKind }): boolean {
-  return LEAF_KINDS.has(node.kind);
+/** A value, text or blob, or an inner node with a lifter. */
+export function isLeaf(node: { kind: NodeKind; lifter?: string }): boolean {
+  return LEAF_KINDS.has(node.kind) || node.lifter !== undefined;
 }
 
 /** True if `name` is the node's canonical name or matches one of its aliases. */
@@ -162,6 +173,8 @@ export function effectiveStates(root: ProjectNode): Map<ProjectNode, EffectiveSt
       for (const child of node.children ?? []) visit(child, true);
     } else if (isLeaf(node)) {
       state = node.decision ?? 'show';
+      // Below a lifter, nodes are input to the lifter, not imported themselves.
+      for (const child of node.children ?? []) visit(child, true);
     } else {
       state = 'ignore';
       for (const child of node.children ?? []) {
@@ -180,6 +193,7 @@ export function effectiveStates(root: ProjectNode): Map<ProjectNode, EffectiveSt
 /** Paths of the leaves below `node` (inclusive) with an explicit show or donate decision. */
 function decidedLeaves(node: ProjectNode, path: NodePath, out: NodePath[] = []): NodePath[] {
   if (isLeaf(node) && (node.decision === 'show' || node.decision === 'donate')) out.push(path);
+  if (node.lifter !== undefined) return out;
   for (const child of node.children ?? []) decidedLeaves(child, [...path, child.name], out);
   return out;
 }
@@ -215,7 +229,9 @@ export function setTable(root: ProjectNode, path: NodePath, table: boolean): Pro
   const tree = structuredClone(root);
   const node = getNode(tree, path);
   if (!node) throw new DecisionError(`no node at ${path.join('/')}`);
-  if (isLeaf(node)) throw new DecisionError('only inner nodes can be tables');
+  if (isLeaf(node) && node.lifter === undefined) {
+    throw new DecisionError('only inner nodes can be tables');
+  }
   if (table) node.table = true;
   else delete node.table;
   return tree;
