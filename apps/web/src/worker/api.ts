@@ -29,7 +29,17 @@ export interface TableManifest {
   errorCount: number;
 }
 
-export type DatasetManifest = SourceManifest | TableManifest;
+/** A file of a source, kept as one encrypted blob of its raw bytes. Never sent anywhere. */
+export interface FileManifest {
+  type: 'file';
+  sourceId: string;
+  /** Path inside the picked folder, or the file name. */
+  path: string;
+  mime: string;
+  size: number;
+}
+
+export type DatasetManifest = SourceManifest | TableManifest | FileManifest;
 
 export interface TableSummary {
   id: string;
@@ -130,13 +140,25 @@ export interface StoreStatus {
   unlocked: boolean;
 }
 
-export type UnlockResult = 'ok' | 'wrong-passphrase';
+/** Why a store could not be created or opened. `retryAfter` is in seconds. */
+export type KeyServiceProblem =
+  | { status: 'too-many-attempts'; retryAfter: number }
+  | { status: 'unreachable' };
+
+export type CreateResult = { status: 'ok' } | { status: 'invalid-password' } | KeyServiceProblem;
+
+export type UnlockResult =
+  | { status: 'ok' }
+  | { status: 'wrong-password'; retryAfter?: number }
+  /** The server no longer has this store's key, so the data cannot be opened again. */
+  | { status: 'store-gone' }
+  | KeyServiceProblem;
 
 /** The data worker's API. All parsing, encryption and querying happen behind it. */
 export interface DataApi {
   status(): Promise<StoreStatus>;
-  create(passphrase: string): Promise<void>;
-  unlock(passphrase: string): Promise<UnlockResult>;
+  create(password: string): Promise<CreateResult>;
+  unlock(password: string): Promise<UnlockResult>;
   lock(): Promise<void>;
   destroy(): Promise<void>;
   importFiles(

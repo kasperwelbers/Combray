@@ -88,17 +88,18 @@ export function App() {
           <Lock
             exists={status.exists}
             {...(notice ? { notice } : {})}
-            onCreate={async (passphrase) => {
-              await data.create(passphrase);
-              await refresh();
+            onCreate={async (password) => {
+              const result = await data.create(password);
+              if (result.status === 'ok') await refresh();
+              return result;
             }}
-            onUnlock={async (passphrase) => {
-              const result = await data.unlock(passphrase);
-              if (result === 'ok') {
+            onUnlock={async (password) => {
+              const result = await data.unlock(password);
+              if (result.status === 'ok') {
                 setNotice(undefined);
                 await refresh();
               }
-              return result === 'ok';
+              return result;
             }}
             onDeleteAll={deleteAll}
           />

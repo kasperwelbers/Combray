@@ -18,12 +18,13 @@ import {
   type TreeNode,
 } from '@combray/core';
 import { importers } from '@combray/importers';
-import { LocalStore, WrongPassphraseError } from '@combray/store';
+import { LocalStore, WrongKeyError } from '@combray/store';
 import * as Comlink from 'comlink';
 
 import type {
   DataApi,
   DatasetManifest,
+  FileManifest,
   DatasetSummary,
   ImportProgress,
   SourceManifest,
@@ -31,6 +32,7 @@ import type {
   TableSummary,
   Upload,
 } from './api';
+import { createServerStore, deleteServerStore, fetchKek } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
 import { rows, timeline, topItems } from './tables';
@@ -170,16 +172,25 @@ const api: DataApi = {
     return { exists: s.exists, unlocked: s.unlocked };
   },
 
-  async create(passphrase) {
-    await (await getStore()).create(passphrase);
+  async create(password) {
+    const s = await getStore();
+    const created = await createServerStore(password);
+    if (!created.ok) return created.result;
+    await s.create(created.store);
+    return { status: 'ok' };
   },
 
-  async unlock(passphrase) {
+  async unlock(password) {
+    const s = await getStore();
+    if (!s.storeId) throw new Error('no store on this device yet');
+    const fetched = await fetchKek(s.storeId, password);
+    if (!fetched.ok) return fetched.result;
     try {
-      await (await getStore()).unlock(passphrase);
-      return 'ok';
+      await s.unlock(fetched.kek);
+      return { status: 'ok' };
     } catch (error) {
-      if (error instanceof WrongPassphraseError) return 'wrong-passphrase';
+      // The server gave a key, but not this store's: its master key must have changed.
+      if (error instanceof WrongKeyError) return { status: 'store-gone' };
       throw error;
     }
   },
@@ -193,7 +204,10 @@ const api: DataApi = {
   async destroy() {
     cache.clear();
     tableCache.clear();
-    await (await getStore()).destroy();
+    const s = await getStore();
+    // Crypto-shred first: once the server forgets the KEK, even a copy of this disk is useless.
+    if (s.storeId && s.deleteToken) await deleteServerStore(s.storeId, s.deleteToken);
+    await s.destroy();
     store = undefined;
   },
 
@@ -216,6 +230,11 @@ const api: DataApi = {
     onProgress({ step: 'encrypting' });
     const id = await s.putDataset(manifest, nodes);
     cache.set(id, nodes);
+    // Keep the raw files too, one encrypted blob each, so better importers can read them later.
+    for (const { file, path } of uploads) {
+      const fileManifest: FileManifest = { type: 'file', sourceId: id, path, mime: file.type, size: file.size };
+      await s.putFile(fileManifest, file);
+    }
     onProgress({ step: 'importers' });
     const tables = await runImporters(s, id, tree, importedAt);
     onProgress({ step: 'done' });
@@ -238,9 +257,9 @@ const api: DataApi = {
 
   async deleteDataset(id) {
     const s = await unlockedStore();
-    // Deleting a source also deletes the tables found in it.
+    // Deleting a source also deletes its files and the tables found in it.
     for (const d of await s.listDatasets()) {
-      if (d.manifest.type === 'table' && d.manifest.sourceId === id) {
+      if (d.manifest.type !== 'source' && d.manifest.sourceId === id) {
         tableCache.delete(d.id);
         await s.deleteDataset(d.id);
       }
