@@ -10,7 +10,9 @@ Combray is built from three separately deployable parts, so that a university ca
 | **Web client** | Participants (with lab staff) | Any modern browser | Import, store encrypted, explore, reflect, enrich with consent, donate encrypted |
 | **Combray server** | A university, a lab, or one researcher | A VM, a lab laptop, or a container host | Host projects and the web client, hold the symmetric keys for participants' local stores, enrich URLs, store encrypted donations |
 
-A shared **core** library (`combray-core`, Rust) implements the tree model, path language, shape extraction, unfolding and aggregation. It compiles to WebAssembly for the web client and Studio's UI, and natively for the server and Studio, so all three agree exactly on formats.
+A shared **core** library (`packages/core`, TypeScript) implements the tree model, parsers, path language and shape extraction, and runs in a web worker in the browser. A Rust/WASM layer is only added for hot paths once measurements show it is needed ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
+
+> **Update ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)):** the researcher tool is reduced to a small local tool that creates the key pair, signs project configs and decrypts donations. The rest of what this document calls Studio (configuring projects, participants, importers) can be a browser UI, because it never handles the private key.
 
 ```
   researcher's computer                 university VM                     participant's browser
@@ -76,7 +78,7 @@ Recommendation: **React SPA with Vite**, installable as a PWA so a lab laptop ke
 - *sandbox worker*: runs QuickJS importer scripts and WASM plugins with no network and bounded resources (see [plugins.md](plugins.md)).
 - *crypto worker*: bulk encryption and decryption, HPKE for donations.
 
-**Why Rust/WASM in the client.** Parsing a 2 GB Takeout and aggregating millions of nodes is where JavaScript struggles. A Rust core gives predictable memory use, and sharing it with Studio and the server means the shape format, path language and importer semantics are implemented once. We should still measure: for many studies, plain TypeScript in a worker is fast enough. DuckDB-WASM is an alternative for tabular aggregation; powerful but several megabytes and table-centric, so better as an optional plugin than as the foundation.
+**TypeScript first, Rust/WASM where measured.** The core is TypeScript in a worker ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)). Parsing a 2 GB Takeout and aggregating millions of nodes is where JavaScript may struggle; if measurements show that, the hot path moves to Rust compiled to WASM, tested against the same cases. DuckDB-WASM is an alternative for tabular aggregation; powerful but several megabytes and table-centric, so better as an optional plugin than as the foundation.
 
 **Internationalisation.** i18next, as in DigitalFootprintsLab. English and Dutch from day one; importers carry language variants of file and key names.
 
@@ -120,30 +122,29 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 
 ## Monorepo layout
 
+What exists now is marked with ✓; the rest is planned.
+
 ```
 combray/
 ├── apps/
-│   ├── web/                  participant web client (React SPA)
-│   └── studio/               researcher tool UI (React, served by combray-studio on localhost)
+│   └── web/                  ✓ participant web client (React SPA, Vite)
 ├── packages/
+│   ├── core/                 ✓ tree model, parsers, paths, shapes (TypeScript)
+│   ├── store/                ✓ encrypted local IndexedDB store
 │   ├── ui/                   design system: tokens, components, illustrations
-│   ├── core-js/              TypeScript bindings for combray-core (WASM)
-│   ├── crypto/               client crypto (WebCrypto + HPKE), test vectors shared with Rust
+│   ├── crypto/               donation crypto (HPKE), test vectors shared with Rust
 │   └── viz/                  tree-aware visualisation components
 ├── crates/
-│   ├── combray-core/         tree, paths, shapes, unfold, aggregate (native + wasm)
+│   ├── combray-server/       ✓ shared server (axum)
 │   ├── combray-crypto/       envelope format, HPKE, signatures, key files
-│   ├── combray-server/       shared server (axum)
-│   └── combray-studio/       researcher tool binary: localhost UI + CLI
+│   └── combray-keys/         local key tool: key pairs, config signing, decryption
 ├── importers/                importer specs (YAML) + synthetic fixtures + expected output
 ├── plugins/                  example WASM plugins (anonymiser, classifier)
-├── deploy/
-│   ├── docker-compose.yml    server
-│   └── examples/             example project configs
+├── deploy/                   ✓ docker compose, Caddyfile, example project configs
 └── docs/
 ```
 
-Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, `wasm-bindgen` to build the core for the browser, and a `justfile` with common tasks (`just dev`, `just test`, `just build`, `just release`). CI publishes the server image, server binaries, and signed Studio binaries for Windows, macOS and Linux.
+Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, and a `justfile` with common tasks (`just dev`, `just test`, `just check`, `just build`, `just docker`). CI runs type checks, tests, clippy and a Docker build; later it publishes the server image and signed key-tool binaries.
 
 ## Deployment shapes
 
@@ -157,7 +158,7 @@ See [deployment.md](deployment.md).
 
 ## Open questions
 
-- Start the core in TypeScript and port to Rust, or start in Rust? (Recommendation: define the formats in Rust from the start, but allow TypeScript implementations of simple operations while the WASM build matures.)
-- Studio as localhost binary first, Tauri later, or Tauri from the start?
+- ~~Start the core in TypeScript and port to Rust, or start in Rust?~~ Decided: TypeScript first ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
+- ~~Studio as localhost binary first, Tauri later, or Tauri from the start?~~ Decided: a small local key tool, researcher UI in the browser ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
 - Can several servers federate (a project registered on two servers), or is a project always bound to one server? Recommendation: one server per project.
 - Facilitator view: same app on a second device, synced through the server? That would mean the server relays encrypted UI state, which needs its own design.

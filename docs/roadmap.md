@@ -2,7 +2,7 @@
 
 A phased plan. Each phase ends with something usable, so the design can be tested with real (consenting team member) data early.
 
-## Phase 0: design (now)
+## Phase 0: design (done)
 
 - These documents, reviewed and argued over.
 - Decide the open questions marked as blocking in [open-questions.md](open-questions.md).
@@ -11,21 +11,24 @@ A phased plan. Each phase ends with something usable, so the design can be teste
 
 Goal: import a Google Takeout and a TikTok export, explore them, entirely in the browser.
 
-- Monorepo skeleton: pnpm + Cargo workspaces, CI, `justfile`.
-- `combray-core`: tree model, parsers (JSON, CSV, HTML, zip), path language, shape extraction, unfolding. Native and WASM builds with shared tests.
-- Importer spec format and runner; QuickJS sandbox; converter for old data-donation-importers recipes; first platform packs (Google Takeout: YouTube, search, browsing; TikTok).
-- Encrypted local store (passphrase unlock), workers, Comlink.
-- First views: memory lane, timeline, top items, tree browser.
-- Design system v0: palette, type, madeleine placeholder, town placeholder.
+- [x] Monorepo skeleton: pnpm + Cargo workspaces, CI, `justfile`.
+- [x] `packages/core` (TypeScript, [ADR 0003](decisions/0003-typescript-core-and-key-tool.md)): tree model, parsers (JSON, JSON Lines, CSV, HTML, XML, text, zip), path language, shape extraction.
+- [ ] Unfolding and aggregation for views.
+- [ ] Importer spec format and runner; QuickJS sandbox; converter for old data-donation-importers recipes; first platform packs (Google Takeout: YouTube, search, browsing; TikTok).
+- [x] Encrypted local store (passphrase unlock), data worker, Comlink.
+- [x] Tree browser and structure view. [ ] Memory lane, timeline, top items.
+- [x] Design system v0: palette, madeleine placeholder, town placeholder. [ ] Self-hosted fonts.
+- [x] Minimal Rust server (web client, health, read-only project configs), Docker image and compose file, pulled forward from Phase 2.
 
-## Phase 2: Studio, server and donation
+## Phase 2: researcher tools, server and donation
 
-Goal: a researcher with no programming experience creates a project in Studio, registers it on a shared server, runs sessions, and decrypts donations locally.
+Goal: a researcher with no programming experience creates a project, registers it on a shared server, runs sessions, and decrypts donations locally.
 
-- Combray Studio v0: create project, generate keys with guided backup, configure from platform packs, register on a server, create participant codes, download and decrypt donations, export.
+- Local key tool v0: generate keys with guided backup, sign project configs, decrypt donations, export ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
+- Researcher UI in the browser: create a project, configure from platform packs, register on a server, create participant codes, download encrypted donations.
 - Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, store-key service (server unlock), donation storage on its own disk.
 - `combray-crypto`: HPKE with X-Wing, envelope format, signatures, key files; test vectors shared with the client.
-- CLI equivalents of the Studio functions for power users.
+- CLI equivalents of the key tool functions for power users.
 - Donation flow: preview, exclusions, consent receipts, probes and answers.
 - Docker image and compose file; deployment guide.
 - External review of the crypto design.
