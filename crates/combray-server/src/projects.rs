@@ -8,7 +8,7 @@ use regex::Regex;
 use serde::Deserialize;
 
 /// Names that cannot be project ids, because the web client is served at `/{project}/`.
-const RESERVED: &[&str] = &["api", "assets"];
+const RESERVED: &[&str] = &["api", "assets", "studio"];
 
 pub fn valid_project_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
@@ -138,6 +138,7 @@ mod tests {
         assert!(valid_project_id("willow"));
         assert!(!valid_project_id("api"));
         assert!(!valid_project_id("assets"));
+        assert!(!valid_project_id("studio"));
         assert!(!valid_project_id("Willow"));
     }
 

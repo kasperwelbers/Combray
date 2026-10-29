@@ -1,7 +1,18 @@
 import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
-import { findPath, flatten, mergeDirs, parseEntries, parseFile, unflatten, type DirNode, type TreeNode } from '../src';
+import {
+  findPath,
+  flatten,
+  jsonToTree,
+  mergeDirs,
+  parseEntries,
+  parseFile,
+  unflatten,
+  uploadRoot,
+  type DirNode,
+  type TreeNode,
+} from '../src';
 import { takeout } from './fixtures';
 
 const text = (s: string) => strToU8(s);
@@ -120,6 +131,19 @@ describe('flatten', () => {
         for (let i = 0; i < node.count!; i++) expect(flat[node.first + i]!.parent).toBe(flat.indexOf(node));
       }
     }
+  });
+});
+
+describe('uploadRoot', () => {
+  it('drops the upload name and unwraps the one folder of an archive', () => {
+    const zip: DirNode = {
+      kind: 'dir',
+      name: 'takeout-001.zip',
+      children: [{ kind: 'dir', name: 'Takeout', children: [{ kind: 'dir', name: 'Chrome', children: [] }] }],
+    };
+    expect(uploadRoot(zip, true)).toEqual({ kind: 'dir', name: '', children: [{ kind: 'dir', name: 'Chrome', children: [] }] });
+    expect(uploadRoot(zip, false)).toEqual({ ...zip, name: '' });
+    expect(uploadRoot(jsonToTree('kaspers_tiktok.json', { a: 1 }), false).name).toBe('');
   });
 });
 

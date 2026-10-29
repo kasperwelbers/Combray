@@ -121,9 +121,9 @@ function fromShape(shape: Shape): ProjectNode {
   return node;
 }
 
-/** A new project tree from a shape, with every node undecided. */
+/** A new project tree from a shape, with every node undecided. The root has no name. */
 export function projectTreeFromShape(shape: Shape): ProjectNode {
-  return fromShape(shape);
+  return { ...fromShape(shape), name: '' };
 }
 
 function toShape(node: ProjectNode): Shape {

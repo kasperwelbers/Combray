@@ -1,5 +1,5 @@
 import { localize } from '@combray/core';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Madeleine, Skyline } from './components/Madeleine';
@@ -16,6 +16,9 @@ import type { DatasetSummary, ProjectInfo, StoreStatus, TableSummary } from './w
 import { data } from './worker/client';
 
 const IDLE_MINUTES = 15;
+
+// The researcher workspace and its worker load only on /studio/.
+const Studio = lazy(() => import('./studio/Studio').then((m) => ({ default: m.Studio })));
 
 export function App() {
   const [route] = useState(readRoute);
@@ -48,6 +51,15 @@ export function App() {
     })();
   }, [route]);
 
+  if (route.kind === 'studio') {
+    return (
+      <Shell wide>
+        <Suspense fallback={null}>
+          <Studio />
+        </Suspense>
+      </Shell>
+    );
+  }
   if (route.kind === 'home') {
     return (
       <Shell>
@@ -72,7 +84,14 @@ export function App() {
   );
 }
 
-function Shell({ project, actions, children }: { project?: ProjectInfo; actions?: ReactNode; children: ReactNode }) {
+interface ShellProps {
+  project?: ProjectInfo;
+  actions?: ReactNode;
+  wide?: boolean;
+  children: ReactNode;
+}
+
+function Shell({ project, actions, wide, children }: ShellProps) {
   const { t, i18n } = useTranslation();
   return (
     <div className="shell">
@@ -96,7 +115,7 @@ function Shell({ project, actions, children }: { project?: ProjectInfo; actions?
           {actions}
         </div>
       </header>
-      <main>{children}</main>
+      <main className={wide ? 'wide' : undefined}>{children}</main>
       <footer>
         <Skyline />
         <div className="footer">{t('app.local')}</div>

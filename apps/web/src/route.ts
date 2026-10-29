@@ -1,5 +1,6 @@
 /**
- * Where the participant is: the project overview at `/`, or a project at `/{project}/`.
+ * Where the participant is: the project overview at `/`, or a project at `/{project}/`. The
+ * researcher workspace is at `/studio/`.
  *
  * A study link can carry a participant id (`#id=P1234`) or a password reset token
  * (`#reset=…`) in the fragment, which browsers never send to the server, so they stay out of
@@ -9,6 +10,7 @@
 
 export type Route =
   | { kind: 'home' }
+  | { kind: 'studio' }
   | { kind: 'project'; projectId: string; participantId?: string; resetToken?: string };
 
 const PROJECT_ID = /^[a-z0-9-]{1,64}$/;
@@ -34,6 +36,7 @@ function remember(projectId: string, participantId: string): void {
 export function parseRoute(pathname: string, hash: string): Route {
   const [first, ...rest] = pathname.split('/').filter(Boolean);
   if (!first || rest.length > 0 || !PROJECT_ID.test(first)) return { kind: 'home' };
+  if (first === 'studio') return { kind: 'studio' };
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const route: Route = { kind: 'project', projectId: first };
   const id = params.get('id');
@@ -52,6 +55,8 @@ export function readRoute(): Route {
       const id = remembered(route.projectId);
       if (id) route.participantId = id;
     }
+  } else if (route.kind === 'studio') {
+    if (location.pathname !== '/studio/') history.replaceState(null, '', '/studio/');
   } else if (location.pathname !== '/') {
     history.replaceState(null, '', '/');
   }

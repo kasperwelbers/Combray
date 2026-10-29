@@ -635,3 +635,282 @@ button.node:hover {
   font-weight: 600;
   padding-left: 1rem;
 }
+
+/* Researcher workspace (/studio/) */
+main.wide {
+  width: min(1400px, 100% - 2rem);
+}
+
+.studio-top {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  margin-bottom: 1.5rem;
+}
+
+.studio-top .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.studio-section {
+  margin-top: 2.5rem;
+}
+
+.studio-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 1000px) {
+  .studio-grid {
+    grid-template-columns: minmax(0, 1fr) 24rem;
+  }
+
+  .node-panel {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+  }
+}
+
+.export-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+
+.export-list li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0 1rem;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0 0.5em;
+  margin-left: 0.4em;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.donate-tag {
+  border-color: var(--madeleine);
+  color: var(--madeleine-deep);
+}
+
+.decision-tree,
+.decision-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.decision-tree ul {
+  padding-left: 1.4rem;
+  border-left: 1px dotted var(--line);
+}
+
+.decision-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.2rem 0.25rem;
+  border-radius: 8px;
+  border-left: 4px solid transparent;
+}
+
+.decision-line.selected {
+  background: var(--paper-deep);
+}
+
+.state-donate > .decision-line {
+  border-left-color: var(--madeleine);
+}
+
+.state-show > .decision-line {
+  border-left-color: var(--tilleul);
+}
+
+.state-undecided > .decision-line {
+  border-left-color: var(--line);
+  border-left-style: dashed;
+}
+
+.state-ignore > .decision-line {
+  opacity: 0.6;
+}
+
+.toggle {
+  width: 1.6rem;
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.decision-name {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.decision-name:hover {
+  text-decoration: underline;
+}
+
+.decision-tags {
+  flex: 1;
+}
+
+.decision-controls {
+  margin-left: auto;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.seg {
+  background: var(--paper);
+  border: none;
+  border-left: 1px solid var(--line);
+  padding: 0.1em 0.7em;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.seg:first-child {
+  border-left: none;
+}
+
+.seg:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.seg[aria-pressed='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--paper-deep);
+}
+
+.seg-donate[aria-pressed='true'],
+.seg-table[aria-pressed='true'] {
+  background: var(--madeleine);
+  color: #2b1d0f;
+}
+
+.seg-show[aria-pressed='true'] {
+  background: var(--tilleul);
+  color: #2b1d0f;
+}
+
+.node-panel h2 {
+  word-break: break-word;
+}
+
+.panel-group {
+  border: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.panel-group legend {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.field textarea,
+.field select,
+.alias-form input,
+.alias-form select {
+  padding: 0.5em 0.7em;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.alias-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.alias-list li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.alias-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.alias-form .check {
+  margin: 0;
+}
+
+.preview-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.preview-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+.preview-table th,
+.preview-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  max-width: 28rem;
+  word-break: break-word;
+}
+
+.preview-table th {
+  background: var(--paper-deep);
+  position: sticky;
+  top: 0;
+}
+
+.cell-items {
+  margin: 0.25rem 0 0;
+  padding-left: 1.2rem;
+}

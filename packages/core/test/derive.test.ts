@@ -18,7 +18,7 @@ describe('deriveTables', () => {
   it('makes implicit tables at repeated nodes, with list cells below none', () => {
     const tables = deriveTables(base());
     expect(tables.map((t) => [t.name, t.rows, t.implicit, t.parent])).toEqual([
-      ['watch-history.json', ['[*]'], true, undefined],
+      ['', ['[*]'], true, undefined],
       ['subtitles', ['[*]', 'subtitles', '[*]'], true, 0],
     ]);
     expect(tables[0]!.columns.map((c) => [c.id, c.name, c.type])).toEqual([
@@ -62,7 +62,7 @@ describe('deriveTables', () => {
     tree = setTable(tree, ['[*]', 'subtitles'], true);
     const tables = deriveTables(tree);
     expect(tables.map((t) => [t.name, t.parent])).toEqual([
-      ['watch-history.json', undefined],
+      ['', undefined],
       ['subtitles', 0],
     ]);
     expect(tables[1]!.columns.map((c) => c.name)).toEqual(['name', 'url']);
