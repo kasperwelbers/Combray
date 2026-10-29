@@ -1,0 +1,15 @@
+id: tiktok/searches
+version: 1
+platform: tiktok
+name:
+  en: TikTok searches
+  nl: TikTok-zoekopdrachten
+match:
+  file: "**/{user_data.json,user_data_tiktok.json}"
+select:
+  rows: "{Activity,Your Activity}/{Search History,Searches}/{SearchList,searchList}/[*]"
+  fields:
+    date: { path: "{Date,date}", as: datetime, format: "YYYY-MM-DD HH:mm:ss" }
+    query: { path: "{SearchTerm,searchTerm}" }
+    words: { from: query, transform: [tokenize] }
+display: { date: date, title: query, group_by: [words] }

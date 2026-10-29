@@ -1,0 +1,15 @@
+id: google-takeout/youtube-subscriptions
+version: 1
+platform: google-takeout
+name:
+  en: YouTube subscriptions
+  nl: YouTube-abonnementen
+match:
+  file: "**/{subscriptions.csv,abonnementen.csv,Abos.csv}"
+select:
+  rows: "[*]"
+  fields:
+    channel: { path: "{Channel title,Kanaaltitel,Kanaltitel}" }
+    channel_url: { path: "{Channel URL,Kanaal-URL,Kanal-URL}", as: url }
+    channel_id: { path: "{Channel Id,Kanaal-ID,Kanal-ID}" }
+display: { title: channel, url: channel_url }

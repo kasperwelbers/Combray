@@ -1,0 +1,30 @@
+{
+  "Your Activity": {
+    "Watch History": {
+      "VideoList": [
+        {
+          "Date": "2025-06-01 19:00:00",
+          "Link": "https://www.tiktok.com/@combray.kitchen/video/7500000000000000001"
+        }
+      ]
+    },
+    "Searches": {
+      "SearchList": [
+        {
+          "Date": "2025-06-01 18:59:00",
+          "SearchTerm": "Combray kitchen"
+        }
+      ]
+    }
+  },
+  "Likes and Favorites": {
+    "Like List": {
+      "ItemFavoriteList": [
+        {
+          "date": "2025-06-01 19:00:30",
+          "link": "https://www.tiktok.com/@combray.kitchen/video/7500000000000000001"
+        }
+      ]
+    }
+  }
+}

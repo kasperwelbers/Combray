@@ -1,0 +1,14 @@
+id: tiktok/likes
+version: 1
+platform: tiktok
+name:
+  en: TikTok likes
+  nl: TikTok-likes
+match:
+  file: "**/{user_data.json,user_data_tiktok.json}"
+select:
+  rows: "{Activity,Your Activity,Likes and Favorites}/{Like List,Liked Videos}/{ItemFavoriteList,itemFavoriteList}/[*]"
+  fields:
+    date: { path: "{Date,date}", as: datetime, format: "YYYY-MM-DD HH:mm:ss" }
+    url: { path: "{Link,link,VideoLink}", as: url }
+display: { date: date, url: url }

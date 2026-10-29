@@ -1,0 +1,25 @@
+{
+  "tiktok/likes": [
+    {
+      "date": "2025-06-01T19:00:30",
+      "url": "https://www.tiktok.com/@combray.kitchen/video/7500000000000000001"
+    }
+  ],
+  "tiktok/searches": [
+    {
+      "date": "2025-06-01T18:59:00",
+      "query": "Combray kitchen",
+      "words": [
+        "combray",
+        "kitchen"
+      ]
+    }
+  ],
+  "tiktok/watch-history": [
+    {
+      "date": "2025-06-01T19:00:00",
+      "url": "https://www.tiktok.com/@combray.kitchen/video/7500000000000000001",
+      "video_id": "7500000000000000001"
+    }
+  ]
+}

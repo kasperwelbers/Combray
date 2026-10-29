@@ -1,0 +1,116 @@
+{
+  "app": {
+    "tagline": "Samen terugkijken op je digitale verleden.",
+    "local": "Je gegevens blijven op deze computer.",
+    "language": "Taal"
+  },
+  "lock": {
+    "createTitle": "Welkom bij Combray",
+    "createIntro": "Je gegevens blijven op deze computer, beveiligd met een wachtzin die alleen jij kent. Kies er een die je onthoudt: als hij vergeten wordt, kan niemand de gegevens meer openen, ook de onderzoekers niet.",
+    "passphrase": "Wachtzin",
+    "confirm": "Typ hem nog een keer",
+    "create": "Maak mijn plek aan",
+    "tooShort": "Gebruik minstens {{min}} tekens.",
+    "mismatch": "De twee wachtzinnen zijn nog niet hetzelfde.",
+    "unlockTitle": "Welkom terug",
+    "unlockIntro": "Typ je wachtzin om je gegevens op deze computer te openen.",
+    "unlock": "Openen",
+    "wrong": "Met deze wachtzin gaat deze plek niet open. Zullen we het nog eens proberen?",
+    "working": "Een moment…",
+    "forgot": "Wachtzin vergeten? Opnieuw beginnen",
+    "confirmDelete": "Hiermee verwijder je alles wat op deze computer is toegevoegd. Dit kan niet ongedaan worden gemaakt. Doorgaan?",
+    "autoLocked": "We hebben je gegevens vergrendeld omdat Combray een tijdje niet is gebruikt.",
+    "lock": "Vergrendelen",
+    "deleteAll": "Alles van deze computer verwijderen"
+  },
+  "home": {
+    "title": "Je herinneringen",
+    "empty": "Hier is nog niets. Zullen we je eerste herinneringen ophalen?"
+  },
+  "import": {
+    "title": "Je gegevens toevoegen",
+    "intro": "Kies het zipbestand dat je van een platform hebt gedownload (zoals Google Takeout of TikTok), een map, of losse bestanden. Alles wordt alleen op deze computer gelezen en bewaard.",
+    "chooseFiles": "Bestanden kiezen",
+    "chooseFolder": "Een map kiezen",
+    "drop": "of sleep ze hierheen",
+    "failed": "Er ging iets mis bij het lezen. Er is niets bewaard.",
+    "step": {
+      "reading_one": "{{count}} bestand lezen…",
+      "reading_other": "{{count}} bestanden lezen…",
+      "parsing": "Uitpakken en lezen…",
+      "shape": "Naar de structuur kijken…",
+      "encrypting": "Veilig en versleuteld bewaren…",
+      "done": "Klaar",
+      "importers": "Kijken of we iets herkennen…"
+    }
+  },
+  "datasets": {
+    "files_one": "{{count}} bestand",
+    "files_other": "{{count}} bestanden",
+    "items_one": "{{count}} onderdeel",
+    "items_other": "{{count}} onderdelen",
+    "imported": "Toegevoegd op {{date}}",
+    "open": "Bekijken",
+    "delete": "Verwijderen",
+    "confirmDelete": "“{{name}}” van deze computer verwijderen?",
+    "browse": "Alles doorbladeren",
+    "found": "Wat we vonden",
+    "nothingFound": "We herkennen hier nog niets in, maar je kunt wel alles doorbladeren."
+  },
+  "explore": {
+    "back": "Terug naar je herinneringen",
+    "browse": "Bladeren",
+    "structure": "Structuur",
+    "search": "Zoeken in deze gegevens",
+    "results_one": "{{count}} resultaat",
+    "results_other": "{{count}} resultaten",
+    "showingFirst": "de eerste {{shown}} worden getoond",
+    "more": "Meer tonen",
+    "inside_one": "{{count}} erin",
+    "inside_other": "{{count}} erin",
+    "path": "Pad",
+    "empty": "Dit is leeg.",
+    "breadcrumbs": "Waar je bent",
+    "shapeIntro": "Dit is de structuur van je gegevens, zonder de inhoud: de namen van bestanden en velden, wat voor soort waarde erin staat en ongeveer hoeveel. Namen die op persoonlijke gegevens lijken worden vervangen, bijvoorbeeld door <email> of <date>. Alleen dit soort informatie zou ooit gedeeld kunnen worden om onderzoekers te helpen, en alleen als je daarmee instemt.",
+    "collapsed": "namen verborgen"
+  },
+  "kind": {
+    "dir": "map",
+    "map": "groep",
+    "list": "lijst",
+    "value": "waarde",
+    "element": "HTML-element",
+    "text": "tekst",
+    "blob": "bestand"
+  },
+  "views": {
+    "memories": "Herinneringen",
+    "timeline": "In de tijd",
+    "top": "Het vaakst",
+    "showingOnly": "Alleen",
+    "showAll": "Weer alles tonen",
+    "nothing": "Hier is niets te zien.",
+    "undated": "Zonder datum",
+    "untitled": "(geen titel)",
+    "noDates": "Er staan geen datums in deze gegevens.",
+    "per": "Per",
+    "unit": {
+      "day": "dag",
+      "week": "week",
+      "month": "maand"
+    },
+    "count_one": "{{count}} onderdeel",
+    "count_other": "{{count}} onderdelen",
+    "timelineCaption": "Hoeveel onderdelen er per {{unit}} zijn. De hoogste staaf is {{max}}. Kies een staaf om die herinneringen te zien.",
+    "undatedCount_one": "{{count}} onderdeel heeft geen datum.",
+    "undatedCount_other": "{{count}} onderdelen hebben geen datum.",
+    "groupBy": "Tellen per",
+    "distinct_one": "{{count}} verschillende waarde in totaal.",
+    "distinct_other": "{{count}} verschillende waarden in totaal."
+  },
+  "fields": {
+    "channel": "kanaal",
+    "words": "woorden",
+    "domain": "website"
+  }
+}

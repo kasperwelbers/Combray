@@ -155,7 +155,7 @@ The catch is where the PRF secret is evaluated. If the passkey ceremony runs in 
 
 Browser crypto is only as trustworthy as the JavaScript that runs it. Mitigations:
 
-- Strict Content Security Policy: no inline scripts, no third-party origins, `connect-src` limited to the Combray server.
+- Strict Content Security Policy: no inline scripts, no third-party origins, `connect-src` limited to the Combray server. The only relaxation is `'wasm-unsafe-eval'`, which lets the browser compile WebAssembly (the QuickJS sandbox) but does not allow JavaScript `eval`.
 - No third-party analytics, fonts or CDNs in production builds. Everything is self-hosted.
 - Reproducible builds, with published hashes of the SPA bundle per release; the server binary embeds the bundle so a deployment runs exactly a released version.
 - Installable PWA so lab machines keep a known version.

@@ -1,0 +1,18 @@
+id: tiktok/watch-history
+version: 1
+platform: tiktok
+name:
+  en: TikTok watch history
+  nl: TikTok-kijkgeschiedenis
+match:
+  file: "**/{user_data.json,user_data_tiktok.json}"
+select:
+  rows: "{Activity,Your Activity}/{Video Browsing History,Watch History}/{VideoList,videoList}/[*]"
+  fields:
+    date: { path: "{Date,date}", as: datetime, format: "YYYY-MM-DD HH:mm:ss" }
+    url: { path: "{Link,link,VideoLink}", as: url }
+    video_id:
+      from: url
+      transform:
+        - match: { pattern: "(?:video/|/v/)(\\d+)", group: 1 }
+display: { date: date, url: url }

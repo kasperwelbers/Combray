@@ -1,0 +1,39 @@
+# Combray server, Phase 1: serves the web client and project configs.
+# See docs/deployment.md. From this directory:
+#
+#   COMBRAY_DOMAIN=combray.example.edu docker compose up -d
+#
+# Without COMBRAY_DOMAIN, Caddy serves https://localhost with a local certificate.
+services:
+  combray:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: combray-server:dev
+    restart: unless-stopped
+    environment:
+      RUST_LOG: info
+    volumes:
+      # Project configs live in ./combray-data/projects/{id}.json. To start:
+      #   mkdir -p combray-data && cp -r examples/projects combray-data/
+      - ./combray-data:/data:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    expose: ["8080"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      COMBRAY_DOMAIN: ${COMBRAY_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [combray]
+
+volumes:
+  caddy-data:
+  caddy-config:

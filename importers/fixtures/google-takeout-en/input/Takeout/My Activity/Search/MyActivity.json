@@ -1,0 +1,20 @@
+[
+  {
+    "header": "Search",
+    "title": "Searched for madeleine recipe",
+    "titleUrl": "https://www.google.com/search?q=madeleine+recipe",
+    "time": "2024-03-01T08:00:00.000Z",
+    "products": [
+      "Search"
+    ]
+  },
+  {
+    "header": "Search",
+    "title": "Visited Madeleines - A Recipe",
+    "titleUrl": "https://www.google.com/url?q=https://recipes.example/madeleines",
+    "time": "2024-03-01T08:00:10.000Z",
+    "products": [
+      "Search"
+    ]
+  }
+]

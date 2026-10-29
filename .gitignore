@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+coverage/
+*.log
+.DS_Store
+.vite/
+combray-data/
+deploy/secrets/
+# Never commit real data download packages (CLAUDE.md, rule 5)
+*.takeout.zip

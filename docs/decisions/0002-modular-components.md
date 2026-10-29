@@ -1,6 +1,6 @@
 # ADR 0002: Three components: researcher tool, web client, shared server
 
-- **Status:** proposed
+- **Status:** accepted, amended by [ADR 0003](0003-typescript-core-and-key-tool.md): the researcher tool is reduced to a small local key tool, with the researcher UI in the browser
 - **Date:** 2026-10-29
 
 ## Context

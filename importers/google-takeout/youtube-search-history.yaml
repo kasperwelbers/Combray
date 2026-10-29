@@ -1,0 +1,19 @@
+id: google-takeout/youtube-search-history
+version: 1
+platform: google-takeout
+name:
+  en: YouTube searches
+  nl: YouTube-zoekopdrachten
+match:
+  file: "**/{search-history.json,zoekgeschiedenis.json,Suchverlauf.json}"
+select:
+  rows: "[*]"
+  fields:
+    query:
+      path: title
+      transform:
+        - replace: { pattern: "^(Searched for|Gezocht naar|Gesucht nach) ", with: "" }
+    url: { path: titleUrl, as: url }
+    date: { path: time, as: datetime }
+    words: { from: query, transform: [tokenize] }
+display: { date: date, title: query, url: url, group_by: [words] }
