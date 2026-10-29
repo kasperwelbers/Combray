@@ -1,5 +1,6 @@
 {
   "id": "example",
   "name": { "en": "Example study", "nl": "Voorbeeldstudie" },
-  "note": "Placeholder. In Phase 2 project configs are signed and registered from the researcher tool."
+  "participants": { "mode": "optional" },
+  "note": "Placeholder. In Phase 2 project configs are signed and registered from the researcher tool. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match) is optional and never sent to clients."
 }

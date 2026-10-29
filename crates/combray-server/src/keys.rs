@@ -3,13 +3,17 @@
 //!
 //! - The server never sees the store's data or its data key (DEK). The device keeps the DEK,
 //!   wrapped under the KEK, next to the encrypted data. Neither side alone can read the data.
-//! - KEK = HKDF-SHA-256(ikm = master key, salt = per-store random salt, info = label || store id).
-//!   The database holds only the salt, so a copy of the database without the master key yields
+//! - KEK = HKDF-SHA-256(ikm = store master key, salt = per-store random salt, info = label || store id).
+//!   The database holds only the salt, so a copy of the database without the store master key yields
 //!   no keys, and deleting the row crypto-shreds the store.
 //! - Passwords are hashed with Argon2id. Failed attempts are counted per store *before* the hash
 //!   is checked, so parallel guesses are counted too, and lead to an increasing lockout.
 //! - Per client IP, attempts and new stores are rate limited in memory. IPs are never stored or
 //!   logged.
+//! - Every store belongs to one project, and optionally to a participant id. Only stores with a
+//!   participant id can have their password reset, with a one-time token a researcher creates
+//!   after verifying who the participant is. A reset replaces the password hash and keeps the
+//!   KEK, so the data on the device opens again.
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -27,6 +31,9 @@ use subtle::ConstantTimeEq;
 use tokio::sync::Semaphore;
 
 const KEK_INFO: &[u8] = b"combray/store-kek/v1/";
+const SCHEMA_VERSION: i64 = 2;
+/// How long a password reset link stays valid.
+pub const RESET_TTL_SECS: i64 = 72 * 3600;
 pub const MIN_PASSWORD_CHARS: usize = 8;
 pub const MAX_PASSWORD_BYTES: usize = 1024;
 /// Failed attempts allowed before the lockout starts.
@@ -78,6 +85,8 @@ pub enum KeyError {
     InvalidPassword,
     /// No such store (never created, or deleted).
     NotFound,
+    /// The reset token is unknown, used, expired, or not for this store.
+    InvalidResetToken,
     WrongPassword {
         retry_after: Option<u64>,
     },
@@ -146,13 +155,13 @@ fn check_password(password: &str) -> Result<(), KeyError> {
     Ok(())
 }
 
-/// Read the master key, or create one if the file does not exist yet.
-pub fn load_master_key(path: &Path) -> std::io::Result<[u8; 32]> {
+/// Read the store master key, or create one if the file does not exist yet.
+pub fn load_store_master_key(path: &Path) -> std::io::Result<[u8; 32]> {
     match std::fs::read(path) {
         Ok(bytes) => bytes.try_into().map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "the master key file must hold exactly 32 bytes",
+                "the store master key file must hold exactly 32 bytes",
             )
         }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -166,7 +175,9 @@ pub fn load_master_key(path: &Path) -> std::io::Result<[u8; 32]> {
             #[cfg(unix)]
             std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
             std::io::Write::write_all(&mut options.open(path)?, &key)?;
-            tracing::warn!("created a new master key file; back it up separately from the data");
+            tracing::warn!(
+                "created a new store master key file; back it up separately from the data"
+            );
             Ok(key)
         }
         Err(e) => Err(e),
@@ -188,7 +199,9 @@ impl KeyService {
             "PRAGMA journal_mode = WAL;
              PRAGMA secure_delete = ON;
              CREATE TABLE IF NOT EXISTS stores (
-                 id           TEXT PRIMARY KEY,
+                 id             TEXT PRIMARY KEY,
+                 project_id     TEXT NOT NULL,
+                 participant_id TEXT,
                  kek_salt     BLOB NOT NULL,
                  pw_salt      BLOB NOT NULL,
                  pw_hash      BLOB NOT NULL,
@@ -198,9 +211,16 @@ impl KeyService {
                  p_cost       INTEGER NOT NULL,
                  failures     INTEGER NOT NULL DEFAULT 0,
                  locked_until INTEGER NOT NULL DEFAULT 0
+             );
+             CREATE TABLE IF NOT EXISTS reset_tokens (
+                 token_hash     BLOB PRIMARY KEY,
+                 project_id     TEXT NOT NULL,
+                 participant_id TEXT NOT NULL,
+                 expires_at     INTEGER NOT NULL
              );",
         )
         .map_err(std::io::Error::other)?;
+        migrate(&db).map_err(std::io::Error::other)?;
         let parallel = std::thread::available_parallelism().map_or(2, |n| n.get());
         Ok(KeyService {
             db: Mutex::new(db),
@@ -277,8 +297,15 @@ impl KeyService {
         Ok(())
     }
 
-    /// Create a store protected by `password`. Returns its id and KEK.
-    pub async fn create(&self, ip: IpAddr, password: &str) -> Result<NewStore, KeyError> {
+    /// Create a store for a project (and participant, if any) protected by `password`. The
+    /// caller has checked the project and participant id against the project's policy.
+    pub async fn create(
+        &self,
+        ip: IpAddr,
+        project_id: &str,
+        participant_id: Option<&str>,
+        password: &str,
+    ) -> Result<NewStore, KeyError> {
         check_password(password)?;
         self.rate_limit(Bucket::Create, ip)?;
         let store_id = URL_SAFE_NO_PAD.encode(random::<16>()?);
@@ -292,8 +319,9 @@ impl KeyService {
             .lock()
             .map_err(|_| KeyError::Internal("lock"))?
             .execute(
-                "INSERT INTO stores (id, kek_salt, pw_salt, pw_hash, m_kib, t_cost, p_cost, delete_hash)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO stores (id, kek_salt, pw_salt, pw_hash, m_kib, t_cost, p_cost, delete_hash,
+                                     project_id, participant_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     store_id,
                     kek_salt,
@@ -302,7 +330,9 @@ impl KeyService {
                     cost.m_kib,
                     cost.t,
                     cost.p,
-                    delete_hash.as_slice()
+                    delete_hash.as_slice(),
+                    project_id,
+                    participant_id
                 ],
             )?;
         let kek = self.kek(&store_id, &kek_salt)?;
@@ -431,6 +461,115 @@ impl KeyService {
     }
 }
 
+impl KeyService {
+    /// Create a one-time password reset token for a participant's stores in a project. Only for
+    /// researchers of that project, after they verified who the participant is.
+    pub fn create_reset_token(
+        &self,
+        project_id: &str,
+        participant_id: &str,
+    ) -> Result<String, KeyError> {
+        let token = random::<32>()?;
+        let db = self.db.lock().map_err(|_| KeyError::Internal("lock"))?;
+        db.execute(
+            "DELETE FROM reset_tokens WHERE expires_at <= ?1",
+            params![now_secs()],
+        )?;
+        db.execute(
+            "INSERT INTO reset_tokens (token_hash, project_id, participant_id, expires_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                Sha256::digest(token).as_slice(),
+                project_id,
+                participant_id,
+                now_secs() + RESET_TTL_SECS
+            ],
+        )?;
+        Ok(URL_SAFE_NO_PAD.encode(token))
+    }
+
+    /// Set a new password with a reset token, and return the (unchanged) KEK. The token must be
+    /// for this store's project and participant; it is used up.
+    pub async fn reset(
+        &self,
+        ip: IpAddr,
+        store_id: &str,
+        token: &str,
+        password: &str,
+    ) -> Result<String, KeyError> {
+        if !valid_store_id(store_id) {
+            return Err(KeyError::NotFound);
+        }
+        check_password(password)?;
+        self.rate_limit(Bucket::Attempt, ip)?;
+        let token_hash = URL_SAFE_NO_PAD
+            .decode(token)
+            .map(Sha256::digest)
+            .map_err(|_| KeyError::InvalidResetToken)?;
+        // Use the token up first, so it cannot be raced; it only counts if it matches the store.
+        let kek_salt = {
+            let mut db = self.db.lock().map_err(|_| KeyError::Internal("lock"))?;
+            let tx = db.transaction()?;
+            let store: Option<(String, Option<String>, Vec<u8>)> = tx
+                .query_row(
+                    "SELECT project_id, participant_id, kek_salt FROM stores WHERE id = ?1",
+                    params![store_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional()?;
+            let Some((project_id, Some(participant_id), kek_salt)) = store else {
+                return Err(match store {
+                    None => KeyError::NotFound,
+                    Some(_) => KeyError::InvalidResetToken,
+                });
+            };
+            let used = tx.execute(
+                "DELETE FROM reset_tokens
+                 WHERE token_hash = ?1 AND project_id = ?2 AND participant_id = ?3 AND expires_at > ?4",
+                params![token_hash.as_slice(), project_id, participant_id, now_secs()],
+            )?;
+            if used != 1 {
+                return Err(KeyError::InvalidResetToken);
+            }
+            tx.commit()?;
+            kek_salt
+        };
+        let pw_salt = random::<16>()?;
+        let cost = self.cost;
+        let hash = self.hash(password, pw_salt, cost).await?;
+        self.db
+            .lock()
+            .map_err(|_| KeyError::Internal("lock"))?
+            .execute(
+            "UPDATE stores SET pw_salt = ?1, pw_hash = ?2, m_kib = ?3, t_cost = ?4, p_cost = ?5,
+                               failures = 0, locked_until = 0
+             WHERE id = ?6",
+            params![pw_salt, hash, cost.m_kib, cost.t, cost.p, store_id],
+        )?;
+        self.kek(store_id, &kek_salt)
+    }
+}
+
+/// Bring a database from an earlier version up to `SCHEMA_VERSION`.
+fn migrate(db: &Connection) -> rusqlite::Result<()> {
+    let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if version < 2 {
+        // Version 1 (before projects) had no project or participant columns.
+        let has_project: bool = db.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('stores') WHERE name = 'project_id'",
+            [],
+            |r| r.get(0),
+        )?;
+        if !has_project {
+            db.execute_batch(
+                "ALTER TABLE stores ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+                 ALTER TABLE stores ADD COLUMN participant_id TEXT;",
+            )?;
+        }
+    }
+    db.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))
+}
+
 /// Seconds to wait after the given number of failed attempts: none for the first few, then
 /// doubling from 30 seconds up to an hour.
 fn lockout_secs(failures: i64) -> i64 {
@@ -445,7 +584,39 @@ pub type SharedKeyService = Arc<KeyService>;
 
 #[cfg(test)]
 mod tests {
-    use super::lockout_secs;
+    use super::*;
+
+    #[test]
+    fn migrates_stores_from_before_projects() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("combray.sqlite");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE stores (id TEXT PRIMARY KEY, kek_salt BLOB NOT NULL, pw_salt BLOB NOT NULL,
+                     pw_hash BLOB NOT NULL, delete_hash BLOB NOT NULL, m_kib INTEGER NOT NULL,
+                     t_cost INTEGER NOT NULL, p_cost INTEGER NOT NULL,
+                     failures INTEGER NOT NULL DEFAULT 0, locked_until INTEGER NOT NULL DEFAULT 0);
+                 INSERT INTO stores (id, kek_salt, pw_salt, pw_hash, delete_hash, m_kib, t_cost, p_cost)
+                     VALUES ('old', x'00', x'00', x'00', x'00', 64, 1, 1);",
+            )
+            .unwrap();
+        let service =
+            KeyService::open(&path, [1; 32], Argon2Cost::default(), RateLimits::default()).unwrap();
+        let db = service.db.lock().unwrap();
+        let (project, participant): (String, Option<String>) = db
+            .query_row(
+                "SELECT project_id, participant_id FROM stores WHERE id = 'old'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((project.as_str(), participant), ("", None));
+        let version: i64 = db
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
 
     #[test]
     fn lockout_grows_and_is_capped() {
