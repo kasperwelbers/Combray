@@ -26,7 +26,8 @@ COPY --from=server /src/target/release/combray-server /usr/local/bin/combray-ser
 COPY --from=web /src/apps/web/dist /app/web
 ENV COMBRAY_BIND=0.0.0.0:8080 \
     COMBRAY_WEB_DIR=/app/web \
-    COMBRAY_DATA_DIR=/data
+    COMBRAY_DATA_DIR=/data \
+    COMBRAY_MASTER_KEY_FILE=/run/secrets/combray_master_key
 EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/usr/local/bin/combray-server"]

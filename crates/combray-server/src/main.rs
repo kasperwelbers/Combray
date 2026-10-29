@@ -18,9 +18,12 @@ async fn main() -> std::io::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, version = VERSION, "combray-server listening");
-    axum::serve(listener, app(config))
-        .with_graceful_shutdown(shutdown())
-        .await
+    axum::serve(
+        listener,
+        app(config)?.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown())
+    .await
 }
 
 async fn shutdown() {
