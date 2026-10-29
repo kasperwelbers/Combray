@@ -1,0 +1,82 @@
+{
+  "app": {
+    "tagline": "Revisiting your digital past, together.",
+    "local": "Your data stays on this computer.",
+    "language": "Language"
+  },
+  "lock": {
+    "createTitle": "Welcome to Combray",
+    "createIntro": "Your data will stay on this computer, locked with a passphrase that only you know. Choose one you will remember: if it is forgotten, nobody can open the data again, not even the researchers.",
+    "passphrase": "Passphrase",
+    "confirm": "Type it once more",
+    "create": "Create my space",
+    "tooShort": "Please use at least {{min}} characters.",
+    "mismatch": "The two passphrases are not the same yet.",
+    "unlockTitle": "Welcome back",
+    "unlockIntro": "Type your passphrase to open your data on this computer.",
+    "unlock": "Open",
+    "wrong": "That passphrase does not open this space. Shall we try again?",
+    "working": "One moment…",
+    "forgot": "Forgot the passphrase? Start over",
+    "confirmDelete": "This deletes everything that was added on this computer. It cannot be undone. Continue?",
+    "autoLocked": "We locked your data because Combray was not used for a while.",
+    "lock": "Lock",
+    "deleteAll": "Delete everything from this computer"
+  },
+  "home": {
+    "title": "Your memories",
+    "empty": "Nothing here yet. Shall we fetch your first memories?"
+  },
+  "import": {
+    "title": "Add your data",
+    "intro": "Choose the zip file you downloaded from a platform (such as Google Takeout or TikTok), a folder, or single files. Everything is read and kept on this computer only.",
+    "chooseFiles": "Choose files",
+    "chooseFolder": "Choose a folder",
+    "drop": "or drop them here",
+    "failed": "Something went wrong while reading this. Nothing was stored.",
+    "step": {
+      "reading_one": "Reading {{count}} file…",
+      "reading_other": "Reading {{count}} files…",
+      "parsing": "Unpacking and reading…",
+      "shape": "Looking at the structure…",
+      "encrypting": "Storing it safely, encrypted…",
+      "done": "Done"
+    }
+  },
+  "datasets": {
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "imported": "Added on {{date}}",
+    "open": "Explore",
+    "delete": "Remove",
+    "confirmDelete": "Remove “{{name}}” from this computer?"
+  },
+  "explore": {
+    "back": "Back to your memories",
+    "browse": "Browse",
+    "structure": "Structure",
+    "search": "Search in this data",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "showingFirst": "showing the first {{shown}}",
+    "more": "Show more",
+    "inside_one": "{{count}} inside",
+    "inside_other": "{{count}} inside",
+    "path": "Path",
+    "empty": "This is empty.",
+    "breadcrumbs": "Where you are",
+    "shapeIntro": "This is the structure of your data without any of its content: the names of files and fields, what kind of value each one holds, and roughly how many there are. Names that look like personal details are replaced, for example by <email> or <date>. Only this kind of information could ever be shared to help researchers, and only if you agree.",
+    "collapsed": "names hidden"
+  },
+  "kind": {
+    "dir": "folder",
+    "map": "group",
+    "list": "list",
+    "value": "value",
+    "element": "HTML element",
+    "text": "text",
+    "blob": "file"
+  }
+}

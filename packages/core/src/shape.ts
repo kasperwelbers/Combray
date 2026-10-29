@@ -85,7 +85,8 @@ export function screenName(name: string): string {
 }
 
 function elementName(tag: string, attrs: Record<string, string>): string {
-  let name = tag.toLowerCase();
+  // Tags are already lowercased by the HTML parser; the root of a file is named after the file.
+  let name = screenName(tag);
   if (attrs.id !== undefined) name += `#${screenName(attrs.id)}`;
   const classes = [...new Set((attrs.class ?? '').split(/\s+/).filter(Boolean).map(screenName))];
   for (const c of classes.sort()) name += `.${c}`;

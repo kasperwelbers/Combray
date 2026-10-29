@@ -1,0 +1,447 @@
+/* Design system v0. Tokens from docs/design-identity.md#colour. Fonts are system stacks until
+   self-hosted fonts are chosen (no third-party font requests, see the privacy doc). */
+:root {
+  --paper: #fbf6ec;
+  --paper-deep: #f3ead8;
+  --ink: #3b2f2a;
+  --ink-soft: #6b5a50;
+  --madeleine: #c98a3d;
+  --madeleine-deep: #8f5e24;
+  --tilleul: #b9c48a;
+  --terracotta: #b5623f;
+  --dusk: #6e6a9e;
+  --hawthorn: #e8b7b0;
+  --line: #e2d5bd;
+  --focus: #6e6a9e;
+
+  --font-heading: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-body: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --radius: 14px;
+  --shadow: 0 1px 2px rgb(59 47 42 / 8%), 0 6px 20px rgb(59 47 42 / 6%);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* "Evening in Combray" */
+  :root {
+    --paper: #221c22;
+    --paper-deep: #2c242b;
+    --ink: #f1e6d6;
+    --ink-soft: #c7b8a6;
+    --madeleine: #dba15a;
+    --madeleine-deep: #f0c48a;
+    --terracotta: #e08a66;
+    --dusk: #aaa6e0;
+    --line: #463a40;
+    --focus: #c9c5f5;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 20px rgb(0 0 0 / 25%);
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 0.5em;
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.4rem;
+}
+
+p {
+  margin: 0 0 1em;
+  max-width: 62ch;
+}
+
+a {
+  color: var(--dusk);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.55em 1.1em;
+  border-radius: 999px;
+  border: 1.5px solid var(--madeleine-deep);
+  background: var(--madeleine);
+  color: #2b1d0f;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  filter: brightness(1.05);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.button.quiet {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+  font-weight: 500;
+}
+
+.button.danger {
+  background: transparent;
+  color: var(--terracotta);
+  border-color: var(--terracotta);
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--dusk);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.field {
+  display: grid;
+  gap: 0.25em;
+  margin-bottom: 1em;
+}
+
+.field input {
+  padding: 0.6em 0.8em;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+}
+
+.message {
+  padding: 0.7em 1em;
+  border-radius: 10px;
+  background: var(--paper-deep);
+  border-left: 4px solid var(--madeleine);
+}
+
+.message.error {
+  border-left-color: var(--terracotta);
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.topbar select {
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.2em 0.4em;
+}
+
+main {
+  width: min(960px, 100% - 2rem);
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+
+.footer {
+  padding: 1rem 1.5rem 1.5rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* A thin, hazy skyline band: placeholder for the town illustration. */
+.skyline {
+  display: block;
+  width: 100%;
+  height: 48px;
+  color: var(--madeleine);
+  opacity: 0.25;
+}
+
+.card {
+  background: var(--paper-deep);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.lock {
+  width: min(520px, 100% - 2rem);
+  margin: 4rem auto;
+}
+
+.lock .madeleine {
+  display: block;
+  margin: 0 auto 1rem;
+}
+
+.dropzone {
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  text-align: center;
+  transition: background 0.2s;
+}
+
+.dropzone.over {
+  background: var(--paper-deep);
+  border-color: var(--madeleine);
+}
+
+.dropzone .actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.datasets {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.dataset {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dataset h3 {
+  margin: 0;
+  word-break: break-word;
+}
+
+.meta {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  background: none;
+  border: none;
+  padding: 0.5em 0.9em;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+
+.tabs button[aria-selected='true'] {
+  border-bottom-color: var(--madeleine);
+  font-weight: 600;
+}
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+}
+
+.crumbs li + li::before {
+  content: '›';
+  margin-right: 0.25rem;
+  color: var(--ink-soft);
+}
+
+.nodes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.nodes li {
+  border-bottom: 1px solid var(--line);
+}
+
+.node {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(8rem, 0.4fr) 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+  width: 100%;
+  padding: 0.5rem 0.25rem;
+  background: none;
+  border: none;
+  text-align: left;
+}
+
+button.node {
+  cursor: pointer;
+}
+
+button.node:hover {
+  background: var(--paper-deep);
+}
+
+.node .name {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.node .preview {
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+
+.node .preview.url {
+  color: var(--dusk);
+}
+
+.search {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.search input {
+  flex: 1;
+  padding: 0.5em 0.8em;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  word-break: break-all;
+}
+
+.shape ul {
+  list-style: none;
+  padding-left: 1.2rem;
+  margin: 0;
+  border-left: 1px dotted var(--line);
+}
+
+.shape > ul {
+  border-left: none;
+  padding-left: 0;
+}
+
+.shape li {
+  padding: 0.1rem 0;
+}
+
+.shape .tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0 0.5em;
+  margin-left: 0.4em;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .node {
+    grid-template-columns: 1.6rem 1fr;
+  }
+
+  .node .preview {
+    grid-column: 2;
+  }
+}
