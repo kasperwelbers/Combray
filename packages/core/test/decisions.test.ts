@@ -163,3 +163,18 @@ describe('lifters', () => {
     expect(state(tree, ['[*]'])).toBe('donate');
   });
 });
+
+describe('null values', () => {
+  it('keep one node when a key is null in one record and a list in another', () => {
+    const shape = extractShape(jsonToTree('a.json', [{ tags: null }, { tags: ['x'] }]));
+    const tree = projectTreeFromShape(shape);
+    expect(getNode(tree, ['[*]'])!.children!.map((c) => c.kind)).toEqual(['list']);
+    const later = mergeShape(
+      projectTreeFromShape(extractShape(jsonToTree('b.json', [{ tags: null }]))),
+      extractShape(jsonToTree('c.json', [{ tags: ['y'] }])),
+    );
+    expect(getNode(later.tree, ['[*]'])!.children!.map((c) => c.kind)).toEqual(['list']);
+    expect(later.added).toEqual([['[*]', 'tags']]);
+    expect(mergeShape(tree, extractShape(jsonToTree('d.json', [{ tags: null }]))).added).toEqual([]);
+  });
+});

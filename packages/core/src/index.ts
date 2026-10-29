@@ -35,3 +35,13 @@ export type {
 } from './decisions';
 export { deriveTables, deriveRows } from './derive';
 export type { TableDef, ColumnDef, DerivedRow } from './derive';
+export {
+  splitProjectTree,
+  joinProjectTree,
+  parseStructureFile,
+  parseImporterFile,
+  ProjectFileError,
+  STRUCTURE_FORMAT,
+  IMPORTER_FORMAT,
+} from './projectFiles';
+export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';

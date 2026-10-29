@@ -97,13 +97,27 @@ export function getNode(root: ProjectNode, path: NodePath): ProjectNode | undefi
   return node;
 }
 
+/** A value that was only ever null: in JSON, usually an empty map or list. */
+const isNullOnly = (n: { kind: NodeKind; types?: ValueType[] }) =>
+  n.kind === 'value' && n.types?.length === 1 && n.types[0] === 'null';
+
+/**
+ * Drop null-only values next to a node with the same name and another kind, so
+ * `"subtitles": null` in one record and a list in another stay one node.
+ */
+function withoutNullTwins<T extends { kind: NodeKind; name: string; types?: ValueType[] }>(children: T[]): T[] {
+  return children.filter(
+    (c) => !isNullOnly(c) || !children.some((o) => o !== c && o.name === c.name && !isNullOnly(o)),
+  );
+}
+
 function fromShape(shape: Shape): ProjectNode {
   const node: ProjectNode = { kind: shape.kind, name: shape.name };
   if (shape.types) node.types = [...shape.types];
   if (shape.count) node.count = shape.count;
   if (shape.mime) node.mime = shape.mime;
   if (shape.collapsed) node.collapsed = true;
-  if (shape.children) node.children = shape.children.map(fromShape);
+  if (shape.children) node.children = withoutNullTwins(shape.children).map(fromShape);
   return node;
 }
 
@@ -149,10 +163,14 @@ export function mergeShape(
       const match = matchChild(node, child.kind, child.name);
       if (match) {
         visit(match, child, [...path, match.name]);
-      } else {
-        node.children = [...(node.children ?? []), fromShape(child)];
-        added.push([...path, child.name]);
+        continue;
       }
+      const twins = (node.children ?? []).filter((c) => nameMatches(c, child.name));
+      if (isNullOnly(child) && twins.length > 0) continue;
+      const nullTwin = twins.find(isNullOnly);
+      const others = (node.children ?? []).filter((c) => c !== nullTwin);
+      node.children = [...others, fromShape(child)];
+      added.push([...path, child.name]);
     }
   };
   visit(tree, shape, []);
