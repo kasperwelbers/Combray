@@ -19,7 +19,7 @@ import {
   type NodePath,
 } from './decisions';
 import { COLLAPSED_NAME, elementName, ITEM_NAME, screenName } from './shape';
-import { childrenOf, type TreeNode } from './tree';
+import { childrenOf, type TreeNode, type ValueType } from './tree';
 
 export interface ColumnDef {
   /** Stable id within the table: the leaf's path from the row, joined with `/`. */
@@ -40,6 +40,9 @@ export interface ColumnDef {
   state: Exclude<EffectiveState, 'ignore'>;
   /** For `table` columns: the index of the nested table. */
   table?: number;
+  /** Inferred types and formats of the values (of the keys, for `key` columns). */
+  types?: ValueType[];
+  formats?: string[];
 }
 
 export interface TableDef {
@@ -84,27 +87,42 @@ function suffixNames(paths: NodePath[]): string[] {
 
 /**
  * Element names in column names shortened to their tag and as few classes as keep the names
- * unique: `div.content-cell.mdl-cell.mdl-cell--6-col` becomes `div.content-cell`.
+ * unique: `div.content-cell.mdl-cell.mdl-cell--6-col` becomes `div.content-cell`, or, next to
+ * a `div.content-cell.mdl-cell.mdl-cell--12-col`, `div.mdl-cell--6-col`: the classes they do
+ * not share.
  */
 function shortened(names: string[]): string[] {
   const element = /^[a-z][a-z0-9]*(#[^./]+)?(\.[^./]+){2,}$/;
-  const shorten = (name: string, classes: number) =>
+  const split = (segment: string) => {
+    const [head, ...classes] = segment.split('.');
+    return { head: head!, classes };
+  };
+  const short = names.map((name) =>
     name
       .split('/')
-      .map((segment) => (element.test(segment) ? segment.split('.').slice(0, classes + 1).join('.') : segment))
-      .join('/');
-  const classes = names.map(() => 1);
-  for (;;) {
-    const short = names.map((n, i) => shorten(n, classes[i]!));
-    let changed = false;
-    short.forEach((name, i) => {
-      if (short.some((other, j) => j !== i && other === name) && short[i] !== names[i]) {
-        classes[i]!++;
-        changed = true;
-      }
+      .map((segment) => (element.test(segment) ? segment.split('.').slice(0, 2).join('.') : segment))
+      .join('/'),
+  );
+  // Names that still collide keep, per element, the classes that tell them apart.
+  const groups = new Map<string, number[]>();
+  short.forEach((s, i) => groups.set(s, [...(groups.get(s) ?? []), i]));
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const parts = members.map((i) => names[i]!.split('/'));
+    members.forEach((i, m) => {
+      const own = parts[m]!;
+      const distinct = own.map((segment, k) => {
+        if (!element.test(segment)) return segment;
+        const { head, classes } = split(segment);
+        const others = parts.filter((_, o) => o !== m).map((p) => (p[k] ? split(p[k]!).classes : []));
+        const kept = classes.filter((c) => others.some((o) => !o.includes(c)));
+        return kept.length > 0 && kept.length < classes.length ? [head, ...kept].join('.') : short[i]!.split('/')[k]!;
+      });
+      short[i] = distinct.join('/');
     });
-    if (!changed) return short;
   }
+  // Anything still the same is left in full.
+  return short.map((s, i) => (short.some((o, j) => j !== i && o === s) ? names[i]! : s));
 }
 
 /** The path of a table's rows; a table without repeated rows is one record at its node. */
@@ -128,6 +146,10 @@ function nameSource(chain: ProjectNode[]): ProjectNode | undefined {
     return n;
   }
   return undefined;
+}
+
+function valueInfo(types?: ValueType[], formats?: string[]): Pick<ColumnDef, 'types' | 'formats'> {
+  return { ...(types ? { types } : {}), ...(formats ? { formats } : {}) };
 }
 
 function labelOr(node: ProjectNode, fallback: string): Localized {
@@ -193,8 +215,11 @@ export function deriveTables(root: ProjectNode): TableDef[] {
       const rel = relative[i]!;
       const node = nodeAt(leaf);
       const state = states.get(node) as ColumnDef['state'];
+      const info = valueInfo(node.types, node.formats);
       // The value of a `{*}` row whose entries are plain values.
-      if (rel.length === 0) return { id: VALUE_COLUMN, name: node.label ?? '', path: rel, type: 'value', state };
+      if (rel.length === 0) {
+        return { id: VALUE_COLUMN, name: node.label ?? '', path: rel, type: 'value', state, ...info };
+      }
       return {
         id: rel.join('/'),
         name: labelOr(node, names[named++]!),
@@ -202,12 +227,14 @@ export function deriveTables(root: ProjectNode): TableDef[] {
         // A list of plain values below the row (`tags/[*]`) is a list cell.
         type: rel.includes(ITEM_NAME) ? 'list' : 'value',
         state,
+        ...info,
       };
     });
     if (table.keyed) {
       const entry = nodeAt(base);
       const state: ColumnDef['state'] = entry.decision === 'donate' ? 'donate' : 'show';
-      table.columns.unshift({ id: KEY_COLUMN, name: '', path: [], type: 'key', state });
+      const keys = valueInfo(nodeAt(base.slice(0, -1)).keyTypes, nodeAt(base.slice(0, -1)).keyFormats);
+      table.columns.unshift({ id: KEY_COLUMN, name: '', path: [], type: 'key', state, ...keys });
     }
     if (table.parent !== undefined) {
       const parent = tables[table.parent]!;
@@ -318,4 +345,57 @@ export function deriveRows(tree: TreeNode, root: ProjectNode, tables: TableDef[]
     out[table.parent]!.forEach((row, i) => (row.values[column.id] = counts.get(i) ?? 0));
   });
   return out;
+}
+
+/** A table in the researcher's outline: its fields, and the tables nested in its rows. */
+export interface OutlineGroup {
+  /** The repeated node whose entries are rows; `[]` for the fields outside any table. */
+  path: NodePath;
+  name: Localized;
+  keyed?: true;
+  fields: { path: NodePath; name: Localized }[];
+  groups: OutlineGroup[];
+}
+
+/**
+ * The project tree as tables and fields only, ignored ones included: what a researcher needs
+ * to pick data, without the objects and HTML structure in between. Fields are named as their
+ * columns would be (labels, or the shortest unique suffix of their path).
+ */
+export function outline(root: ProjectNode): OutlineGroup {
+  const top: OutlineGroup = { path: [], name: labelOr(root, ''), fields: [], groups: [] };
+  const leaves = new Map<OutlineGroup, NodePath[]>();
+  const visit = (node: ProjectNode, path: NodePath, ancestors: ProjectNode[], group: OutlineGroup) => {
+    let current = group;
+    if (node.name === COLLAPSED_NAME || (node.name === ITEM_NAME && !isLeaf(node))) {
+      const named = nameSource([...ancestors, node]);
+      current = {
+        path,
+        name: labelOr(named ?? node, named?.name ?? ''),
+        ...(node.name === COLLAPSED_NAME ? { keyed: true as const } : {}),
+        fields: [],
+        groups: [],
+      };
+      group.groups.push(current);
+    }
+    if (isLeaf(node)) {
+      leaves.set(current, [...(leaves.get(current) ?? []), path]);
+      return;
+    }
+    for (const child of node.children ?? []) visit(child, [...path, child.name], [...ancestors, node], current);
+  };
+  visit(root, [], [], top);
+  const name = (group: OutlineGroup) => {
+    const paths = leaves.get(group) ?? [];
+    const relative = paths.map((p) => p.slice(group.path.length));
+    const names = suffixNames(relative.filter((r) => r.length > 0));
+    let named = 0;
+    group.fields = paths.map((path, i) => {
+      const node = getNode(root, path)!;
+      return { path, name: relative[i]!.length === 0 ? (node.label ?? '') : labelOr(node, names[named++]!) };
+    });
+    group.groups.forEach(name);
+  };
+  name(top);
+  return top;
 }

@@ -28,7 +28,12 @@ function state(tree: ProjectNode, path: string[]) {
 describe('projectTreeFromShape', () => {
   it('copies structure and leaves every node undecided', () => {
     const tree = base();
-    expect(getNode(tree, ['[*]', 'time'])).toEqual({ kind: 'value', name: 'time', types: ['date-like'] });
+    expect(getNode(tree, ['[*]', 'time'])).toEqual({
+      kind: 'value',
+      name: 'time',
+      types: ['date-like'],
+      formats: ['YYYY-MM-DDTHH:mm:ss.SSSZ'],
+    });
     expect(JSON.stringify(tree)).not.toContain('decision');
   });
 });
@@ -142,7 +147,7 @@ describe('compareShape', () => {
       jsonToTree('kaspers_history.json', [{ title: 'x', watched_at: '2024-01-01', subtitles: [{ extra: 1 }] }]),
     );
     expect(compareShape(tree, shape)).toEqual({
-      unknown: [{ path: ['[*]', 'watched_at'], shape: { kind: 'value', name: 'watched_at', types: ['date-like'] } }],
+      unknown: [{ path: ['[*]', 'watched_at'], shape: { kind: 'value', name: 'watched_at', types: ['date-like'], formats: ['YYYY-MM-DD'] } }],
       missing: [['[*]', 'time']],
     });
   });

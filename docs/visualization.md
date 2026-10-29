@@ -12,6 +12,8 @@ Combray's interface exists to present data back to the participant and to prompt
 
 ## Trees and tables
 
+> The query pipeline and chart builder that views are built on are described in [exploration.md](exploration.md#queries). The view spec below predates inferred tables and will move to chart specs and queries.
+
 Most charts assume a table: one row per observation, one column per variable. Combray datasets are trees: a list of watch events, each with a list of channels; a list of conversations, each with messages.
 
 Each view declares the fields it needs **by path**, relative to the dataset root:

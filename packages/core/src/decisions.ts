@@ -40,10 +40,23 @@ export interface ProjectNode {
   description?: Localized;
   /** Structure seen so far, as in shapes. */
   types?: ValueType[];
+  formats?: string[];
+  keyTypes?: ValueType[];
+  keyFormats?: string[];
   count?: CountBucket;
   mime?: string;
   collapsed?: true;
   children?: ProjectNode[];
+}
+
+/** The structure fields of a node, as in shapes: copied to and from structure files. */
+export const STRUCTURE_FIELDS = ['types', 'formats', 'keyTypes', 'keyFormats', 'count', 'mime', 'collapsed'] as const;
+
+function copyStructure(from: Shape | ProjectNode, to: Shape | ProjectNode): void {
+  for (const key of STRUCTURE_FIELDS) {
+    const value = from[key];
+    if (value !== undefined) (to as unknown as Record<string, unknown>)[key] = Array.isArray(value) ? [...value] : value;
+  }
 }
 
 /** A position in a project tree: the canonical names from the root's children down. */
@@ -156,10 +169,7 @@ function elementTwin(parent: ProjectNode, shape: Shape): ProjectNode | undefined
 
 function fromShape(shape: Shape): ProjectNode {
   const node: ProjectNode = { kind: shape.kind, name: shape.name };
-  if (shape.types) node.types = [...shape.types];
-  if (shape.count) node.count = shape.count;
-  if (shape.mime) node.mime = shape.mime;
-  if (shape.collapsed) node.collapsed = true;
+  copyStructure(shape, node);
   if (shape.children) node.children = withoutNullTwins(shape.children).map(fromShape);
   return node;
 }
@@ -171,10 +181,7 @@ export function projectTreeFromShape(shape: Shape): ProjectNode {
 
 function toShape(node: ProjectNode): Shape {
   const shape: Shape = { kind: node.kind, name: node.name };
-  if (node.types) shape.types = node.types;
-  if (node.count) shape.count = node.count;
-  if (node.mime) shape.mime = node.mime;
-  if (node.collapsed) shape.collapsed = true;
+  copyStructure(node, shape);
   if (node.children) shape.children = node.children.map(toShape);
   return shape;
 }
@@ -183,10 +190,7 @@ function toShape(node: ProjectNode): Shape {
 function absorb(node: ProjectNode, shape: Shape): void {
   const own = toShape({ ...node, children: undefined });
   const merged = mergeAll([own, { ...shape, name: node.name, children: undefined }])[0]!;
-  if (merged.types) node.types = merged.types;
-  if (merged.count) node.count = merged.count;
-  if (merged.mime) node.mime = merged.mime;
-  if (merged.collapsed) node.collapsed = true;
+  copyStructure(merged, node);
 }
 
 /**

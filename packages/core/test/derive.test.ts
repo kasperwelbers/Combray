@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveRows,
   deriveTables,
+  outline,
   extractShape,
   jsonToTree,
   KEY_COLUMN,
@@ -165,5 +166,39 @@ describe('column names for HTML', () => {
       ],
     };
     expect(deriveTables(tree)[0]!.columns.map((c) => c.name)).toEqual(['div.body/#text[0]', 'p.title/#text[0]']);
+  });
+
+  it('keep the classes that tell elements apart when the first class does not', () => {
+    const cell = (width: string): ProjectNode => ({
+      kind: 'element',
+      name: `div.content-cell.mdl-cell.mdl-cell--${width}-col`,
+      children: [{ kind: 'value', name: '#text[0]' }],
+    });
+    const tree: ProjectNode = {
+      kind: 'list',
+      name: '',
+      children: [{ kind: 'element', name: '[*]', children: [cell('12'), cell('6')] }],
+    };
+    expect(deriveTables(tree)[0]!.columns.map((c) => c.name)).toEqual([
+      'div.mdl-cell--12-col/#text[0]',
+      'div.mdl-cell--6-col/#text[0]',
+    ]);
+  });
+});
+
+describe('outline', () => {
+  it('lists tables and fields only, with short names, ignored ones included', () => {
+    const tree = projectTreeFromShape(extractShape(tweets));
+    tree.children!.find((c) => c.name === 'user')!.decision = 'ignore';
+    const o = outline(tree);
+    expect(o.fields.map((f) => f.name)).toEqual(['joined', 'name']);
+    expect(o.groups.map((g) => g.name)).toEqual(['tweets']);
+    const tweetsGroup = o.groups[0]!;
+    expect(tweetsGroup.fields.map((f) => [f.name, f.path.join('/')])).toEqual([
+      ['likes', 'tweets/[*]/stats/likes'],
+      ['tags', 'tweets/[*]/tags/[*]'],
+      ['text', 'tweets/[*]/text'],
+    ]);
+    expect(tweetsGroup.groups[0]!.fields.map((f) => f.name)).toEqual(['by', 'text']);
   });
 });

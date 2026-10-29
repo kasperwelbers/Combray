@@ -9,6 +9,7 @@ import {
   setDecision,
   setKeysAreData,
   getNode,
+  isDecidable,
   type ImporterEntry,
   type ImporterFile,
   type LeafDecision,
@@ -23,12 +24,34 @@ import { Dropzone } from '../components/Dropzone';
 import type { ImportProgress, Upload } from '../worker/api';
 import type { PreviewTable, StudioExport } from './api';
 import { addExport, studio } from './client';
-import { DecisionTree } from './DecisionTree';
-import { countDecisions, fromFiles, pathKey, patchNode, toFiles, undecidedBelow, type NodePatch } from './model';
+import { DecisionTree, type TreeView } from './DecisionTree';
+import {
+  countDecisions,
+  decideBelow,
+  fromFiles,
+  pathKey,
+  patchNode,
+  SHORTCUT_DECISIONS,
+  toFiles,
+  undecidedBelow,
+  type NodePatch,
+  type Shortcut,
+} from './model';
 import { NodePanel } from './NodePanel';
+import { ChartBuilder } from './ChartBuilder';
 import { Preview } from './Preview';
 
 const DRAFT_KEY = 'combray:studio:draft';
+const VIEW_KEY = 'combray:studio:view';
+
+function loadView(): { view: TreeView; hideIgnored: boolean } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}') as { view?: unknown; hideIgnored?: unknown };
+    return { view: saved.view === 'tree' ? 'tree' : 'fields', hideIgnored: saved.hideIgnored === true };
+  } catch {
+    return { view: 'fields', hideIgnored: false };
+  }
+}
 const PREVIEW_ROWS = 25;
 const PREVIEW_DELAY_MS = 300;
 
@@ -84,12 +107,20 @@ export function Studio() {
   const [selected, setSelected] = useState<NodePath>();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [onlyUndecided, setOnlyUndecided] = useState(false);
+  const [{ view, hideIgnored }, setViewSettings] = useState(loadView);
   const [progress, setProgress] = useState<ImportProgress>();
   const [message, setMessage] = useState<{ text: string; error?: boolean }>();
   const [preview, setPreview] = useState<PreviewTable[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => saveDraft(tree, pending), [tree, pending]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ view, hideIgnored }));
+    } catch {
+      // A convenience only.
+    }
+  }, [view, hideIgnored]);
 
   useEffect(() => {
     if (!tree || exports.length === 0) return setPreview([]);
@@ -185,31 +216,42 @@ export function Studio() {
     setMessage(undefined);
   }
 
+  function decide(path: NodePath, decision: LeafDecision) {
+    if (!tree) return;
+    const node = getNode(tree, path);
+    if (!node) return;
+    if (!isDecidable(node) && decision !== 'ignore' && decision !== 'undecided') return;
+    const overridden = decision === 'ignore' ? ignoreOverrides(tree, path).length : 0;
+    if (overridden > 0 && !window.confirm(t('studio.confirmIgnore', { count: overridden }))) return;
+    setTree(setDecision(tree, path, decision));
+  }
+
   const actions = {
     select: (path: NodePath) => setSelected(path),
-    toggleOpen: (path: NodePath) =>
+    toggleOpen: (key: string) =>
       setOpen((o) => {
         const next = new Set(o);
-        const key = pathKey(path);
         if (next.has(key)) next.delete(key);
         else next.add(key);
         return next;
       }),
-    setLeaf: (path: NodePath, decision: LeafDecision) => {
-      if (!tree) return;
-      const overridden = decision === 'ignore' ? ignoreOverrides(tree, path).length : 0;
-      if (overridden > 0 && !window.confirm(t('studio.confirmIgnore', { count: overridden }))) return;
-      setTree(setDecision(tree, path, decision));
-    },
-    toggleIgnore: (path: NodePath) => {
-      if (!tree) return;
-      const node = getNode(tree, path);
-      if (node?.decision === 'ignore') return setTree(setDecision(tree, path, 'undecided'));
-      const overridden = ignoreOverrides(tree, path).length;
-      if (overridden > 0 && !window.confirm(t('studio.confirmIgnore', { count: overridden }))) return;
-      setTree(setDecision(tree, path, 'ignore'));
+    shortcut: (path: NodePath, key: Shortcut) => {
+      setSelected(path);
+      const node = tree && getNode(tree, path);
+      if (!node) return;
+      const decision = SHORTCUT_DECISIONS[key];
+      // On inner nodes, 2 switches ignore on and off.
+      if (!isDecidable(node)) {
+        if (decision === 'ignore') decide(path, node.decision === 'ignore' ? 'undecided' : 'ignore');
+        return;
+      }
+      decide(path, decision);
     },
   };
+
+  function setBelow(path: NodePath, decision: 'show' | 'donate' | 'undecided', undecidedOnly: boolean) {
+    if (tree) setTree(decideBelow(tree, path, decision, undecidedOnly));
+  }
 
   function patch(path: NodePath, change: NodePatch) {
     if (tree) setTree(patchNode(tree, path, change));
@@ -310,16 +352,42 @@ export function Studio() {
               {t('studio.counts', { ...counts })}
               {counts.undecided > 0 && ` ${t('studio.undecidedLeft', { count: counts.undecided })}`}
             </p>
-            <label className="check">
-              <input type="checkbox" checked={onlyUndecided} onChange={(e) => setOnlyUndecided(e.target.checked)} />
-              {t('studio.onlyUndecided')}
-            </label>
+            <div className="tree-controls">
+              <span className="segmented" role="group" aria-label={t('studio.viewLabel')}>
+                {(['fields', 'tree'] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className="seg"
+                    aria-pressed={view === v}
+                    onClick={() => setViewSettings({ view: v, hideIgnored })}
+                  >
+                    {t(`studio.view.${v}`)}
+                  </button>
+                ))}
+              </span>
+              <label className="check">
+                <input type="checkbox" checked={onlyUndecided} onChange={(e) => setOnlyUndecided(e.target.checked)} />
+                {t('studio.onlyUndecided')}
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={hideIgnored}
+                  onChange={(e) => setViewSettings({ view, hideIgnored: e.target.checked })}
+                />
+                {t('studio.hideIgnored')}
+              </label>
+            </div>
+            <p className="meta">{t(`studio.viewHelp.${view}`)}</p>
             <div className="studio-grid">
               <DecisionTree
                 tree={tree}
                 states={states}
                 undecided={undecided}
                 onlyUndecided={onlyUndecided}
+                hideIgnored={hideIgnored}
+                view={view}
                 open={open}
                 actions={actions}
                 {...(selected ? { selected } : {})}
@@ -330,6 +398,8 @@ export function Studio() {
                   tree={tree}
                   path={selected}
                   states={states}
+                  onDecide={decide}
+                  onDecideBelow={setBelow}
                   onPatch={patch}
                   onMerge={merge}
                   onKeysAreData={keysAreData}
@@ -344,6 +414,12 @@ export function Studio() {
             <h2 id="studio-preview">{t('studio.previewTitle')}</h2>
             <p className="meta">{t('studio.previewIntro')}</p>
             <Preview tables={preview} hasExports={exports.length > 0} />
+          </section>
+
+          <section aria-labelledby="studio-chart" className="studio-section">
+            <h2 id="studio-chart">{t('studio.chartTitle')}</h2>
+            <p className="meta">{t('studio.chartIntro')}</p>
+            <ChartBuilder tree={tree} hasExports={exports.length > 0} />
           </section>
         </>
       )}

@@ -4,6 +4,7 @@ import {
   isLeaf,
   type Alias,
   type EffectiveState,
+  type LeafDecision,
   type Localized,
   type NodePath,
   type ProjectNode,
@@ -12,12 +13,16 @@ import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { LANGUAGES } from '../i18n';
-import { formsTable, type NodePatch } from './model';
+import { displayName, formsTable, type NodePatch } from './model';
+
+const LEAF_DECISIONS: LeafDecision[] = ['undecided', 'ignore', 'show', 'donate'];
 
 interface Props {
   tree: ProjectNode;
   path: NodePath;
   states: Map<ProjectNode, EffectiveState>;
+  onDecide: (path: NodePath, decision: LeafDecision) => void;
+  onDecideBelow: (path: NodePath, decision: 'show' | 'donate' | 'undecided', undecidedOnly: boolean) => void;
   onPatch: (path: NodePath, patch: NodePatch) => void;
   onMerge: (from: NodePath, into: NodePath) => void;
   onKeysAreData: (path: NodePath) => void;
@@ -42,8 +47,9 @@ function aliasText(alias: Alias): string {
 }
 
 /** Settings of the selected node: label, description, aliases, merging, keys as data. */
-export function NodePanel({ tree, path, states, onPatch, onMerge, onKeysAreData }: Props) {
+export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch, onMerge, onKeysAreData }: Props) {
   const { t } = useTranslation();
+  const [undecidedOnly, setUndecidedOnly] = useState(true);
   const node = getNode(tree, path);
   const parent = getNode(tree, path.slice(0, -1));
   const [alias, setAlias] = useState('');
@@ -77,15 +83,84 @@ export function NodePanel({ tree, path, states, onPatch, onMerge, onKeysAreData 
 
   return (
     <section className="card node-panel" aria-labelledby="node-panel-title">
-      <h2 id="node-panel-title">{node.name || t('studio.root')}</h2>
-      <p className="path">{path.length > 0 ? path.join(' / ') : t('studio.root')}</p>
+      <h2 id="node-panel-title">{displayName(node.name, t)}</h2>
+      <p className="path">{path.length > 0 ? path.map((n) => displayName(n, t)).join(' / ') : t('studio.root')}</p>
       <p className="meta">
         {t(`kind.${node.kind}`)}
         {node.types && ` · ${node.types.map((type) => t(`type.${type}`)).join(', ')}`}
         {node.count && ` · × ${node.count}`} · {t(`studio.state.${state}`)}
       </p>
+      {node.formats && (
+        <p className="meta">
+          {t('studio.formats')} <Formats formats={node.formats} />
+        </p>
+      )}
+      {node.keyTypes && (
+        <p className="meta">
+          {t('studio.keyTypes', { types: node.keyTypes.map((type) => t(`type.${type}`)).join(', ') })}
+          {node.keyFormats && (
+            <>
+              {' '}
+              <Formats formats={node.keyFormats} />
+            </>
+          )}
+        </p>
+      )}
+
+      {isDecidable(node) ? (
+        <div className="panel-group">
+          <span className="segmented" role="group" aria-label={t('studio.decisionFor', { name: displayName(node.name, t) })}>
+            {LEAF_DECISIONS.map((d, i) => (
+              <button
+                key={d}
+                type="button"
+                className={`seg seg-${d}`}
+                aria-pressed={(node.decision ?? 'undecided') === d}
+                aria-keyshortcuts={String(i + 1)}
+                onClick={() => onDecide(path, d)}
+              >
+                {t(`studio.decision.${d}`)}
+              </button>
+            ))}
+          </span>
+          {state === 'ignore' && node.decision !== 'ignore' && <p className="meta">{t('studio.ignoredAbove')}</p>}
+        </div>
+      ) : (
+        <div className="panel-group">
+          <button
+            type="button"
+            className="button quiet"
+            aria-pressed={node.decision === 'ignore'}
+            aria-keyshortcuts="2"
+            onClick={() => onDecide(path, node.decision === 'ignore' ? 'undecided' : 'ignore')}
+          >
+            {node.decision === 'ignore' ? t('studio.unignore') : t('studio.ignoreAll')}
+          </button>
+          {node.decision !== 'ignore' && (
+            <fieldset className="panel-group">
+              <legend>{t('studio.fieldsBelow')}</legend>
+              <div className="actions">
+                <button type="button" className="button quiet" onClick={() => onDecideBelow(path, 'show', undecidedOnly)}>
+                  {t('studio.showAll')}
+                </button>
+                <button type="button" className="button quiet" onClick={() => onDecideBelow(path, 'donate', undecidedOnly)}>
+                  {t('studio.donateAll')}
+                </button>
+                <button type="button" className="button quiet" onClick={() => onDecideBelow(path, 'undecided', false)}>
+                  {t('studio.clearAll')}
+                </button>
+              </div>
+              <label className="check">
+                <input type="checkbox" checked={undecidedOnly} onChange={(e) => setUndecidedOnly(e.target.checked)} />
+                {t('studio.undecidedOnly')}
+              </label>
+            </fieldset>
+          )}
+        </div>
+      )}
       <p className="meta">
-        {leaf ? t('studio.leafHelp') : formsTable(node) ? t('studio.tableHelp') : t('studio.innerHelp')}
+        {leaf ? t('studio.leafHelp') : formsTable(node) ? t('studio.tableHelp') : t('studio.innerHelp')}{' '}
+        {t('studio.shortcuts')}
       </p>
 
       <fieldset className="panel-group">
@@ -225,5 +300,18 @@ export function NodePanel({ tree, path, states, onPatch, onMerge, onKeysAreData 
         </fieldset>
       )}
     </section>
+  );
+}
+
+function Formats({ formats }: { formats: string[] }) {
+  return (
+    <>
+      {formats.map((f, i) => (
+        <span key={f}>
+          {i > 0 && ', '}
+          <code>{f}</code>
+        </span>
+      ))}
+    </>
   );
 }

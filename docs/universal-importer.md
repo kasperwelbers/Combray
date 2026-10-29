@@ -136,6 +136,7 @@ When a donation is made, Combray can (with consent, as its own item in the donat
 A shape keeps only structure:
 
 - Directory and file names, node kinds, keys, list lengths in coarse buckets (`0`, `1`, `2-10`, `11-100`, `101-1k`, `>1k`), inferred value types, and for HTML the tag, `id` and `class` values.
+- **Value formats** for dates and timestamps (`YYYY-MM-DD`, `MMM D, YYYY, H:mm:ss A Z`, `epoch-s`), made of tokens only, and the types and formats of keys that are data. See [exploration.md](exploration.md#value-formats).
 - No values: no strings, numbers, dates or URLs.
 
 Names can be data too, so the shape extractor detects and collapses them:

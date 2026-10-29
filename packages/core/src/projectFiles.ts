@@ -6,7 +6,8 @@
  * Settings are keyed by canonical path plus the node's kind, so the server adding new paths
  * never touches them.
  */
-import { type Alias, type NodePath, type ProjectNode } from './decisions';
+import { STRUCTURE_FIELDS, type Alias, type NodePath, type ProjectNode } from './decisions';
+import { isFormat, MAX_FORMATS } from './formats';
 import type { Localized } from './importer/spec';
 import type { Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
@@ -45,11 +46,10 @@ export class ProjectFileError extends Error {
 }
 
 const SETTINGS = ['decision', 'label', 'description', 'aliases', 'lifter', 'raw'] as const;
-const STRUCTURE = ['types', 'count', 'mime', 'collapsed'] as const;
 
 function shapeOf(node: ProjectNode): Shape {
   const shape: Shape = { kind: node.kind, name: node.name };
-  for (const key of STRUCTURE) {
+  for (const key of STRUCTURE_FIELDS) {
     if (node[key] !== undefined) (shape as unknown as Record<string, unknown>)[key] = node[key];
   }
   if (node.children) shape.children = node.children.map(shapeOf);
@@ -95,7 +95,7 @@ function find(root: ProjectNode, path: NodePath, kind: NodeKind): ProjectNode | 
 
 function toNode(shape: Shape): ProjectNode {
   const node: ProjectNode = { kind: shape.kind, name: shape.name };
-  for (const key of STRUCTURE) {
+  for (const key of STRUCTURE_FIELDS) {
     if (shape[key] !== undefined) (node as unknown as Record<string, unknown>)[key] = shape[key];
   }
   if (shape.children) node.children = shape.children.map(toNode);
@@ -153,6 +153,20 @@ function checkShape(v: unknown, where: string, depth = 0): void {
   check(typeof v.name === 'string', `${where}: name must be a string`);
   if (v.types !== undefined) {
     check(Array.isArray(v.types) && v.types.every((t) => TYPES.has(t as ValueType)), `${where}: unknown type`);
+  }
+  if (v.keyTypes !== undefined) {
+    check(Array.isArray(v.keyTypes) && v.keyTypes.every((t) => TYPES.has(t as ValueType)), `${where}: unknown key type`);
+  }
+  // Formats are tokens only, so a structure file cannot carry values in them.
+  for (const key of ['formats', 'keyFormats'] as const) {
+    const formats = v[key];
+    if (formats === undefined) continue;
+    check(
+      Array.isArray(formats) &&
+        formats.length <= MAX_FORMATS &&
+        formats.every((f) => typeof f === 'string' && isFormat(f)),
+      `${where}: ${key} must be formats such as YYYY-MM-DD`,
+    );
   }
   if (v.count !== undefined) check(BUCKETS.has(v.count as string), `${where}: unknown count`);
   if (v.mime !== undefined) check(typeof v.mime === 'string', `${where}: mime must be a string`);

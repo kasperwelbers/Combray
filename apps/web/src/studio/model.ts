@@ -20,6 +20,109 @@ export const pathKey = (path: NodePath) => JSON.stringify(path);
 
 export const isRepeatedName = (name: string) => name === '[*]' || name === '{*}';
 
+/** Keys on a selected row: 1 undecided, 2 ignore, 3 show, 4 donate. */
+export type Shortcut = '1' | '2' | '3' | '4';
+export const SHORTCUT_DECISIONS = { '1': 'undecided', '2': 'ignore', '3': 'show', '4': 'donate' } as const;
+
+/** A node name for people: list items and keys that are data get words instead of `[*]`. */
+export function displayName(name: string, t: (key: string) => string): string {
+  if (name === '[*]') return t('studio.eachItem');
+  if (name === '{*}') return t('studio.eachKey');
+  return name || t('studio.root');
+}
+
+export type IconKind =
+  | 'table'
+  | 'row'
+  | 'list'
+  | 'object'
+  | 'element'
+  | 'folder'
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'link'
+  | 'email'
+  | 'bool'
+  | 'empty'
+  | 'html-text'
+  | 'file';
+
+const GLYPHS: Record<IconKind, string> = {
+  table: '▦',
+  row: '↳',
+  list: '⋮',
+  object: '{ }',
+  element: '‹›',
+  folder: '📁',
+  text: 'Aa',
+  number: '#',
+  date: '◷',
+  link: '↗',
+  email: '@',
+  bool: '◐',
+  empty: '∅',
+  'html-text': '¶',
+  file: '▣',
+};
+
+/** What a row's icon shows: tables, lists of values and objects differ, and leaves by type. */
+export function nodeIcon(node: ProjectNode): { kind: IconKind; glyph: string } {
+  const kind = ((): IconKind => {
+    if (formsTable(node)) return 'table';
+    if (isRepeatedName(node.name) && !isLeaf(node)) return 'row';
+    switch (node.kind) {
+      case 'list':
+        return 'list';
+      case 'map':
+        return 'object';
+      case 'element':
+        return 'element';
+      case 'dir':
+        return 'folder';
+      case 'text':
+        return 'html-text';
+      case 'blob':
+        return 'file';
+      case 'value': {
+        const types = (node.types ?? []).filter((t) => t !== 'null');
+        if (types.includes('date-like') || node.formats?.some((f) => f.startsWith('epoch-'))) return 'date';
+        if (types.length === 0) return 'empty';
+        if (types.every((t) => t === 'int' || t === 'float')) return 'number';
+        if (types.includes('url-like')) return 'link';
+        if (types.includes('email-like')) return 'email';
+        if (types.every((t) => t === 'bool')) return 'bool';
+        return 'text';
+      }
+    }
+  })();
+  return { kind, glyph: GLYPHS[kind] };
+}
+
+/**
+ * Set every decidable field below a node at once (leaves and keys that are data). With
+ * `undecidedOnly`, fields that already have a decision keep it.
+ */
+export function decideBelow(
+  tree: ProjectNode,
+  path: NodePath,
+  decision: 'show' | 'donate' | 'undecided',
+  undecidedOnly: boolean,
+): ProjectNode {
+  const copy = structuredClone(tree);
+  const start = getNode(copy, path);
+  if (!start) return tree;
+  const visit = (node: ProjectNode) => {
+    if (isDecidable(node) && node !== start && !(undecidedOnly && node.decision !== undefined)) {
+      if (decision === 'undecided') delete node.decision;
+      else node.decision = decision;
+    }
+    if (!isLeaf(node)) for (const child of node.children ?? []) visit(child);
+  };
+  visit(start);
+  return copy;
+}
+
 /** Settings a researcher edits in the side panel. */
 export type NodePatch = Partial<Pick<ProjectNode, 'label' | 'description' | 'aliases' | 'raw'>>;
 

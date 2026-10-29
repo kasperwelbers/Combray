@@ -288,10 +288,11 @@ The researcher decides, for every path in a platform's tree, what happens to it.
   - *No, these paths contain private information.* (The refusal and its reason are recorded, without the paths, so researchers learn that the extractor missed something.)
   - *No, for another reason.*
 - **Structure only.** Paths come from the shape extractor, which drops values, collapses dictionary-like keys (usernames, dates used as keys) and screens names that look like emails, numbers or tokens (see [universal-importer.md](universal-importer.md#structure-metadata)). Showing the paths before sending is the last check, for the rare key that is private anyway.
+- **Formats, not values.** Shapes say how dates and timestamps are written (`YYYY-MM-DD`, `epoch-s`), so researchers can set up parsing without seeing a value. A format is made of tokens and separators only: if any part of a value is not a known token, it gets no format, so text from a value cannot end up in one. Structure files are checked against the same grammar, and keep at most 8 formats per position. Collapsed keys keep only their types and formats. See [exploration.md](exploration.md#value-formats).
 
 ## Researcher workspace
 
-The researcher workspace (`/studio/`) works on the researcher's own exports. They are parsed in a separate worker and kept only in its memory: nothing is written to IndexedDB or sent anywhere, and closing the tab drops them. What is kept between visits is a draft of the project tree in `localStorage`: the structure (names screened as in shapes) and the researcher's settings, never values. Values from the exports are shown only in the "view as participant" preview, as React text, like everywhere else. `studio` is reserved as a project id.
+The researcher workspace (`/studio/`) works on the researcher's own exports. They are parsed in a separate worker and kept only in its memory: nothing is written to IndexedDB or sent anywhere, and closing the tab drops them. What is kept between visits is a draft of the project tree in `localStorage`: the structure (names screened as in shapes) and the researcher's settings, never values. Values from the exports are shown only in the "view as participant" preview, as React text, like everywhere else. Charts run their query in the same worker and only counts and summaries come back to the page; they are SVG drawn by React, so labels are text. `studio` is reserved as a project id.
 
 ## Supply chain
 

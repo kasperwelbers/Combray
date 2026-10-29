@@ -239,7 +239,54 @@
     "keyColumn": "key",
     "valueColumn": "value",
     "size": "{{rows}} × {{columns}}",
-    "recordTable": "Fields that are not part of a list"
+    "recordTable": "Fields that are not part of a list",
+    "eachItem": "each item",
+    "eachKey": "each key",
+    "pill": {
+      "undecided": "Undecided",
+      "ignore": "Ignored",
+      "show": "Shown",
+      "donate": "Donate"
+    },
+    "icon": {
+      "table": "table",
+      "row": "each row",
+      "list": "list of values",
+      "object": "object",
+      "element": "HTML element",
+      "folder": "folder",
+      "text": "text",
+      "number": "number",
+      "date": "date or time",
+      "link": "link",
+      "email": "email address",
+      "bool": "yes or no",
+      "empty": "always empty",
+      "html-text": "HTML text",
+      "file": "file"
+    },
+    "formats": "Written as:",
+    "keyTypes": "Its keys are data: {{types}}.",
+    "unignore": "Stop ignoring",
+    "ignoreAll": "Ignore all of this",
+    "fieldsBelow": "All fields inside",
+    "showAll": "Show",
+    "donateAll": "Ask to donate",
+    "clearAll": "Reset to undecided",
+    "undecidedOnly": "Only fields that are still undecided",
+    "shortcuts": "Keys on a selected row: 1 undecided, 2 ignore, 3 show, 4 donate.",
+    "viewLabel": "How to show the structure",
+    "view": {
+      "fields": "Tables and fields",
+      "tree": "Full tree"
+    },
+    "hideIgnored": "Hide what is ignored",
+    "viewHelp": {
+      "fields": "Only tables and the fields in them, named as their columns. Hover a field to see where it is in the file.",
+      "tree": "Everything in the files, including the folders, objects and HTML in between."
+    },
+    "chartTitle": "Explore with a chart",
+    "chartIntro": "Count rows over time or per value, from the exports you loaded. This runs in your browser; it is a first step towards views participants can make themselves."
   },
   "type": {
     "null": "empty",
@@ -250,5 +297,45 @@
     "date-like": "date",
     "url-like": "link",
     "email-like": "email address"
+  },
+  "chart": {
+    "empty": "Nothing to draw yet: no rows have a value here.",
+    "timeline": "Timeline of {{measure}}",
+    "bars": "Bars of {{measure}}",
+    "explore": "Chart values; use the arrow keys to move along the timeline",
+    "along": "Along",
+    "count": "Rows of",
+    "per": "Per",
+    "format": "Written as",
+    "show": "Show",
+    "of": "Of",
+    "split": "Split by",
+    "noSplit": "Nothing",
+    "none": "(empty)",
+    "failed": "This chart could not be made from these exports.",
+    "weekOf": "week of {{date}}",
+    "rowsOf": "Number of rows in {{table}}",
+    "showTable": "Show as a table",
+    "showChart": "Show as a chart",
+    "moreCategories_one": "{{count}} more value not shown",
+    "moreCategories_other": "{{count}} more values not shown",
+    "moreSeries_one": "{{count}} more series not shown",
+    "moreSeries_other": "{{count}} more series not shown",
+    "part": {
+      "year": "year",
+      "month": "month",
+      "week": "week",
+      "day": "day",
+      "weekday": "day of the week",
+      "hour": "hour of the day"
+    },
+    "measure": {
+      "count": "Number of rows",
+      "sum": "Sum of {{column}}",
+      "mean": "Average of {{column}}",
+      "min": "Lowest {{column}}",
+      "max": "Highest {{column}}",
+      "distinct": "Different values of {{column}}"
+    }
   }
 }

@@ -7,8 +7,9 @@
  * dates) are collapsed to `{*}`. The thresholds are first guesses and need tuning on
  * real-world shapes from consenting team members.
  */
+import { MAX_FORMATS, valueFormat } from './formats';
 import { inferType } from './infer';
-import type { NodeKind, TreeNode, ValueType } from './tree';
+import { childrenOf, type NodeKind, type TreeNode, type ValueType } from './tree';
 
 export interface Shape {
   kind: NodeKind;
@@ -17,6 +18,11 @@ export interface Shape {
   count?: CountBucket;
   /** Inferred types seen at this position, for values. */
   types?: ValueType[];
+  /** How values are written, for dates and timestamps (`YYYY-MM-DD`); see formats.ts. */
+  formats?: string[];
+  /** For collapsed maps and directories: the types and formats of their keys. */
+  keyTypes?: ValueType[];
+  keyFormats?: string[];
   /** MIME type, for blobs. */
   mime?: string;
   /** True if the children's names were collapsed to `{*}`. */
@@ -98,10 +104,18 @@ function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+function union<T extends string>(a: T[] | undefined, b: T[] | undefined, max = Infinity): T[] | undefined {
+  if (!a && !b) return undefined;
+  return [...new Set([...(a ?? []), ...(b ?? [])])].sort(compare).slice(0, max);
+}
+
+const LISTS = ['types', 'formats', 'keyTypes', 'keyFormats'] as const;
+
 function merge(a: Shape, b: Shape): Shape {
   const out: Shape = { ...a };
-  if (a.types || b.types) {
-    out.types = [...new Set([...(a.types ?? []), ...(b.types ?? [])])].sort(compare);
+  for (const key of LISTS) {
+    const merged = union<string>(a[key], b[key], key.endsWith('ormats') ? MAX_FORMATS : Infinity);
+    if (merged) (out as unknown as Record<string, unknown>)[key] = merged;
   }
   if (a.count || b.count) {
     const rank = (c?: CountBucket) => (c ? BUCKETS.indexOf(c) : -1);
@@ -159,9 +173,30 @@ export const SPARSE_MIN_KEYS = 5;
 /** And no key in more than this share of the rows that have the map. */
 export const SPARSE_MAX_SHARE = 0.5;
 
-function collapsedShape(map: Shape): Shape {
+/** The types and formats of keys that are data, never the keys themselves. */
+function keyInfo(names: string[]): Pick<Shape, 'keyTypes' | 'keyFormats'> {
+  const types = new Set<ValueType>();
+  const formats = new Set<string>();
+  for (const name of names) {
+    const type = inferType(name);
+    types.add(type);
+    const format = valueFormat(name, type);
+    if (format) formats.add(format);
+  }
+  const out: Pick<Shape, 'keyTypes' | 'keyFormats'> = { keyTypes: [...types].sort(compare) };
+  if (formats.size > 0) out.keyFormats = [...formats].sort(compare).slice(0, MAX_FORMATS);
+  return out;
+}
+
+function collapsedShape(map: Shape, names: string[]): Shape {
   return withChildren(
-    { kind: map.kind, name: map.name, collapsed: true, count: countBucket(map.children?.length ?? 0) },
+    {
+      kind: map.kind,
+      name: map.name,
+      collapsed: true,
+      count: countBucket(map.children?.length ?? 0),
+      ...keyInfo(names),
+    },
     mergeAll((map.children ?? []).map((c) => ({ ...c, name: COLLAPSED_NAME }))),
   );
 }
@@ -173,7 +208,7 @@ function collapsedShape(map: Shape): Shape {
  * Optional fields do not trigger this, because the same keys come back in many rows. With few
  * rows this cannot be told apart from coincidence; researchers can then set it by hand.
  */
-function collapseSparseKeys(items: Shape[]): Shape[] {
+function collapseSparseKeys(items: Shape[], nodes: TreeNode[]): Shape[] {
   const keys = new Map<string, Map<string, number>>();
   const rows = new Map<string, number>();
   for (const item of items) {
@@ -193,17 +228,29 @@ function collapseSparseKeys(items: Shape[]): Shape[] {
     }).map(([id]) => id),
   );
   if (sparse.size === 0) return items;
-  return items.map((item) => ({
-    ...item,
-    children: item.children?.map((c) => (sparse.has(`${c.kind}:${c.name}`) ? collapsedShape(c) : c)),
-  }));
+  return items.map((item, i) => {
+    const original = childrenOf(nodes[i]!);
+    return {
+      ...item,
+      children: item.children?.map((c) => {
+        if (!sparse.has(`${c.kind}:${c.name}`)) return c;
+        // Key types come from the original names; shapes only have the screened ones.
+        const map = original.find((o) => o.kind === c.kind && screenName(o.name) === c.name);
+        return collapsedShape(c, map ? childrenOf(map).map((k) => k.name) : []);
+      }),
+    };
+  });
 }
 
 /** Extract the shape of a tree. Values are never copied into the shape. */
 export function extractShape(node: TreeNode): Shape {
   switch (node.kind) {
     case 'value':
-      return { kind: 'value', name: screenName(node.name), types: [node.type] };
+    {
+      const format = valueFormat(node.value, node.type);
+      const shape: Shape = { kind: 'value', name: screenName(node.name), types: [node.type] };
+      return format ? { ...shape, formats: [format] } : shape;
+    }
     case 'text':
       return { kind: 'text', name: '#text' };
     case 'blob':
@@ -211,7 +258,12 @@ export function extractShape(node: TreeNode): Shape {
     case 'list':
       return withChildren(
         { kind: 'list', name: screenName(node.name), count: countBucket(node.children.length) },
-        mergeAll(collapseSparseKeys(node.children.map((c) => ({ ...extractShape(c), name: ITEM_NAME })))),
+        mergeAll(
+          collapseSparseKeys(
+            node.children.map((c) => ({ ...extractShape(c), name: ITEM_NAME })),
+            node.children,
+          ),
+        ),
       );
     case 'element':
       return withChildren(
@@ -224,7 +276,12 @@ export function extractShape(node: TreeNode): Shape {
       const base: Shape = { kind: node.kind, name: screenName(node.name) };
       if (isDictionaryLike(node.children.map((c) => c.name), shapes)) {
         return withChildren(
-          { ...base, collapsed: true, count: countBucket(node.children.length) },
+          {
+            ...base,
+            collapsed: true,
+            count: countBucket(node.children.length),
+            ...keyInfo(node.children.map((c) => c.name)),
+          },
           mergeAll(shapes.map((s) => ({ ...s, name: COLLAPSED_NAME }))),
         );
       }

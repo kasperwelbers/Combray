@@ -239,7 +239,54 @@
     "keyColumn": "sleutel",
     "valueColumn": "waarde",
     "size": "{{rows}} × {{columns}}",
-    "recordTable": "Velden die niet in een lijst staan"
+    "recordTable": "Velden die niet in een lijst staan",
+    "eachItem": "elk item",
+    "eachKey": "elke sleutel",
+    "pill": {
+      "undecided": "Nog open",
+      "ignore": "Genegeerd",
+      "show": "Getoond",
+      "donate": "Doneren"
+    },
+    "icon": {
+      "table": "tabel",
+      "row": "elke rij",
+      "list": "lijst met waarden",
+      "object": "object",
+      "element": "HTML-element",
+      "folder": "map",
+      "text": "tekst",
+      "number": "getal",
+      "date": "datum of tijd",
+      "link": "link",
+      "email": "e-mailadres",
+      "bool": "ja of nee",
+      "empty": "altijd leeg",
+      "html-text": "HTML-tekst",
+      "file": "bestand"
+    },
+    "formats": "Geschreven als:",
+    "keyTypes": "De sleutels zijn gegevens: {{types}}.",
+    "unignore": "Niet meer negeren",
+    "ignoreAll": "Dit allemaal negeren",
+    "fieldsBelow": "Alle velden hierin",
+    "showAll": "Tonen",
+    "donateAll": "Vragen om te doneren",
+    "clearAll": "Terug naar nog open",
+    "undecidedOnly": "Alleen velden die nog open zijn",
+    "shortcuts": "Toetsen op een gekozen rij: 1 nog open, 2 negeren, 3 tonen, 4 doneren.",
+    "viewLabel": "Hoe de structuur te tonen",
+    "view": {
+      "fields": "Tabellen en velden",
+      "tree": "Volledige boom"
+    },
+    "hideIgnored": "Verberg wat genegeerd wordt",
+    "viewHelp": {
+      "fields": "Alleen tabellen en hun velden, met de namen van hun kolommen. Houd de muis op een veld om te zien waar het in het bestand staat.",
+      "tree": "Alles in de bestanden, ook de mappen, objecten en HTML ertussen."
+    },
+    "chartTitle": "Verkennen met een grafiek",
+    "chartIntro": "Tel rijen door de tijd of per waarde, uit de exports die je hebt geladen. Dit gebeurt in je browser; het is een eerste stap naar weergaven die deelnemers zelf kunnen maken."
   },
   "type": {
     "null": "leeg",
@@ -250,5 +297,45 @@
     "date-like": "datum",
     "url-like": "link",
     "email-like": "e-mailadres"
+  },
+  "chart": {
+    "empty": "Nog niets te tekenen: geen enkele rij heeft hier een waarde.",
+    "timeline": "Tijdlijn van {{measure}}",
+    "bars": "Staven van {{measure}}",
+    "explore": "Waarden in de grafiek; gebruik de pijltjestoetsen om langs de tijdlijn te gaan",
+    "along": "Langs",
+    "count": "Rijen van",
+    "per": "Per",
+    "format": "Geschreven als",
+    "show": "Toon",
+    "of": "Van",
+    "split": "Opsplitsen naar",
+    "noSplit": "Niets",
+    "none": "(leeg)",
+    "failed": "Deze grafiek kon niet worden gemaakt van deze exports.",
+    "weekOf": "week van {{date}}",
+    "rowsOf": "Aantal rijen in {{table}}",
+    "showTable": "Toon als tabel",
+    "showChart": "Toon als grafiek",
+    "moreCategories_one": "nog {{count}} waarde niet getoond",
+    "moreCategories_other": "nog {{count}} waarden niet getoond",
+    "moreSeries_one": "nog {{count}} reeks niet getoond",
+    "moreSeries_other": "nog {{count}} reeksen niet getoond",
+    "part": {
+      "year": "jaar",
+      "month": "maand",
+      "week": "week",
+      "day": "dag",
+      "weekday": "dag van de week",
+      "hour": "uur van de dag"
+    },
+    "measure": {
+      "count": "Aantal rijen",
+      "sum": "Som van {{column}}",
+      "mean": "Gemiddelde van {{column}}",
+      "min": "Laagste {{column}}",
+      "max": "Hoogste {{column}}",
+      "distinct": "Verschillende waarden van {{column}}"
+    }
   }
 }

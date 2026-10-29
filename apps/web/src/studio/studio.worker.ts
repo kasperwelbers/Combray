@@ -5,13 +5,18 @@
  * the tab drops it.
  */
 import {
+  chartData,
+  chartQuery,
   countNodes,
   deriveRows,
   deriveTables,
   extractShape,
   normalizeTree,
+  runQuery,
   uploadRoot,
   type DerivedRow,
+  type ProjectNode,
+  type TableDef,
   type TreeNode,
 } from '@combray/core';
 import * as Comlink from 'comlink';
@@ -40,10 +45,24 @@ function previewValue(value: unknown): PreviewValue {
   return text(value);
 }
 
-function previewRow(row: DerivedRow, index: number, parentOffset: number): PreviewRow {
+function previewRow(row: DerivedRow, index: number): PreviewRow {
   const values: PreviewRow['values'] = {};
   for (const [id, value] of Object.entries(row.values)) values[id] = previewValue(value);
-  return row.parent === undefined ? { index, values } : { index, values, parent: row.parent + parentOffset };
+  return row.parent === undefined ? { index, values } : { index, values, parent: row.parent };
+}
+
+/** The rows of all exports, one after the other; nested rows' parents shift with each export. */
+function allRows(projectTree: ProjectNode, tables: TableDef[]): DerivedRow[][] {
+  const all: DerivedRow[][] = tables.map(() => []);
+  for (const { tree } of exports.values()) {
+    const offsets = all.map((rows) => rows.length);
+    deriveRows(tree, projectTree, tables).forEach((rows, i) => {
+      const parent = tables[i]!.parent;
+      const offset = parent === undefined ? 0 : offsets[parent]!;
+      for (const row of rows) all[i]!.push(row.parent === undefined ? row : { ...row, parent: row.parent + offset });
+    });
+  }
+  return all;
 }
 
 const api: StudioApi = {
@@ -74,16 +93,7 @@ const api: StudioApi = {
       rowCount: 0,
       rows: [],
     }));
-    // Rows of all exports, one after the other; parent indices shift with each export.
-    const all: PreviewRow[][] = tables.map(() => []);
-    for (const { tree } of exports.values()) {
-      const offsets = all.map((rows) => rows.length);
-      deriveRows(tree, projectTree, tables).forEach((rows, i) => {
-        const parent = tables[i]!.parent;
-        const offset = parent === undefined ? 0 : offsets[parent]!;
-        for (const row of rows) all[i]!.push(previewRow(row, all[i]!.length, offset));
-      });
-    }
+    const all: PreviewRow[][] = allRows(projectTree, tables).map((rows) => rows.map((row, i) => previewRow(row, i)));
     // Tables come parents first, so nested rows can be kept only under parent rows that are.
     const kept: Set<number>[] = [];
     out.forEach((table, i) => {
@@ -96,6 +106,11 @@ const api: StudioApi = {
       kept[i] = new Set(table.rows.map((r) => r.index));
     });
     return out;
+  },
+
+  async chart(projectTree, spec) {
+    const tables = deriveTables(projectTree);
+    return chartData(runQuery(tables, allRows(projectTree, tables), chartQuery(tables, spec)), spec);
   },
 };
 
