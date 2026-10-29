@@ -1,0 +1,5 @@
+{$COMBRAY_DOMAIN} {
+	encode zstd gzip
+	# No access logs: they would contain URLs (see docs/privacy-and-encryption.md).
+	reverse_proxy combray:8080
+}
