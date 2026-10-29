@@ -138,7 +138,7 @@ combray/
 │   ├── combray-server/       ✓ shared server (axum)
 │   ├── combray-crypto/       envelope format, HPKE, signatures, key files
 │   └── combray-keys/         local key tool: key pairs, config signing, decryption
-├── importers/                importer specs (YAML) + synthetic fixtures + expected output
+├── importers/                ✓ importer specs (YAML) + synthetic fixtures + expected output
 ├── plugins/                  example WASM plugins (anonymiser, classifier)
 ├── deploy/                   ✓ docker compose, Caddyfile, example project configs
 └── docs/

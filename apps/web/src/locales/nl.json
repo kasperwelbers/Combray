@@ -40,7 +40,8 @@
       "parsing": "Uitpakken en lezen…",
       "shape": "Naar de structuur kijken…",
       "encrypting": "Veilig en versleuteld bewaren…",
-      "done": "Klaar"
+      "done": "Klaar",
+      "importers": "Kijken of we iets herkennen…"
     }
   },
   "datasets": {
@@ -51,7 +52,10 @@
     "imported": "Toegevoegd op {{date}}",
     "open": "Bekijken",
     "delete": "Verwijderen",
-    "confirmDelete": "“{{name}}” van deze computer verwijderen?"
+    "confirmDelete": "“{{name}}” van deze computer verwijderen?",
+    "browse": "Alles doorbladeren",
+    "found": "Wat we vonden",
+    "nothingFound": "We herkennen hier nog niets in, maar je kunt wel alles doorbladeren."
   },
   "explore": {
     "back": "Terug naar je herinneringen",
@@ -78,5 +82,35 @@
     "element": "HTML-element",
     "text": "tekst",
     "blob": "bestand"
+  },
+  "views": {
+    "memories": "Herinneringen",
+    "timeline": "In de tijd",
+    "top": "Het vaakst",
+    "showingOnly": "Alleen",
+    "showAll": "Weer alles tonen",
+    "nothing": "Hier is niets te zien.",
+    "undated": "Zonder datum",
+    "untitled": "(geen titel)",
+    "noDates": "Er staan geen datums in deze gegevens.",
+    "per": "Per",
+    "unit": {
+      "day": "dag",
+      "week": "week",
+      "month": "maand"
+    },
+    "count_one": "{{count}} onderdeel",
+    "count_other": "{{count}} onderdelen",
+    "timelineCaption": "Hoeveel onderdelen er per {{unit}} zijn. De hoogste staaf is {{max}}. Kies een staaf om die herinneringen te zien.",
+    "undatedCount_one": "{{count}} onderdeel heeft geen datum.",
+    "undatedCount_other": "{{count}} onderdelen hebben geen datum.",
+    "groupBy": "Tellen per",
+    "distinct_one": "{{count}} verschillende waarde in totaal.",
+    "distinct_other": "{{count}} verschillende waarden in totaal."
+  },
+  "fields": {
+    "channel": "kanaal",
+    "words": "woorden",
+    "domain": "website"
   }
 }

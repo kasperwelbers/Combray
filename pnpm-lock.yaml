@@ -13,6 +13,9 @@ importers:
       '@combray/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@combray/importers':
+        specifier: workspace:*
+        version: link:../../importers
       '@combray/store':
         specifier: workspace:*
         version: link:../../packages/store

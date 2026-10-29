@@ -445,3 +445,165 @@ button.node:hover {
     grid-column: 2;
   }
 }
+
+.found-title {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.found {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.found-item {
+  display: grid;
+  text-align: left;
+  gap: 0.1rem;
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.found-item:hover {
+  border-color: var(--madeleine);
+}
+
+.toolbar {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.toolbar select,
+.chip-row select {
+  font: inherit;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.2em 0.4em;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chip {
+  padding: 0.1em 0.7em;
+  border-radius: 999px;
+  background: var(--hawthorn);
+  color: #3b2f2a;
+}
+
+.lane-day h3 {
+  font-size: 1.1rem;
+  margin: 1.75rem 0 0.5rem;
+  color: var(--madeleine-deep);
+}
+
+.lane-day ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1rem;
+  border-left: 2px solid var(--line);
+}
+
+.lane-item {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.3rem 0;
+}
+
+.lane-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  min-width: 3rem;
+}
+
+.lane-extra {
+  display: block;
+}
+
+.timeline svg {
+  width: 100%;
+  height: auto;
+}
+
+.timeline .bar {
+  fill: var(--madeleine);
+  cursor: pointer;
+}
+
+.timeline .bar:hover,
+.timeline .bar:focus-visible {
+  fill: var(--dusk);
+  outline: none;
+}
+
+.timeline .axis {
+  stroke: var(--line);
+}
+
+.timeline .axis-label {
+  fill: var(--ink-soft);
+  font-size: 13px;
+}
+
+.timeline figcaption {
+  margin-top: 0.5rem;
+}
+
+.top {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.top-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--paper-deep);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.top-item:hover {
+  outline: 2px solid var(--madeleine);
+}
+
+.top-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--tilleul);
+  opacity: 0.45;
+}
+
+.top-label,
+.top-count {
+  position: relative;
+  word-break: break-word;
+}
+
+.top-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  padding-left: 1rem;
+}

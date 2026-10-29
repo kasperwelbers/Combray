@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@combray/core": "workspace:*",
+    "@combray/importers": "workspace:*",
     "@combray/store": "workspace:*",
     "comlink": "^4.4.2",
     "i18next": "^26.5.11",

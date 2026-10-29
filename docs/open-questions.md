@@ -14,7 +14,7 @@ Cross-cutting decisions that still need an answer, with the current recommendati
 | 6c | Researcher login on a university server | Passkeys, OIDC/SAML SSO (e.g. SURFconext), both | Passkeys built in, SSO optional | Phase 2 |
 | 6d | Server storage | Own disk storage, S3 | Own storage (SQLite + data directory) by default, S3 optional | Phase 2 |
 | 7 | Importer spec format | YAML, JSON | YAML on disk, JSON Schema for validation (not built yet) | Yes |
-| 8 | Chart library | Vega-Lite, Observable Plot, custom | Vega-Lite, lazily loaded, plus custom item views | Phase 1 |
+| 8 | Chart library | Vega-Lite, Observable Plot, custom | Vega-Lite, lazily loaded, plus custom item views. The first timeline is a small custom SVG chart: Vega compiles expressions with `new Function`, which our CSP forbids, so adopting it needs `vega-interpreter` | Phase 1 |
 | 9 | Enrichment cache scope | Shared across studies, per study, none | Shared by default, per study or none configurable | Phase 3 |
 | 10 | AI providers | Local (OpenAI-compatible), Anthropic API, both | Both, behind one provider interface; the model only ever sees metadata | Phase 5 |
 | 11 | Which classifier labels are safe to show the AI | Any, declared list, none | Declared per plugin, enabled per study | Phase 5 |

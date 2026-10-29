@@ -40,7 +40,8 @@
       "parsing": "Unpacking and reading…",
       "shape": "Looking at the structure…",
       "encrypting": "Storing it safely, encrypted…",
-      "done": "Done"
+      "done": "Done",
+      "importers": "Looking for familiar things in it…"
     }
   },
   "datasets": {
@@ -51,7 +52,10 @@
     "imported": "Added on {{date}}",
     "open": "Explore",
     "delete": "Remove",
-    "confirmDelete": "Remove “{{name}}” from this computer?"
+    "confirmDelete": "Remove “{{name}}” from this computer?",
+    "browse": "Browse everything",
+    "found": "What we found",
+    "nothingFound": "We did not recognise anything in this yet, but you can still browse everything."
   },
   "explore": {
     "back": "Back to your memories",
@@ -78,5 +82,35 @@
     "element": "HTML element",
     "text": "text",
     "blob": "file"
+  },
+  "views": {
+    "memories": "Memory lane",
+    "timeline": "Over time",
+    "top": "Most often",
+    "showingOnly": "Showing only",
+    "showAll": "Show everything again",
+    "nothing": "Nothing to show here.",
+    "undated": "Without a date",
+    "untitled": "(no title)",
+    "noDates": "There are no dates in this data.",
+    "per": "Per",
+    "unit": {
+      "day": "day",
+      "week": "week",
+      "month": "month"
+    },
+    "count_one": "{{count}} item",
+    "count_other": "{{count}} items",
+    "timelineCaption": "How many items there are per {{unit}}. The highest bar is {{max}}. Choose a bar to see those memories.",
+    "undatedCount_one": "{{count}} item has no date.",
+    "undatedCount_other": "{{count}} items have no date.",
+    "groupBy": "Count by",
+    "distinct_one": "{{count}} different value in total.",
+    "distinct_other": "{{count}} different values in total."
+  },
+  "fields": {
+    "channel": "channel",
+    "words": "words",
+    "domain": "website"
   }
 }

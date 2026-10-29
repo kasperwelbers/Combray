@@ -15,6 +15,7 @@ See [docs/architecture.md](docs/architecture.md#monorepo-layout). Three separate
 - `apps/web` participant web client: React + TypeScript SPA (Vite). All parsing, encryption and querying run in `src/worker/data.worker.ts`.
 - `packages/core` tree model, parsers, path language, shape extraction (TypeScript; Rust/WASM only for measured bottlenecks)
 - `packages/store` encrypted IndexedDB store (WebCrypto)
+- `importers` platform packs: importer specs (YAML) with synthetic fixtures; format in [docs/importer-spec.md](docs/importer-spec.md)
 - `crates/combray-server` the server (Rust, axum)
 - `deploy/` docker compose, Caddyfile, example project configs
 - `docs/` design documents and decision records (`docs/decisions/NNNN-*.md`)

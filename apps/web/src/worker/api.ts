@@ -1,7 +1,8 @@
-import type { NodeKind, Shape, ValueType } from '@combray/core';
+import type { DisplayHints, Localized, NodeKind, Row, Shape, ValueType } from '@combray/core';
 
-/** Encrypted along with each dataset. Never sent anywhere. */
-export interface DatasetManifest {
+/** An imported archive, folder or file, stored as its tree. Encrypted; never sent anywhere. */
+export interface SourceManifest {
+  type: 'source';
   name: string;
   source: 'archive' | 'folder' | 'file';
   /** Day of import, ISO date. */
@@ -11,13 +12,71 @@ export interface DatasetManifest {
   shape: Shape;
 }
 
+/** The rows an importer found in a source. Encrypted; never sent anywhere. */
+export interface TableManifest {
+  type: 'table';
+  sourceId: string;
+  importer: { id: string; version: number };
+  name: Localized;
+  description?: Localized;
+  importedAt: string;
+  rowCount: number;
+  fields: string[];
+  display: DisplayHints;
+  /** Rows left out by the importer's filter. */
+  filtered: number;
+  /** Rows where a script failed. */
+  errorCount: number;
+}
+
+export type DatasetManifest = SourceManifest | TableManifest;
+
+export interface TableSummary {
+  id: string;
+  type: 'table';
+  sourceId: string;
+  importerId: string;
+  name: Localized;
+  description?: Localized;
+  rowCount: number;
+  fields: string[];
+  display: DisplayHints;
+}
+
 export interface DatasetSummary {
   id: string;
+  type: 'source';
   name: string;
-  source: DatasetManifest['source'];
+  source: SourceManifest['source'];
   importedAt: string;
   nodeCount: number;
   fileCount: number;
+  /** What the importers found in this source. */
+  tables: TableSummary[];
+}
+
+/** Narrow rows down: by a value of a field, and/or by a range of local days [from, to). */
+export interface RowFilter {
+  field?: string;
+  value?: string;
+  from?: string;
+  to?: string;
+}
+
+export type TimeUnit = 'day' | 'week' | 'month';
+
+export interface Timeline {
+  unit: TimeUnit;
+  /** Consecutive periods, including empty ones. `start` and `end` are local days. */
+  buckets: { start: string; end: string; count: number }[];
+  /** Rows without a usable date. */
+  undated: number;
+}
+
+export interface TopItems {
+  /** Number of distinct values. */
+  distinct: number;
+  items: { value: string; count: number }[];
 }
 
 /** A node as the tree browser sees it: values are truncated previews. */
@@ -58,7 +117,7 @@ export interface Upload {
   path: string;
 }
 
-export type ImportStep = 'reading' | 'parsing' | 'shape' | 'encrypting' | 'done';
+export type ImportStep = 'reading' | 'parsing' | 'shape' | 'encrypting' | 'importers' | 'done';
 
 export interface ImportProgress {
   step: ImportStep;
@@ -90,4 +149,7 @@ export interface DataApi {
   getChildren(datasetId: string, index: number, offset: number, limit: number): Promise<Page<NodeSummary>>;
   getShape(datasetId: string): Promise<Shape>;
   search(datasetId: string, query: string, limit: number): Promise<Page<SearchHit>>;
+  getRows(tableId: string, filter: RowFilter, offset: number, limit: number): Promise<Page<Row>>;
+  getTimeline(tableId: string, filter: RowFilter, unit?: TimeUnit): Promise<Timeline>;
+  getTopItems(tableId: string, field: string, filter: RowFilter, limit: number): Promise<TopItems>;
 }

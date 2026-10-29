@@ -1,13 +1,16 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { DatasetSummary, ImportProgress, Upload } from '../worker/api';
+import { localize } from '@combray/core';
+
+import type { DatasetSummary, ImportProgress, TableSummary, Upload } from '../worker/api';
 import { data, importFiles } from '../worker/client';
 
 interface Props {
   datasets: DatasetSummary[];
   onChanged: () => Promise<void>;
   onOpen: (dataset: DatasetSummary) => void;
+  onOpenTable: (table: TableSummary) => void;
 }
 
 /** Files from a drop. Dropped folders are read recursively with their relative paths. */
@@ -40,7 +43,7 @@ function fromInput(list: FileList | null): Upload[] {
   return [...(list ?? [])].map((file) => ({ file, path: file.webkitRelativePath || file.name }));
 }
 
-export function Home({ datasets, onChanged, onOpen }: Props) {
+export function Home({ datasets, onChanged, onOpen, onOpenTable }: Props) {
   const { t, i18n } = useTranslation();
   const [progress, setProgress] = useState<ImportProgress>();
   const [error, setError] = useState(false);
@@ -140,22 +143,41 @@ export function Home({ datasets, onChanged, onOpen }: Props) {
         ) : (
           <ul className="datasets">
             {datasets.map((d) => (
-              <li key={d.id} className="card dataset">
-                <div>
-                  <h3>{d.name}</h3>
-                  <div className="meta">
-                    {t('datasets.files', { count: d.fileCount })} · {t('datasets.items', { count: d.nodeCount })} ·{' '}
-                    {t('datasets.imported', { date: date(d.importedAt) })}
+              <li key={d.id} className="card">
+                <div className="dataset">
+                  <div>
+                    <h3>{d.name}</h3>
+                    <div className="meta">
+                      {t('datasets.files', { count: d.fileCount })} · {t('datasets.items', { count: d.nodeCount })} ·{' '}
+                      {t('datasets.imported', { date: date(d.importedAt) })}
+                    </div>
+                  </div>
+                  <div className="topbar-actions">
+                    <button className="button quiet" type="button" onClick={() => onOpen(d)}>
+                      {t('datasets.browse')}
+                    </button>
+                    <button className="button danger" type="button" onClick={() => remove(d)}>
+                      {t('datasets.delete')}
+                    </button>
                   </div>
                 </div>
-                <div className="topbar-actions">
-                  <button className="button" type="button" onClick={() => onOpen(d)}>
-                    {t('datasets.open')}
-                  </button>
-                  <button className="button danger" type="button" onClick={() => remove(d)}>
-                    {t('datasets.delete')}
-                  </button>
-                </div>
+                {d.tables.length > 0 ? (
+                  <>
+                    <h4 className="found-title">{t('datasets.found')}</h4>
+                    <ul className="found">
+                      {d.tables.map((table) => (
+                        <li key={table.id}>
+                          <button type="button" className="found-item" onClick={() => onOpenTable(table)}>
+                            <strong>{localize(table.name, i18n.language)}</strong>
+                            <span className="meta">{t('datasets.items', { count: table.rowCount })}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="meta found-title">{t('datasets.nothingFound')}</p>
+                )}
               </li>
             ))}
           </ul>

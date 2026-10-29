@@ -14,9 +14,9 @@ Goal: import a Google Takeout and a TikTok export, explore them, entirely in the
 - [x] Monorepo skeleton: pnpm + Cargo workspaces, CI, `justfile`.
 - [x] `packages/core` (TypeScript, [ADR 0003](decisions/0003-typescript-core-and-key-tool.md)): tree model, parsers (JSON, JSON Lines, CSV, HTML, XML, text, zip), path language, shape extraction.
 - [ ] Unfolding and aggregation for views.
-- [ ] Importer spec format and runner; QuickJS sandbox; converter for old data-donation-importers recipes; first platform packs (Google Takeout: YouTube, search, browsing; TikTok).
+- [x] Importer spec format and runner ([reference](importer-spec.md)); QuickJS sandbox; converter for old data-donation-importers recipes; first platform packs (Google Takeout: YouTube, search, browsing; TikTok) with synthetic fixtures.
 - [x] Encrypted local store (passphrase unlock), data worker, Comlink.
-- [x] Tree browser and structure view. [ ] Memory lane, timeline, top items.
+- [x] Tree browser, structure view, memory lane, timeline and top items (linked: choosing a bar or an item filters memory lane).
 - [x] Design system v0: palette, madeleine placeholder, town placeholder. [ ] Self-hosted fonts.
 - [x] Minimal Rust server (web client, health, read-only project configs), Docker image and compose file, pulled forward from Phase 2.
 

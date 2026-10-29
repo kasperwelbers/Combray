@@ -20,8 +20,9 @@ use tower_http::set_header::SetResponseHeaderLayer;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Content Security Policy for the web client: no inline scripts, no third-party origins.
+/// `wasm-unsafe-eval` allows compiling WebAssembly (the importer script sandbox), not JS `eval`.
 /// See docs/privacy-and-encryption.md#code-integrity.
-pub const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self'; \
+pub const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; \
     img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; \
     object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 

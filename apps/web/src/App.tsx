@@ -7,7 +7,8 @@ import { LANGUAGES } from './i18n';
 import { Explore } from './screens/Explore';
 import { Home } from './screens/Home';
 import { Lock } from './screens/Lock';
-import type { DatasetSummary, StoreStatus } from './worker/api';
+import { Views } from './screens/Views';
+import type { DatasetSummary, StoreStatus, TableSummary } from './worker/api';
 import { data } from './worker/client';
 
 const IDLE_MINUTES = 15;
@@ -17,6 +18,7 @@ export function App() {
   const [status, setStatus] = useState<StoreStatus>();
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [open, setOpen] = useState<DatasetSummary>();
+  const [table, setTable] = useState<TableSummary>();
   const [notice, setNotice] = useState<string>();
 
   const refresh = useCallback(async () => {
@@ -33,6 +35,7 @@ export function App() {
     async (message?: string) => {
       await data.lock();
       setOpen(undefined);
+      setTable(undefined);
       setNotice(message);
       await refresh();
     },
@@ -45,6 +48,7 @@ export function App() {
   async function deleteAll() {
     await data.destroy();
     setOpen(undefined);
+    setTable(undefined);
     setNotice(undefined);
     await refresh();
   }
@@ -98,12 +102,14 @@ export function App() {
             }}
             onDeleteAll={deleteAll}
           />
+        ) : table ? (
+          <Views table={table} onBack={() => setTable(undefined)} />
         ) : open ? (
           <Explore dataset={open} onBack={() => setOpen(undefined)} />
         ) : (
           <>
             <h1>{t('app.tagline')}</h1>
-            <Home datasets={datasets} onChanged={refresh} onOpen={setOpen} />
+            <Home datasets={datasets} onChanged={refresh} onOpen={setOpen} onOpenTable={setTable} />
             <p style={{ marginTop: '3rem' }}>
               <button className="link-button" type="button" onClick={deleteAllConfirmed}>
                 {t('lock.deleteAll')}
