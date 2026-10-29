@@ -1,6 +1,6 @@
 # Privacy and encryption
 
-Privacy is the reason a participant can trust Combray with years of their search history. This document sets out the threat model, how data is protected in the browser, how keys are handled, and how donations are encrypted so that only the researcher can read them.
+Privacy is the reason a participant can trust Combray with years of their search history. This document sets out the threat model, how data is protected in the browser, how keys are handled, and how donations are encrypted so that only the researcher can read them. What is implemented today, with the reasoning behind each choice, is in [security.md](security.md).
 
 > All constructions here are proposals and need review by someone with applied cryptography experience before implementation. We use standard, vetted constructions and libraries only.
 
@@ -17,8 +17,8 @@ Privacy is the reason a participant can trust Combray with years of their search
 
 | Adversary | Example | What we defend | How |
 | --- | --- | --- | --- |
-| Next user of a shared lab machine | Opens the browser after the participant left | Local data | Encrypted store; key needs server login; auto-lock and explicit end-of-session wipe |
-| Someone with a copy of the disk | Stolen laptop, backup image | Local data | Store key wrapped by a server-held key that is never written to disk |
+| Next user of a shared lab machine | Opens the browser after the participant left | Local data | Encrypted store; key released by the server only for the participant's password; auto-lock and explicit end-of-session wipe |
+| Someone with a copy of the disk | Stolen laptop, backup image | Local data | Data key wrapped by a server-held key that is never written to the device; password guessing only online, under a lockout |
 | Curious or compromised server operator | Admin of the shared university server browses its storage | Donations, vault copies | End-to-end encryption; private key only in the researcher's Studio; vault needs a participant secret too |
 | Compromised storage | Stolen server disk or leaked S3 credentials | Donations, vault copies | Ciphertext only; store keys kept separately under a master key |
 | Network attacker | Café Wi-Fi in browser mode | Everything in transit | TLS everywhere; payloads already encrypted |
@@ -32,45 +32,27 @@ Out of scope, stated honestly: malware running as the participant on the same ma
 
 ## Local store
 
-Data imported by the participant is stored in IndexedDB, as in DigitalFootprintsLab, but every record is encrypted.
+Data imported by the participant is stored in IndexedDB, as in DigitalFootprintsLab, but every record is encrypted. The details (storage model, record encryption, key handling, parameters and limits) are in [security.md](security.md#local-store). In short:
 
-### Layout
-
-- **Records** are chunks of a dataset (e.g. 5,000 nodes per chunk), serialised compactly (MessagePack or a binary tree format from `combray-core`), then encrypted with **AES-256-GCM** using the store's data key.
-- Each record has a random 96-bit nonce. The additional authenticated data binds the ciphertext to its context: `store_id || dataset_id || chunk_index || format_version`, so chunks cannot be swapped or replayed between datasets.
-- An unencrypted **index** holds only what is needed to list and open datasets without revealing content: random ids, chunk counts, sizes rounded up to buckets, format version. Dataset names, importer names and dates are inside the encrypted manifest.
-- Large binary chunks may go to OPFS instead of IndexedDB; the encryption is identical.
-
-### Keys
+- **Layout.** Each uploaded file is kept as one logical blob of its raw bytes, encrypted in 4 MiB slices, plus chunked caches of the parsed tree and importer tables. IndexedDB is used as a blob store, never queried by content. An unencrypted index holds only random ids, chunk counts, size buckets and format versions.
+- **Records** are encrypted with **AES-256-GCM** under the store's data key (DEK), with a random 96-bit nonce and additional data that binds each ciphertext to its store, dataset and position.
+- **Keys** ([ADR 0004](decisions/0004-server-held-store-keys.md)). The data stays on the device and the key stays on the server:
 
 ```
-  DEK            random AES-256 key that encrypts all records
-   │ unwrapKey with server KEK = HKDF(server_secret, salt = store_id)
-  inner blob     = AES-KW(server KEK, DEK)
-   │ decrypt with device key (non-extractable AES-GCM key in IndexedDB)
-  wrappedDEK     = AES-GCM(device key, inner blob)   ← what is stored in IndexedDB
+  DEK            random AES-256 key, non-extractable, only in the data worker; never leaves the device
+   │ wrapped with AES-KW under
+  KEK            = HKDF-SHA-256(server master key, per-store salt, label || store id)
+                   released by the server's key service only for the store's password
+                   (Argon2id, per-store lockout, per-IP rate limits)
 ```
 
-Two layers are needed because WebCrypto cannot feed a non-extractable key into a KDF: the device key opens the outer layer, the server-derived KEK opens the inner one, and the result is imported as a non-extractable DEK.
-
-- **DEK** (data encryption key): generated with `crypto.subtle.generateKey`, used as a **non-extractable** `CryptoKey`. It exists unwrapped only in memory, inside the crypto worker, while the store is unlocked.
-- **Device key**: a non-extractable `CryptoKey` generated on first use and stored in IndexedDB (structured clone keeps it non-extractable). JavaScript on the page can use it but cannot read it, which limits what an XSS bug could take away. It does not protect against someone reading the browser profile on disk, which is why it is combined with the server secret.
-- **Server secret**: a random 256-bit value per participant store, held by the server's key service. The client receives it after the participant (or the facilitator, on their behalf) logs in, derives the server KEK, unwraps the DEK, and then forgets the server secret.
-- **Participant secret** (optional): a high-entropy recovery code printed on a card or shown once (e.g. 8 words from a word list, about 88 bits), required for portable vaults. The server never stores it.
-
-### Unlock modes
-
-| Mode | KEK derived from | Use case |
-| --- | --- | --- |
-| **Server unlock** (default in lab) | device key + server secret | Store is unreadable at rest; logging in unlocks it on this device |
-| **Server + code** | server secret + participant secret | Portable: the same store can be opened on another lab machine via the vault |
-| **Passphrase** (browser-only mode) | Argon2id(passphrase) via WASM, fallback PBKDF2-SHA-256 (≥ 600k iterations) | No Combray server available |
-| **Ephemeral** | in-memory only | Kiosk demos; nothing persists after the tab closes |
+- **Server unlock is the only mode.** There is no passphrase or browser-only mode, and no device-key layer (see [security.md](security.md#no-passphrase-only-mode) for why).
+- **Participant secret** (later, optional): a high-entropy recovery code for portable vaults, which the server never stores.
 
 ### Session hygiene on shared machines
 
 - Auto-lock after a configurable idle period: the DEK is dropped from memory and the UI returns to a calm lock screen.
-- "End session" offers two clear choices: *lock and keep for next time* or *delete everything from this computer*. Deletion removes the IndexedDB database, OPFS files and caches, and asks the server to destroy the server secret (crypto-shredding: even an old disk image becomes unreadable).
+- "End session" offers two clear choices: *lock and keep for next time* or *delete everything from this computer*. Deletion asks the server to forget the store's KEK (crypto-shredding: even an old disk image becomes unreadable), then removes the IndexedDB database, OPFS files and caches. Implemented: auto-lock, lock, and delete with crypto-shredding.
 - The facilitator view can show which stores exist on the machine (by random id and participant code) so stale data is noticed and cleaned up.
 - Deployment guide recommends a dedicated browser profile per lab machine, with sync, password saving and extensions disabled.
 
@@ -78,8 +60,8 @@ Two layers are needed because WebCrypto cannot feed a non-extractable key into a
 
 For large stores, multi-session diary studies or moving between lab machines, the encrypted chunks can be uploaded to the server's blob storage or an S3 bucket. Chunks are already encrypted with the DEK, so the vault only ever sees ciphertext.
 
-- **Same-device vault**: the DEK is wrapped only with device-derived keys. The bucket holds opaque blobs that are useless anywhere else. If the browser profile is lost, the data is lost, which is acceptable for a backup of data the participant can re-import.
-- **Portable vault**: the DEK is additionally wrapped with a KEK from the server secret plus the participant secret. The server operator alone cannot decrypt (no participant secret); a participant who loses the code loses the data.
+- **Same-device vault**: the DEK stays wrapped only under the server KEK, and the wrapped DEK stays on the device. The bucket holds opaque blobs that are useless without the device. If the browser profile is lost, the data is lost, which is acceptable for a backup of data the participant can re-import.
+- **Portable vault**: the DEK is additionally wrapped with a KEK from the server key plus the participant secret. The server operator alone cannot decrypt (no participant secret); a participant who loses the code loses the data.
 - The key service and vault storage use separate credentials and, on a VM deployment, separate volumes. Leaking the vault storage does not leak keys; leaking the key database does not leak data.
 
 ## Consent layer
@@ -153,13 +135,7 @@ The catch is where the PRF secret is evaluated. If the passkey ceremony runs in 
 
 ## Code integrity
 
-Browser crypto is only as trustworthy as the JavaScript that runs it. Mitigations:
-
-- Strict Content Security Policy: no inline scripts, no third-party origins, `connect-src` limited to the Combray server. The only relaxation is `'wasm-unsafe-eval'`, which lets the browser compile WebAssembly (the QuickJS sandbox) but does not allow JavaScript `eval`.
-- No third-party analytics, fonts or CDNs in production builds. Everything is self-hosted.
-- Reproducible builds, with published hashes of the SPA bundle per release; the server binary embeds the bundle so a deployment runs exactly a released version.
-- Installable PWA so lab machines keep a known version.
-- Small, audited dependency set for anything that touches data or keys.
+Browser crypto is only as trustworthy as the JavaScript that runs it. The measures (strict CSP with Trusted Types, never rendering data as HTML, self-hosted code only, reproducible builds with published hashes) and why "only run code we signed" is not available on the web are described in [security.md](security.md#xss-and-code-integrity).
 
 ## Legal and ethics support
 
@@ -167,7 +143,7 @@ Not a substitute for a DPIA, but Combray should ship with: a data flow descripti
 
 ## Open questions
 
-- Is the device key plus server secret combination worth its complexity, or is server secret only (in memory) enough for lab settings?
+- ~~Is the device key plus server secret combination worth its complexity?~~ Decided: server key only ([ADR 0004](decisions/0004-server-held-store-keys.md)).
 - Should participants be able to unlock with a QR code on a card (scan with the lab webcam) instead of typing a code?
 - Is the passkey-protected key backup worth offering, given that the passkey ceremony must run in Studio rather than in server-served code?
 - Do we want a hybrid signature (Ed25519 + ML-DSA) on project configs from v1, or Ed25519 only and upgrade later? Signatures are verified at use time, so the quantum risk is lower than for encryption.

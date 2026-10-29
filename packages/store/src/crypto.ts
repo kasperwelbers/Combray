@@ -1,33 +1,25 @@
 /**
- * Local store crypto, WebCrypto only. See docs/privacy-and-encryption.md#local-store.
+ * Local store crypto, WebCrypto only. See docs/security.md#local-store.
  *
  * - DEK: a random AES-256-GCM key that encrypts every record. It is only ever held as a
- *   non-extractable CryptoKey once unlocked.
- * - KEK: derived from the passphrase with PBKDF2-SHA-256 (600k iterations, the documented
- *   fallback; Argon2id via WASM can replace it later). The KEK wraps the DEK with AES-KW,
- *   whose integrity check also tells us when a passphrase is wrong.
+ *   non-extractable CryptoKey once unlocked, and never leaves the device.
+ * - KEK: 32 random bytes held by the Combray server's key service, released only for the
+ *   store's password. Imported as a non-extractable AES-KW key, it wraps the DEK. AES-KW's
+ *   integrity check tells us when a KEK does not match.
  * - Records: AES-256-GCM with a random 96-bit nonce and additional data that binds each
  *   ciphertext to its store, dataset and position, so chunks cannot be swapped or replayed.
  */
-
-export const KDF_ITERATIONS = 600_000;
-
-export interface KdfParams {
-  name: 'PBKDF2';
-  hash: 'SHA-256';
-  iterations: number;
-  salt: Uint8Array<ArrayBuffer>;
-}
 
 export interface EncryptedRecord {
   iv: Uint8Array<ArrayBuffer>;
   ciphertext: ArrayBuffer;
 }
 
-export class WrongPassphraseError extends Error {
+/** The KEK does not unwrap this store's DEK (e.g. the server's master key was replaced). */
+export class WrongKeyError extends Error {
   constructor() {
-    super('wrong passphrase');
-    this.name = 'WrongPassphraseError';
+    super('the key does not open this store');
+    this.name = 'WrongKeyError';
   }
 }
 
@@ -41,25 +33,14 @@ export function randomId(): string {
   return Array.from(randomBytes(16), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function newKdfParams(iterations = KDF_ITERATIONS): KdfParams {
-  return { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: randomBytes(16) };
-}
-
-export async function deriveKek(passphrase: string, params: KdfParams): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(passphrase.normalize('NFC')),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  );
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', hash: params.hash, iterations: params.iterations, salt: params.salt },
-    material,
-    { name: 'AES-KW', length: 256 },
-    false,
-    ['wrapKey', 'unwrapKey'],
-  );
+/** Import the KEK's raw bytes as a non-extractable AES-KW key, then wipe the bytes. */
+export async function importKek(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+  if (raw.byteLength !== 32) throw new WrongKeyError();
+  try {
+    return await crypto.subtle.importKey('raw', raw, 'AES-KW', false, ['wrapKey', 'unwrapKey']);
+  } finally {
+    raw.fill(0);
+  }
 }
 
 /** Create a new DEK, wrapped under the KEK. Returns the wrapped bytes and a usable key. */
@@ -86,7 +67,7 @@ export async function unwrapDek(kek: CryptoKey, wrapped: ArrayBuffer): Promise<C
       ['encrypt', 'decrypt'],
     );
   } catch {
-    throw new WrongPassphraseError();
+    throw new WrongKeyError();
   }
 }
 

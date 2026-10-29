@@ -2,3 +2,7 @@ packages:
   - apps/*
   - packages/*
   - importers
+
+# Only resolve versions published at least a week ago (in minutes), so a hijacked release is
+# likely caught before we pick it up. See docs/security.md#supply-chain.
+minimumReleaseAge: 10080

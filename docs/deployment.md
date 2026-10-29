@@ -9,7 +9,6 @@ Combray has three components (see [architecture.md](architecture.md)): **Studio*
 | **University server** | `docker compose up -d` on a VM, TLS through Caddy | University IT or research support, once, for all researchers |
 | **Researcher tool** | Download Combray Studio for Windows, macOS or Linux, double-click | Every researcher |
 | **Lab laptop** | One `combray-server` binary on the laptop, plus Studio | A lab without a university server, or offline sessions |
-| **Browser only** | Static bundle exported from Studio, on any web host | Remote, low-touch studies without enrichment |
 
 ## Combray Studio
 
@@ -22,15 +21,14 @@ The `combray-server` binary (Rust, statically linked) embeds the built web clien
 ```
 combray-data/
 ├── combray.toml        config
-├── combray.sqlite      researcher accounts, projects, sessions, receipts, enrichment cache
+├── combray.sqlite      store key records (built); later researcher accounts, projects, sessions, receipts, enrichment cache
 ├── projects/           signed project configs and platform packs
 ├── donations/          encrypted envelopes (unless S3 is configured)
-└── keys/               server secrets for local-store unlock (encrypted with the master key)
 ```
 
 No object storage is needed: donations and vault blobs live in this directory by default. S3 is an optional backend.
 
-The master key that protects `keys/` comes from an environment variable or a file outside the data directory (e.g. a Docker secret), so a backup of the data directory alone does not contain usable keys.
+The **master key** (32 random bytes) from which every store's key is derived comes from a file outside the data directory (`COMBRAY_MASTER_KEY_FILE`, a Docker secret in the compose setup), so a backup of the data directory alone contains no usable keys. Back it up separately: losing it makes every participant's local store unreadable. See [security.md](security.md#store-keys).
 
 ## Docker compose
 
@@ -72,14 +70,6 @@ volumes:
 ```
 
 `docker compose --profile s3 --profile ai up -d` adds the optional parts. The main image is built `FROM scratch` (or distroless) and runs as a non-root user with a read-only root filesystem.
-
-## Browser-only build
-
-`pnpm build --mode static` produces a static site that works without a Combray server:
-
-- Local store unlocked with a passphrase (see [privacy-and-encryption.md](privacy-and-encryption.md#unlock-modes)).
-- No enrichment and no server-side AI proxy.
-- Donations either go to a configured endpoint that accepts Combray envelopes (for example a minimal intake service, or an existing platform like OSD2F if it adds support), or are downloaded by the participant as an encrypted file to upload elsewhere.
 
 ## A project, end to end
 

@@ -2,38 +2,54 @@ import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Madeleine } from '../components/Madeleine';
+import type { CreateResult, UnlockResult } from '../worker/api';
 
-export const MIN_PASSPHRASE = 10;
+/** The server's minimum; see crates/combray-server/src/keys.rs. */
+export const MIN_PASSWORD = 8;
 
 interface Props {
   exists: boolean;
   notice?: string;
-  onCreate: (passphrase: string) => Promise<void>;
-  onUnlock: (passphrase: string) => Promise<boolean>;
+  onCreate: (password: string) => Promise<CreateResult>;
+  onUnlock: (password: string) => Promise<UnlockResult>;
   onDeleteAll: () => Promise<void>;
 }
 
 export function Lock({ exists, notice, onCreate, onUnlock, onDeleteAll }: Props) {
   const { t } = useTranslation();
-  const [passphrase, setPassphrase] = useState('');
+  const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+
+  function problem(result: CreateResult | UnlockResult): string | undefined {
+    const wait = (seconds: number) => t('lock.wait', { count: Math.ceil(seconds / 60) });
+    switch (result.status) {
+      case 'ok':
+        return undefined;
+      case 'invalid-password':
+        return t('lock.tooShort', { min: MIN_PASSWORD });
+      case 'wrong-password':
+        return result.retryAfter ? `${t('lock.wrong')} ${wait(result.retryAfter)}` : t('lock.wrong');
+      case 'too-many-attempts':
+        return wait(result.retryAfter);
+      case 'store-gone':
+        return t('lock.storeGone');
+      case 'unreachable':
+        return t('lock.unreachable');
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(undefined);
     if (!exists) {
-      if (passphrase.length < MIN_PASSPHRASE) return setError(t('lock.tooShort', { min: MIN_PASSPHRASE }));
-      if (passphrase !== confirm) return setError(t('lock.mismatch'));
+      if ([...password].length < MIN_PASSWORD) return setError(t('lock.tooShort', { min: MIN_PASSWORD }));
+      if (password !== confirm) return setError(t('lock.mismatch'));
     }
     setBusy(true);
     try {
-      if (exists) {
-        if (!(await onUnlock(passphrase))) setError(t('lock.wrong'));
-      } else {
-        await onCreate(passphrase);
-      }
+      setError(problem(exists ? await onUnlock(password) : await onCreate(password)));
     } finally {
       setBusy(false);
     }
@@ -51,12 +67,12 @@ export function Lock({ exists, notice, onCreate, onUnlock, onDeleteAll }: Props)
       <p>{exists ? t('lock.unlockIntro') : t('lock.createIntro')}</p>
       <form onSubmit={submit} noValidate>
         <label className="field">
-          {t('lock.passphrase')}
+          {t('lock.password')}
           <input
             type="password"
             autoComplete={exists ? 'current-password' : 'new-password'}
-            value={passphrase}
-            onChange={(e) => setPassphrase(e.target.value)}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             autoFocus
             required
           />

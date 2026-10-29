@@ -2,6 +2,7 @@ import { localize, type FieldValue, type Row } from '@combray/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { safeHref } from '../security';
 import type { RowFilter, TableSummary, Timeline as TimelineData, TimeUnit, TopItems as TopItemsData } from '../worker/api';
 import { data } from '../worker/client';
 import { localTime } from '../worker/tables';
@@ -100,7 +101,7 @@ function MemoryLane({ table, filter }: { table: TableSummary; filter: RowFilter 
             {rows.map((row, j) => {
               const time = dateField ? localTime(row[dateField])?.slice(11, 16) : undefined;
               const label = text(title ? row[title] : undefined) || text(url ? row[url] : undefined) || t('views.untitled');
-              const link = url ? text(row[url]) : '';
+              const link = url ? safeHref(text(row[url])) : undefined;
               const extra = groups.map((g) => text(row[g])).filter(Boolean).join(' · ');
               return (
                 <li key={j} className="lane-item">

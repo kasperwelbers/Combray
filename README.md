@@ -82,7 +82,8 @@ See [docs/architecture.md](docs/architecture.md) for the full picture.
 | [Visualisation and reflection](docs/visualization.md) | Tree-aware charts, auto-unfolding, questions and annotations |
 | [Local processing plugins](docs/plugins.md) | WASM modules for anonymisation and classification |
 | [AI helper](docs/ai-helper.md) | Help and agentic tasks, and what the model may see |
-| [Deployment](docs/deployment.md) | Docker compose, single binary, browser-only mode |
+| [Security](docs/security.md) | Every implemented security choice and why: local store, store keys, XSS |
+| [Deployment](docs/deployment.md) | Docker compose, single binary |
 | [Visual identity](docs/design-identity.md) | Madeleine, the town, colour, type and tone |
 | [Roadmap](docs/roadmap.md) | Phased plan |
 | [Open questions](docs/open-questions.md) | Decisions that still need to be made |

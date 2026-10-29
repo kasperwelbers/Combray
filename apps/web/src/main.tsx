@@ -1,3 +1,6 @@
+// Must stay the first import: see installPolicy.ts.
+import './installPolicy';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 

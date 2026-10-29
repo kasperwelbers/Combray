@@ -96,5 +96,4 @@ Fetching public metadata at small scale for consenting participants is a differe
 
 - Should the client mix in decoy URLs (e.g. popular items) to make batches less identifying, or is shuffling plus not logging enough? Decoys cost fetches but mostly hit the cache.
 - Is a shared cache across studies acceptable for all ethics committees, or should caches be per study by default?
-- Should enrichment be possible in browser-only mode through a public Combray enrichment service run by the team, or is that a trust boundary we do not want?
 - How do we keep enrichers working as platforms change oEmbed and HTML? A scheduled CI job that tests each enricher against a few public URLs?
