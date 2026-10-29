@@ -1,7 +1,17 @@
-import { extractShape, jsonToTree, projectTreeFromShape, setDecision, setTable, effectiveStates } from '@combray/core';
+import { extractShape, jsonToTree, projectTreeFromShape, setDecision, effectiveStates } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
-import { countDecisions, foldChain, fromFiles, patchNode, toFiles, undecidedBelow } from '../src/studio/model';
+import {
+  countDecisions,
+  decideBelow,
+  displayName,
+  foldChain,
+  fromFiles,
+  nodeIcon,
+  patchNode,
+  toFiles,
+  undecidedBelow,
+} from '../src/studio/model';
 
 const tree = () =>
   projectTreeFromShape(
@@ -13,13 +23,12 @@ const tree = () =>
   );
 
 describe('studio model', () => {
-  it('folds runs of single-child groups, but not through lists or tables', () => {
+  it('folds runs of single-child groups, but not into the rows of a table or past a label', () => {
     const t = tree();
     const youtube = t.children![0]!.children!.find((c) => c.name === 'YouTube')!;
     expect(foldChain(youtube, ['Takeout', 'YouTube']).map((c) => c.node.name)).toEqual(['YouTube', 'history']);
-    const marked = setTable(t, ['Takeout', 'YouTube'], true);
-    const markedYoutube = marked.children![0]!.children!.find((c) => c.name === 'YouTube')!;
-    expect(foldChain(markedYoutube, ['Takeout', 'YouTube'])).toHaveLength(1);
+    youtube.label = { en: 'YouTube' };
+    expect(foldChain(youtube, ['Takeout', 'YouTube'])).toHaveLength(1);
   });
 
   it('counts decisions and undecided leaves', () => {
@@ -46,5 +55,33 @@ describe('studio model', () => {
     expect(first.pending).toHaveLength(1);
     const later = fromFiles(toFiles(tree(), first.pending).structure, toFiles(tree(), first.pending).importer);
     expect(later.pending).toHaveLength(0);
+  });
+
+  it('picks icons for tables, lists of values, objects and leaves by type', () => {
+    const t = projectTreeFromShape(
+      extractShape(jsonToTree('x.json', { posts: [{ at: 1709284500, tags: ['a'], meta: { url: 'https://x.org' } }] })),
+    );
+    const posts = t.children![0]!;
+    const item = posts.children![0]!;
+    const child = (name: string) => item.children!.find((c) => c.name === name)!;
+    expect(nodeIcon(posts).kind).toBe('table');
+    expect(nodeIcon(item).kind).toBe('row');
+    expect(nodeIcon(child('at')).kind).toBe('date');
+    expect(nodeIcon(child('tags')).kind).toBe('list');
+    expect(nodeIcon(child('meta')).kind).toBe('object');
+    expect(nodeIcon(child('meta').children![0]!).kind).toBe('link');
+    expect(displayName('[*]', (k) => k)).toBe('studio.eachItem');
+  });
+
+  it('sets every field below a node, keeping decisions unless asked not to', () => {
+    let t = setDecision(tree(), ['Takeout', 'YouTube', 'history', '[*]', 'time'], 'donate');
+    t = decideBelow(t, ['Takeout', 'YouTube'], 'show', true);
+    const history = ['Takeout', 'YouTube', 'history', '[*]'];
+    const states = effectiveStates(t);
+    const node = (name: string) => t.children![0]!.children!.find((c) => c.name === 'YouTube')!.children![0]!.children![0]!.children!.find((c) => c.name === name)!;
+    expect(states.get(node('time'))).toBe('donate');
+    expect(states.get(node('title'))).toBe('show');
+    t = decideBelow(t, history, 'undecided', false);
+    expect(countDecisions(t, effectiveStates(t)).undecided).toBe(3);
   });
 });

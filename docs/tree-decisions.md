@@ -4,7 +4,7 @@ Status: **partly built** (see [Implementation plan](#implementation-plan)). Agre
 
 ## Idea
 
-Every upload becomes a tree, and **the tree is the data**. An importer does not build a table from it. It filters the tree. The researcher decides per node what happens to it. Tables are something we derive from those decisions so participants see the data in a readable way, but they are a view, not the import.
+Every upload becomes a tree, and **the tree is the data**. An importer does not build a table from it. It filters the tree. The researcher decides per node what happens to it. Tables are inferred from the structure so participants see the data in a readable way, but they are a view, not the import.
 
 The current spec still thinks in tables: it selects a row path and named field paths. That makes researchers learn the path language and HTML structure, and it drops everything the spec does not name. Here the researcher works on a tree of all the structure the project has seen, and every node has a decision.
 
@@ -28,9 +28,8 @@ A **leaf** is a node that holds a value: a JSON or CSV value, an HTML text posit
 | On an inner node | Meaning |
 | --- | --- |
 | `ignore` | Ignores the node and everything below it. If this overrides decisions on leaves below, the UI warns first. |
-| `table` | A marker, not a decision: rows of this node form a table (see [Tables](#tables)). |
 
-Show and donate are possible on leaves only. An inner node never passes `show` or `donate` down, so new children stay undecided. Its effective state is derived from its leaves:
+Show and donate are possible on leaves only, with one exception: a `{*}` node, whose keys are data (see [Keys that are data](#keys-that-are-data)), has a decision of its own for its keys. An inner node never passes `show` or `donate` down, so new children stay undecided. Its effective state is derived from its leaves:
 
 - **donate** if any leaf below it is donate,
 - else **show** if any leaf below it is show or undecided,
@@ -50,26 +49,48 @@ Besides the decision, a node in the project tree can have:
 | `as`, `format`, `transform`, `script` | leaves | Conversion, as in the current field spec, now attached to the node |
 | `role` | leaves | View hint: `date`, `title`, `url`, `group` (replaces `display`) |
 | `raw` | donated leaves | Donate the value as it is in the file instead of transformed ([What is donated](#what-is-donated)) |
-| `unnest` | inner, repeated | Default for nested lists inside a table: `count` (default), `longer` or `wider` |
 | `lifter` | inner | A sandboxed script that turns each row subtree into a map ([HTML](#html), layer 3) |
 | `where`, derived fields, enrichers | table | Row filter, fields computed from other columns (`from` + transform or script), and which columns may be enriched |
 
 ## Tables
 
-Tables are derived from the decisions:
+Tables are **inferred from the structure**; researchers do not mark them. (An earlier version of this design had researchers mark table nodes. Kasper dropped that on 2026-10-29: marking a table was really a way of unnesting, and it would still need a choice between longer and wider. Nested data now stays nested.)
 
-1. **Rows.** A table node's rows are its repeated children: list items (`[*]`), entries of a collapsed dictionary (`{*}`), or a repeated HTML block. If a table node is not itself repeated (for example `history`, which holds one list), its rows are those of the nearest repeated node below it.
-2. **Columns.** Every leaf that is shown, undecided or donated ends up in the **nearest table ancestor**.
-3. **Column names** are the leaf's label, or else the *shortest unique suffix* of its path from the row: `url` and `timestamp` normally, `h2/url` and `span/url` only when two would collide.
-4. **Table names** are the table node's label, or else its own name.
-5. **Without table nodes**, the client uses the same rule with the nearest repeated ancestor as an implicit table, so undecided data is still readable. Leaves with no repeated ancestor (profile information, settings) form a single record, shown as a card of label and value.
-6. The researcher UI **suggests** table nodes at repeated nodes, so marking one is usually a single click.
+1. **A list of objects is a table.** Its items (`[*]`) are the rows. This is the first array above a leaf, which is what the old `rows_selector` pointed at.
+2. **Objects in a row are more columns.** Leaves inside an item are cells, however deep they sit in objects: `stats/likes` is a column of the tweets table.
+3. **Lists in a row stay nested.** A list of objects inside a row is a **nested table**. A list of plain values (`tags: ["tea", "baking"]`) is a list cell.
+4. **Leaves outside any list** (profile information, settings) form a single record.
+5. **Column names** are the leaf's label, or else the *shortest unique suffix* of its path from the row: `url` and `timestamp` normally, `h2/url` and `span/url` only when two would collide.
+6. **Table names** are the label of the list (or of its items), or else the list's name. A table in an HTML file is named after the file, not after `div.mdl-grid`.
+
+What researchers do is the same as for any node: decide on the leaves, and give tables and columns labels and aliases. Tables that the same structure produces in several files (a language variant, a renamed file) are combined with aliases, like any other node.
 
 ### Nested tables
 
-A table node inside another table node is a **nested table**. Tweets with comments: `tweets` is a table and `tweets/[*]/comments` is a table. In the tweets table, the comments column shows the number of comments per tweet. Choosing it opens the comments table, filtered to that tweet, with a way back. Each nested row keeps a link to its parent row, so views can still unnest.
+Tweets with comments: `tweets` is a table and `tweets/[*]/comments` is a nested table. In the tweets table, the comments column shows the size of each tweet's comments, as rows × columns (`3 × 4`). Choosing it opens the comments table, filtered to that tweet, with a way back. A list cell shows the number of items and opens to show them.
 
-A repeated node inside a table that is not marked as a table (`subtitles/[*]/name` in a watch-history table) becomes a list cell ("2 items"). Its `unnest` setting chooses the default: `count` shows the number of items, `longer` gives one row per item and repeats the parent's values, and `wider` puts the first few items in their own columns. Two unnested sibling lists would cross-multiply, so only one of them can be `longer`, the same rule as in [visualization.md](visualization.md#trees-and-tables).
+Next to the open table there is a **map of all tables**, nested ones under their parent:
+
+```
+tweets        6 × 7
+  comments    7 × 3
+  reactions  12 × 2
+Your data     1 × 2
+```
+
+Each nested row keeps a link to its parent row. **Unnesting happens while aggregating, not while importing.** Counting comments per tweet iterates over the tweets and counts each tweet's comment rows. Plotting tweet likes against comment likes iterates over the tweets and then over their comments, repeating the tweet's likes for every comment. This is the unfold described in [visualization.md](visualization.md#trees-and-tables).
+
+### Keys that are data
+
+Sometimes keys are data rather than field names: `"comments": {"bob": "hey", "sarah": "yeah"}`, a diary keyed by date, an inbox keyed by username. Such a map is a table of key and value rows, nested where it sits: the tweets table gets a comments column, and its rows have a `key` and a `value` column.
+
+These maps become `{*}` positions, so the names never reach the structure metadata:
+
+- **Within one map**, the shape extractor already collapses maps whose keys look like data (dates, numbers, emails, ids) or that have many entries with the same structure.
+- **Across rows**, the extractor now also looks at maps inside list items. If there are at least 5 different keys across the rows, and no key appears in more than half of the rows that have the map, the keys are data. Optional fields do not trigger this, because the same keys come back in many rows.
+- **By hand.** With few rows this cannot be told apart from coincidence, so the researcher UI has a "the keys are data" action on any map or folder. It merges the children into one `{*}` position and drops their names; it does not keep them as aliases, because they are data.
+
+The keys themselves can be shown or donated: the `{*}` node has its own decision, separate from the values inside it. Below a `{*}` node, every key matches the one position, so new keys never add paths and are never offered in a consent request.
 
 ## HTML
 
@@ -157,7 +178,7 @@ When a study needs a raw value, the researcher sets `raw` on that donated leaf. 
 A project tree is kept as two JSON documents, combined into one tree in the browser:
 
 - **`structure.json`**, owned by the server: the union of every shape the project has seen. It grows as participants send structure metadata.
-- **`importer.json`**, owned by the researcher: decisions, table markers, labels, descriptions, aliases, conversions, lifters and scripts (as strings), keyed by canonical path. This is the part that is signed with the project config and shared between projects.
+- **`importer.json`**, owned by the researcher: decisions, labels, descriptions, aliases, conversions, lifters and scripts (as strings), keyed by canonical path. This is the part that is signed with the project config and shared between projects.
 
 Keeping them apart means the server adding new paths never collides with the researcher's edits. Merging nodes rewrites the paths in `importer.json`.
 
@@ -168,12 +189,12 @@ Platform packs become shared `importer.json` files plus a reference `structure.j
 | Current spec | Project tree |
 | --- | --- |
 | `match.file` with `{a,b}` | Nodes under the root, with aliases |
-| `select.rows` | A table node |
+| `select.rows` | Nothing: the list it points at is a table anyway |
 | `fields.*.path` | Donated or shown leaves, with labels |
 | `as`, `format`, `transform`, `script` | The same, on the leaf |
 | `from` (derived fields), `where` | Derived fields and filter on the table |
 | `display` | `role` on leaves |
-| `nth`, `all`, `join` | Positional text and `unnest` |
+| `nth`, `all`, `join` | Positional text, list cells, and unnesting in views |
 
 The current runner stays until the derivation covers all platform packs. Datasets keep recording which project tree version produced them.
 
@@ -188,9 +209,9 @@ The current runner stays until the derivation covers all platform packs. Dataset
 
 1. **Core** (built: `decisions.ts`, `projectFiles.ts`). Project tree types, effective decisions, alias matching, merging, comparing a participant shape with a project tree (known, unknown, missing), and the two JSON files.
 2. **Nameless root and upload points** (partly built: `uploadRoot`, `mergeDirs`). Root without a name, unwrapping one top folder, merging split zips. Still to do: upload points in the project config.
-3. **Table derivation** (built: `derive.ts`). Table nodes, implicit tables, shortest unique suffix, nested tables. `unnest` is stored but `longer` and `wider` are not applied yet; conversions (`as`) are not applied yet.
+3. **Table inference** (built: `derive.ts`). Every list of objects is a table, nested where it sits; maps whose keys are data become key and value tables; shortest unique suffix. Conversions (`as`) are not applied yet.
 4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins. Still to do: `<table>` and `<dl>`, and tuning on team members' own exports.
-5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, table markers, labels, descriptions, aliases, merging, unnest defaults and "view as participant", saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. Still to do: merge suggestions, lifter editing, registering the files with a server project.
+5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, labels, descriptions, aliases, merging, "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in the side panel, value formats and a first chart builder are described in [exploration.md](exploration.md). Still to do: merge suggestions, lifter editing, registering the files with a server project.
 6. **Participant UI.** Collections, other data, breadcrumbs with folding, nested table navigation.
 7. **Consent flows.** Sending unknown paths, then missing-field requests in the donation step.
 8. **Conversion.** Convert the platform packs to project trees and retire the row/field runner once the outputs match.
@@ -199,7 +220,8 @@ The current runner stays until the derivation covers all platform packs. Dataset
 
 Answered by Kasper on 2026-10-29:
 
-- **Leaves in other tables.** Not needed: pulling a parent's value into a nested table is unnesting. Each nested row links to its parent row, and `longer` repeats parent values.
+- **Who decides what a table is.** Nobody: tables are inferred (every list of objects; maps whose keys are data). Researchers label tables and columns. There are no table markers and no `unnest` setting; nested data stays nested and views unnest while aggregating.
+- **Leaves in other tables.** Not needed: pulling a parent's value into a nested table is unnesting. Each nested row links to its parent row, and views repeat parent values when they unnest.
 - **Classes and ids.** Kept only when stable across repeated rows (see [HTML](#html)).
 - **Raw or transformed.** Transformed, as shown in the preview, with a `raw` flag per donated leaf (see [What is donated](#what-is-donated)).
 - **Lifter output.** One decision on the lifter node covers every key it outputs; the output shape is not stored.
@@ -209,3 +231,6 @@ Answered by Kasper on 2026-10-29:
 ## Open questions
 
 - Whether shared project trees go through a public registry, and how they are reviewed.
+- Whether views should ever pivot a nested table wider (first items as columns), or always keep it nested and unnest while aggregating. For now: always nested.
+- The thresholds for keys that are data across rows (5 keys, at most half of the rows) are first guesses; they need tuning on real exports, like the dictionary thresholds.
+- Combining tables beyond aliases, for example two different files that describe the same events.

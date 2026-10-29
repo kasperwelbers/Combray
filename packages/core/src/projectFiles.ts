@@ -6,7 +6,8 @@
  * Settings are keyed by canonical path plus the node's kind, so the server adding new paths
  * never touches them.
  */
-import { type Alias, type NodePath, type ProjectNode } from './decisions';
+import { STRUCTURE_FIELDS, type Alias, type NodePath, type ProjectNode } from './decisions';
+import { isFormat, MAX_FORMATS } from './formats';
 import type { Localized } from './importer/spec';
 import type { Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
@@ -24,13 +25,11 @@ export interface ImporterEntry {
   path: NodePath;
   kind: NodeKind;
   decision?: ProjectNode['decision'];
-  table?: true;
   label?: Localized;
   description?: Localized;
   aliases?: Alias[];
   lifter?: string;
   raw?: true;
-  unnest?: ProjectNode['unnest'];
 }
 
 export interface ImporterFile {
@@ -46,12 +45,11 @@ export class ProjectFileError extends Error {
   }
 }
 
-const SETTINGS = ['decision', 'table', 'label', 'description', 'aliases', 'lifter', 'raw', 'unnest'] as const;
-const STRUCTURE = ['types', 'count', 'mime', 'collapsed'] as const;
+const SETTINGS = ['decision', 'label', 'description', 'aliases', 'lifter', 'raw'] as const;
 
 function shapeOf(node: ProjectNode): Shape {
   const shape: Shape = { kind: node.kind, name: node.name };
-  for (const key of STRUCTURE) {
+  for (const key of STRUCTURE_FIELDS) {
     if (node[key] !== undefined) (shape as unknown as Record<string, unknown>)[key] = node[key];
   }
   if (node.children) shape.children = node.children.map(shapeOf);
@@ -97,7 +95,7 @@ function find(root: ProjectNode, path: NodePath, kind: NodeKind): ProjectNode | 
 
 function toNode(shape: Shape): ProjectNode {
   const node: ProjectNode = { kind: shape.kind, name: shape.name };
-  for (const key of STRUCTURE) {
+  for (const key of STRUCTURE_FIELDS) {
     if (shape[key] !== undefined) (node as unknown as Record<string, unknown>)[key] = shape[key];
   }
   if (shape.children) node.children = shape.children.map(toNode);
@@ -156,6 +154,20 @@ function checkShape(v: unknown, where: string, depth = 0): void {
   if (v.types !== undefined) {
     check(Array.isArray(v.types) && v.types.every((t) => TYPES.has(t as ValueType)), `${where}: unknown type`);
   }
+  if (v.keyTypes !== undefined) {
+    check(Array.isArray(v.keyTypes) && v.keyTypes.every((t) => TYPES.has(t as ValueType)), `${where}: unknown key type`);
+  }
+  // Formats are tokens only, so a structure file cannot carry values in them.
+  for (const key of ['formats', 'keyFormats'] as const) {
+    const formats = v[key];
+    if (formats === undefined) continue;
+    check(
+      Array.isArray(formats) &&
+        formats.length <= MAX_FORMATS &&
+        formats.every((f) => typeof f === 'string' && isFormat(f)),
+      `${where}: ${key} must be formats such as YYYY-MM-DD`,
+    );
+  }
   if (v.count !== undefined) check(BUCKETS.has(v.count as string), `${where}: unknown count`);
   if (v.mime !== undefined) check(typeof v.mime === 'string', `${where}: mime must be a string`);
   if (v.collapsed !== undefined) check(v.collapsed === true, `${where}: collapsed must be true`);
@@ -181,9 +193,7 @@ export function parseImporterFile(json: unknown): ImporterFile {
     check(Array.isArray(e.path) && e.path.every((p) => typeof p === 'string'), `${at}: path must be a list of names`);
     check(typeof e.kind === 'string' && KINDS.has(e.kind as NodeKind), `${at}: unknown kind`);
     if (e.decision !== undefined) check(['ignore', 'show', 'donate'].includes(e.decision as string), `${at}: unknown decision`);
-    if (e.table !== undefined) check(e.table === true, `${at}: table must be true`);
     if (e.raw !== undefined) check(e.raw === true, `${at}: raw must be true`);
-    if (e.unnest !== undefined) check(['count', 'longer', 'wider'].includes(e.unnest as string), `${at}: unknown unnest`);
     if (e.lifter !== undefined) check(typeof e.lifter === 'string', `${at}: lifter must be a string`);
     if (e.label !== undefined) checkLocalized(e.label, `${at}: label`);
     if (e.description !== undefined) checkLocalized(e.description, `${at}: description`);

@@ -1,4 +1,4 @@
-import type { ColumnDef, Localized, ProjectNode, Shape, TableDef } from '@combray/core';
+import type { ChartData, ChartSpec, ColumnDef, Localized, ProjectNode, Shape, TableDef } from '@combray/core';
 
 import type { ImportProgress, Upload } from '../worker/api';
 
@@ -21,7 +21,8 @@ export interface PreviewRow {
 
 export interface PreviewTable {
   name: Localized;
-  implicit: boolean;
+  /** True for a table of key and value rows (a map whose keys are data). */
+  keyed: boolean;
   /** True for a single record: fields outside any repeated node. */
   record: boolean;
   parent?: number;
@@ -39,4 +40,6 @@ export interface StudioApi {
   removeExport(id: number): Promise<void>;
   /** The derived tables of the loaded exports, with the first rows of each. */
   preview(tree: ProjectNode, rowLimit: number): Promise<PreviewTable[]>;
+  /** A chart over all rows of the loaded exports. Only counts and summaries come back. */
+  chart(tree: ProjectNode, spec: ChartSpec): Promise<ChartData>;
 }

@@ -136,6 +136,7 @@ When a donation is made, Combray can (with consent, as its own item in the donat
 A shape keeps only structure:
 
 - Directory and file names, node kinds, keys, list lengths in coarse buckets (`0`, `1`, `2-10`, `11-100`, `101-1k`, `>1k`), inferred value types, and for HTML the tag, `id` and `class` values.
+- **Value formats** for dates and timestamps (`YYYY-MM-DD`, `MMM D, YYYY, H:mm:ss A Z`, `epoch-s`), made of tokens only, and the types and formats of keys that are data. See [exploration.md](exploration.md#value-formats).
 - No values: no strings, numbers, dates or URLs.
 
 Names can be data too, so the shape extractor detects and collapses them:
@@ -146,7 +147,7 @@ Names can be data too, so the shape extractor detects and collapses them:
 
 ### Researcher decisions and new paths
 
-Researchers decide per leaf of a project's tree whether it is `ignore`d, `show`n to the participant, or requested for `donate` (which implies show); inner nodes can be ignored as a whole or marked as tables. Leaves nobody has decided on yet are `undecided`, and the client shows them. The full design, including how tables are derived, HTML normalisation, aliases and the nameless upload root, is in [tree-decisions.md](tree-decisions.md). To decide well, researchers need to see structure their own test export did not have, so the server keeps each project's known structure metadata and sends it to the client. After an import, the client compares locally and, only when it finds paths the server has not seen, asks the participant whether it may send just those paths. The request shows exactly the paths, says that no content is sent, and offers "yes", "no, these contain private information" and "no, another reason". See [security.md](security.md#structure-metadata-and-consent).
+Researchers decide per leaf of a project's tree whether it is `ignore`d, `show`n to the participant, or requested for `donate` (which implies show); inner nodes can be ignored as a whole, and tables are inferred from the structure. Leaves nobody has decided on yet are `undecided`, and the client shows them. The full design, including how tables are inferred, HTML normalisation, aliases and the nameless upload root, is in [tree-decisions.md](tree-decisions.md). To decide well, researchers need to see structure their own test export did not have, so the server keeps each project's known structure metadata and sends it to the client. After an import, the client compares locally and, only when it finds paths the server has not seen, asks the participant whether it may send just those paths. The request shows exactly the paths, says that no content is sent, and offers "yes", "no, these contain private information" and "no, another reason". See [security.md](security.md#structure-metadata-and-consent).
 
 Shapes are hashed into **fingerprints** so importers can declare which variants they support and Combray can pick the right importer automatically. The participant sees the shape in the donation preview in readable form ("the structure of 214 files, without any of your content").
 

@@ -71,7 +71,7 @@ describe('extractShape', () => {
                 },
               ],
             },
-            { kind: 'value', name: 'time', types: ['date-like'] },
+            { kind: 'value', name: 'time', types: ['date-like'], formats: ['YYYY-MM-DDTHH:mm:ss.SSSZ'] },
             { kind: 'value', name: 'title', types: ['string'] },
             { kind: 'value', name: 'titleUrl', types: ['url-like'] },
           ],
@@ -118,6 +118,8 @@ describe('extractShape', () => {
       name: 'daily',
       collapsed: true,
       count: '2-10',
+      keyTypes: ['date-like'],
+      keyFormats: ['YYYY-MM-DD'],
       children: [{ kind: 'value', name: '{*}', types: ['int'] }],
     });
   });
