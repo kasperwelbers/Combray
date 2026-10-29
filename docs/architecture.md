@@ -59,7 +59,7 @@ Power users get the same functions as a CLI (`combray project create`, `combray 
 
 ## Web client
 
-**Framework.** React with TypeScript, built with Vite, as a single-page app served by the Combray server (or as static files in browser-only mode). React keeps continuity with DigitalFootprintsLab, has the largest pool of contributors in research software teams, and has good libraries for charts and accessibility.
+**Framework.** React with TypeScript, built with Vite, as a single-page app served by the Combray server. React keeps continuity with DigitalFootprintsLab, has the largest pool of contributors in research software teams, and has good libraries for charts and accessibility.
 
 | Option | For | Against |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ Power users get the same functions as a CLI (`combray project create`, `combray 
 
 Recommendation: **React SPA with Vite**, installable as a PWA so a lab laptop keeps a known version and can work offline. Studio's UI is a second app in the same monorepo sharing the UI kit and core bindings.
 
-**State and storage.** UI state in a small store (Zustand or React context; no Redux). Persistent data lives in IndexedDB, encrypted per record with a symmetric key that is unlocked through the server's store-key service (see [privacy-and-encryption.md](privacy-and-encryption.md#local-store)). Large datasets are stored in chunks so they can be decrypted and streamed into workers without loading everything at once. OPFS is an option for large binary chunks, with the same encryption.
+**State and storage.** UI state in a small store (Zustand or React context; no Redux). Persistent data lives in IndexedDB, encrypted per record with a data key that is unwrapped with a key from the server's store-key service (see [security.md](security.md#local-store)). Each uploaded file is kept as one encrypted blob (in 4 MiB slices), next to chunked caches of the parsed tree, so data can be decrypted into workers without one huge allocation. IndexedDB is only a blob store, never queried by content. OPFS is an option for large files, with the same encryption.
 
 **Workers.** All parsing, querying and aggregation run in web workers, accessed with Comlink. The main thread only renders.
 
@@ -88,7 +88,7 @@ The server is intentionally small, and **multi-tenant**: one installation serves
 
 1. **Project registry.** Researcher accounts; projects registered from Studio with their signed config and public key; participant codes and links.
 2. **Serve the web client** (embedded in the binary) and each project's signed config.
-3. **Store-key service.** Hold the per-participant symmetric secrets that unlock participants' encrypted IndexedDB stores, released after login. These keys protect data that stays in the browser; they cannot decrypt donations.
+3. **Store-key service** (built). Hold a key encryption key per participant store, released only for the store's password, with lockout and rate limits (see [security.md](security.md#store-keys)). These keys protect data that stays in the browser; they cannot decrypt donations.
 4. **Enrichment.** Accept batches of sanitised URLs, fetch public metadata quickly and politely, cache it without linking it to participants, stream results back (see [enrichment.md](enrichment.md)).
 5. **Donation storage.** Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers in Studio, and delete them on request.
 6. **Optional AI proxy.** Forward helper requests (metadata only, see [ai-helper.md](ai-helper.md)) to a configured model, so API keys never reach the browser.
@@ -111,7 +111,9 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 | `DELETE /api/v1/projects/{id}/donations/{d}` | Studio | Delete a donation (withdrawal) |
 | `GET /api/v1/p/{id}/config` | Web client | Signed project config |
 | `POST /api/v1/sessions` | Web client | Exchange a participant code for a session token |
-| `POST /api/v1/store-keys/{store}` | Web client | Release the store secret for this session |
+| `POST /api/v1/stores` | Web client | Create a store key for a password; returns store id, KEK and delete token (built) |
+| `POST /api/v1/stores/{id}/unlock` | Web client | Release the KEK for the store's password (built) |
+| `POST /api/v1/stores/{id}/delete` | Web client | Forget the KEK, with the delete token: crypto-shredding (built) |
 | `POST /api/v1/enrich` | Web client | Submit a batch of URLs; returns a job id |
 | `GET /api/v1/enrich/{job}/events` | Web client | Server-sent events with metadata as it arrives |
 | `PUT /api/v1/vault/{blob}` | Web client | Encrypted remote copy of the local store (optional) |
@@ -152,7 +154,6 @@ Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, and a `just
 | --- | --- | --- | --- |
 | **University server** | One docker compose stack on a university VM | Each researcher installs Studio | The main target: zero programming for researchers |
 | **Lab laptop** | `combray-server` runs on the same laptop | Same laptop or the researcher's own | Offline sessions; enrichment needs internet |
-| **Browser only** | None (static hosting) | Studio exports a static bundle with the signed config | Passphrase-locked local store, no enrichment; donations downloaded as an encrypted file or sent to a server |
 
 See [deployment.md](deployment.md).
 

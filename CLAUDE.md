@@ -14,7 +14,7 @@ See [docs/architecture.md](docs/architecture.md#monorepo-layout). Three separate
 
 - `apps/web` participant web client: React + TypeScript SPA (Vite). All parsing, encryption and querying run in `src/worker/data.worker.ts`.
 - `packages/core` tree model, parsers, path language, shape extraction (TypeScript; Rust/WASM only for measured bottlenecks)
-- `packages/store` encrypted IndexedDB store (WebCrypto)
+- `packages/store` encrypted IndexedDB store (WebCrypto); keys from the server's key service ([ADR 0004](docs/decisions/0004-server-held-store-keys.md))
 - `importers` platform packs: importer specs (YAML) with synthetic fixtures; format in [docs/importer-spec.md](docs/importer-spec.md)
 - `crates/combray-server` the server (Rust, axum)
 - `deploy/` docker compose, Caddyfile, example project configs
@@ -46,7 +46,8 @@ These apply to every change, however small.
 5. **No real participant data in the repo.** Fixtures are synthetic. Do not commit real takeout files, even your own.
 6. **Sandboxed code stays sandboxed.** QuickJS importer scripts and WASM plugins get no network, no DOM, and bounded memory and time. Do not add host functions that break this without a design discussion.
 7. **The AI helper never sees participant data.** It receives only structure metadata and declared-safe local results, and returns instructions that run locally. See [docs/ai-helper.md](docs/ai-helper.md).
-8. **Crypto uses vetted libraries and documented constructions only.** No home-made primitives. Changes to `combray-crypto`, `packages/store/src/crypto.ts` or other client crypto need a note in the PR on what changed and why.
+8. **Crypto uses vetted libraries and documented constructions only.** No home-made primitives. Changes to `combray-crypto`, `packages/store/src/crypto.ts`, the server's key service (`crates/combray-server/src/keys.rs`) or other crypto need a note in the PR on what changed and why, and an update to [docs/security.md](docs/security.md).
+9. **Data is never rendered as HTML.** No `innerHTML`, `dangerouslySetInnerHTML`, `eval` or `new Function` (a test enforces this); links from data go through `safeHref`. The CSP enforces Trusted Types; do not weaken it. See [docs/security.md](docs/security.md#xss-and-code-integrity).
 
 ## Conventions
 

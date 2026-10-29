@@ -33,7 +33,7 @@ The name comes from the fictional village in Proust's *In Search of Lost Time*. 
 
 **Enrichment-dependent study.** A study wants participants to talk about the creators they watch. The raw export contains only usernames. The participant consents to sending "the 50 TikTok profiles you watched most" to the server, which fetches profile names and avatars. Everything else stays local.
 
-**Classic donation, done gently.** A study just wants a few variables from many participants, remotely. Combray supports this too (browser-only mode, short flow), but it is not the design centre.
+**Classic donation, done gently.** A study just wants a few variables from many participants, remotely. Combray supports this too (a short flow), but it is not the design centre.
 
 ## Guiding principles
 

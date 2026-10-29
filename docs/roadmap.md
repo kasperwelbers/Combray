@@ -15,7 +15,9 @@ Goal: import a Google Takeout and a TikTok export, explore them, entirely in the
 - [x] `packages/core` (TypeScript, [ADR 0003](decisions/0003-typescript-core-and-key-tool.md)): tree model, parsers (JSON, JSON Lines, CSV, HTML, XML, text, zip), path language, shape extraction.
 - [ ] Unfolding and aggregation for views.
 - [x] Importer spec format and runner ([reference](importer-spec.md)); QuickJS sandbox; converter for old data-donation-importers recipes; first platform packs (Google Takeout: YouTube, search, browsing; TikTok) with synthetic fixtures.
-- [x] Encrypted local store (passphrase unlock), data worker, Comlink.
+- [x] Encrypted local store, data worker, Comlink. Raw files kept as encrypted blobs.
+- [x] Store-key service on the server (password unlock, Argon2id, lockout, crypto-shredding), pulled forward from Phase 2; passphrase unlock removed ([ADR 0004](decisions/0004-server-held-store-keys.md)).
+- [x] XSS hardening: Trusted Types, safe links, banned HTML sinks ([security.md](security.md)).
 - [x] Tree browser, structure view, memory lane, timeline and top items (linked: choosing a bar or an item filters memory lane).
 - [x] Design system v0: palette, madeleine placeholder, town placeholder. [ ] Self-hosted fonts.
 - [x] Minimal Rust server (web client, health, read-only project configs), Docker image and compose file, pulled forward from Phase 2.
@@ -26,10 +28,11 @@ Goal: a researcher with no programming experience creates a project, registers i
 
 - Local key tool v0: generate keys with guided backup, sign project configs, decrypt donations, export ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
 - Researcher UI in the browser: create a project, configure from platform packs, register on a server, create participant codes, download encrypted donations.
-- Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, store-key service (server unlock), donation storage on its own disk.
+- Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, donation storage on its own disk.
 - `combray-crypto`: HPKE with X-Wing, envelope format, signatures, key files; test vectors shared with the client.
 - CLI equivalents of the key tool functions for power users.
 - Donation flow: preview, exclusions, consent receipts, probes and answers.
+- Researcher path decisions (ignore, show, donate) on the tree, and the consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent)).
 - Docker image and compose file; deployment guide.
 - External review of the crypto design.
 
