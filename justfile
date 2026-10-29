@@ -12,10 +12,10 @@ dev:
     pnpm --filter @combray/web dev
 
 # Run the server against the built web client and the example projects. Store keys and a
-# development master key go to target/dev, which is not committed.
+# development store master key go to target/dev, which is not committed.
 serve: build-web
     COMBRAY_WEB_DIR=apps/web/dist COMBRAY_DATA_DIR=deploy/examples \
-    COMBRAY_DB=target/dev/combray.sqlite COMBRAY_MASTER_KEY_FILE=target/dev/master.key \
+    COMBRAY_DB=target/dev/combray.sqlite COMBRAY_STORE_MASTER_KEY_FILE=target/dev/store-master.key \
     cargo run -p combray-server
 
 # Run all tests

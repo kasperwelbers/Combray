@@ -5,6 +5,7 @@
 //! the URL, query string, headers or bodies.
 
 pub mod keys;
+pub mod projects;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use keys::{Argon2Cost, KeyError, KeyService, RateLimits};
+use projects::{LoadError, ParticipantError};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -46,7 +48,7 @@ pub struct Config {
     pub db_path: PathBuf,
     /// 32 random bytes from which every store's KEK is derived. Keep it outside the data
     /// directory, so a backup of the data alone holds no usable keys. Created if missing.
-    pub master_key_file: PathBuf,
+    pub store_master_key_file: PathBuf,
     /// Header with the client IP when behind a reverse proxy (e.g. `x-forwarded-for`, whose last
     /// entry is used). Without it the peer address is used.
     pub client_ip_header: Option<HeaderName>,
@@ -66,7 +68,7 @@ impl Config {
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| data_dir.join("combray.sqlite")),
             data_dir,
-            master_key_file: var("COMBRAY_MASTER_KEY_FILE", "combray-master.key"),
+            store_master_key_file: var("COMBRAY_STORE_MASTER_KEY_FILE", "combray-store-master.key"),
             client_ip_header: std::env::var("COMBRAY_CLIENT_IP_HEADER")
                 .ok()
                 .and_then(|h| HeaderName::try_from(h.to_ascii_lowercase()).ok()),
@@ -90,39 +92,38 @@ async fn health() -> Json<serde_json::Value> {
     Json(json!({ "status": "ok", "version": VERSION }))
 }
 
-fn valid_project_id(id: &str) -> bool {
-    (1..=64).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-}
-
-/// Serve a project's config. In Phase 2 these are signed and registered from the researcher
-/// tool; for now they are JSON files placed in the data directory by the operator.
-async fn project_config(State(state): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
-    let config = &state.config;
-    if !valid_project_id(&id) {
-        return error(StatusCode::NOT_FOUND, "not_found");
-    }
-    let path = config.data_dir.join("projects").join(format!("{id}.json"));
-    match tokio::fs::read(&path).await {
-        Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(value) => Json(value).into_response(),
-            Err(_) => {
-                tracing::error!(
-                    error_class = "invalid_project_config",
-                    "project config is not valid JSON"
-                );
-                error(StatusCode::INTERNAL_SERVER_ERROR, "invalid_config")
-            }
-        },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            error(StatusCode::NOT_FOUND, "not_found")
+fn project_error(e: LoadError) -> Response {
+    match e {
+        LoadError::NotFound => error(StatusCode::NOT_FOUND, "no_such_project"),
+        LoadError::Invalid => {
+            tracing::error!(
+                error_class = "invalid_project_config",
+                "project config is invalid"
+            );
+            error(StatusCode::INTERNAL_SERVER_ERROR, "invalid_config")
         }
-        Err(_) => {
+        LoadError::Io => {
             tracing::error!(error_class = "io", "could not read project config");
             error(StatusCode::INTERNAL_SERVER_ERROR, "io")
         }
+    }
+}
+
+/// Serve a project's config. The participant id pattern is left out: the client does not need
+/// it, and there is no reason to show which ids are valid.
+async fn project_config(State(state): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    match projects::load(&state.config.data_dir, &id).await {
+        Ok(project) => {
+            let mut config = project.config;
+            if let Some(p) = config
+                .get_mut("participants")
+                .and_then(|p| p.as_object_mut())
+            {
+                p.remove("pattern");
+            }
+            Json(config).into_response()
+        }
+        Err(e) => project_error(e),
     }
 }
 
@@ -161,6 +162,19 @@ struct DeleteBody {
     delete_token: String,
 }
 
+#[derive(Deserialize)]
+struct CreateBody {
+    project: String,
+    participant_id: Option<String>,
+    password: String,
+}
+
+#[derive(Deserialize)]
+struct ResetBody {
+    token: String,
+    password: String,
+}
+
 /// The client IP, for rate limiting only. Never stored or logged.
 fn client_ip(
     config: &Config,
@@ -193,6 +207,7 @@ fn key_error(e: KeyError) -> Response {
     match e {
         KeyError::InvalidPassword => error(StatusCode::BAD_REQUEST, "invalid_password"),
         KeyError::NotFound => error(StatusCode::NOT_FOUND, "no_such_store"),
+        KeyError::InvalidResetToken => error(StatusCode::FORBIDDEN, "invalid_reset_token"),
         KeyError::WrongPassword { retry_after } => retry(
             error(StatusCode::UNAUTHORIZED, "wrong_password"),
             retry_after,
@@ -221,10 +236,27 @@ async fn create_store(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: Option<Extension<ConnectInfo<SocketAddr>>>,
-    Json(body): Json<PasswordBody>,
+    Json(body): Json<CreateBody>,
 ) -> Response {
     let ip = client_ip(&state.config, &headers, peer);
-    no_store(match state.keys.create(ip, &body.password).await {
+    let project = match projects::load(&state.config.data_dir, &body.project).await {
+        Ok(project) => project,
+        Err(e) => return project_error(e),
+    };
+    let participant = match project.check_participant(body.participant_id.as_deref()) {
+        Ok(participant) => participant,
+        Err(ParticipantError::Required) => {
+            return error(StatusCode::BAD_REQUEST, "participant_required");
+        }
+        Err(ParticipantError::Invalid) => {
+            return error(StatusCode::BAD_REQUEST, "invalid_participant");
+        }
+    };
+    let created = state
+        .keys
+        .create(ip, &body.project, participant, &body.password)
+        .await;
+    no_store(match created {
         Ok(store) => (
             StatusCode::CREATED,
             Json(json!({
@@ -252,6 +284,22 @@ async fn unlock_store(
     })
 }
 
+async fn reset_store(
+    State(state): State<AppState>,
+    UrlPath(id): UrlPath<String>,
+    headers: HeaderMap,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    Json(body): Json<ResetBody>,
+) -> Response {
+    let ip = client_ip(&state.config, &headers, peer);
+    no_store(
+        match state.keys.reset(ip, &id, &body.token, &body.password).await {
+            Ok(kek) => Json(json!({ "kek": kek })).into_response(),
+            Err(e) => key_error(e),
+        },
+    )
+}
+
 async fn delete_store(
     State(state): State<AppState>,
     UrlPath(id): UrlPath<String>,
@@ -266,15 +314,15 @@ async fn delete_store(
     }
 }
 
-/// Build the app. Fails if the key database or the master key cannot be opened.
+/// Open the store key service described by the config.
+pub fn key_service(config: &Config) -> std::io::Result<KeyService> {
+    let master = keys::load_store_master_key(&config.store_master_key_file)?;
+    KeyService::open(&config.db_path, master, config.argon2, config.rate_limits)
+}
+
+/// Build the app. Fails if the key database or the store master key cannot be opened.
 pub fn app(config: Config) -> std::io::Result<Router> {
-    let master = keys::load_master_key(&config.master_key_file)?;
-    let keys = Arc::new(KeyService::open(
-        &config.db_path,
-        master,
-        config.argon2,
-        config.rate_limits,
-    )?);
+    let keys = Arc::new(key_service(&config)?);
     let state = AppState {
         config: config.clone(),
         keys,
@@ -282,6 +330,7 @@ pub fn app(config: Config) -> std::io::Result<Router> {
     let stores = Router::new()
         .route("/stores", post(create_store))
         .route("/stores/{id}/unlock", post(unlock_store))
+        .route("/stores/{id}/reset", post(reset_store))
         .route("/stores/{id}/delete", post(delete_store))
         .layer(DefaultBodyLimit::max(8 * 1024));
     let api = Router::new()

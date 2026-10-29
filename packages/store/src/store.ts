@@ -3,9 +3,9 @@
  * IndexedDB is used as a key-value store for encrypted blobs, never queried by content.
  * See docs/security.md#local-store.
  *
- * Layout (database `combray`, format version 2):
- * - `meta`      the store id (issued by the server), the wrapped DEK and the delete token.
- *               No content.
+ * One store per project per device, in database `combray-{project id}` (format version 2):
+ * - `meta`      the project (id and public name), the participant id if any, the store id
+ *               (issued by the server), the wrapped DEK and the delete token. No content.
  * - `index`     per dataset: random id, kind, chunk count, size bucket, format version.
  * - `manifests` per dataset: the encrypted manifest (name, source, dates, summary).
  * - `chunks`    per dataset and chunk index: encrypted MessagePack arrays of items (`items`),
@@ -40,6 +40,15 @@ interface StoreMeta {
   unlock: { mode: 'server'; wrappedDek: ArrayBuffer };
   /** Lets this device ask the server to forget the KEK, without the password. */
   deleteToken: string;
+  project: StoreProject;
+  /** The participant id from the study link, if the project uses them. */
+  participantId?: string;
+}
+
+/** The project a store belongs to. The name is public (from the project config). */
+export interface StoreProject {
+  id: string;
+  name?: unknown;
 }
 
 /** What the key service returns for a new store. */
@@ -127,11 +136,22 @@ export class LocalStore<M = unknown> {
     return this.meta?.deleteToken;
   }
 
+  get project(): StoreProject | undefined {
+    return this.meta?.project;
+  }
+
+  get participantId(): string | undefined {
+    return this.meta?.participantId;
+  }
+
   /**
    * Create a new, empty store whose DEK is wrapped under the server's KEK. Fails if a store
    * exists. The KEK bytes are wiped after import.
    */
-  async create(server: ServerStore): Promise<void> {
+  async create(
+    server: ServerStore,
+    about: { project: StoreProject; participantId?: string | undefined },
+  ): Promise<void> {
     if (this.meta) throw new Error('a store already exists on this device');
     const { wrapped, dek } = await createDek(await importKek(server.kek));
     const meta: StoreMeta = {
@@ -140,7 +160,9 @@ export class LocalStore<M = unknown> {
       createdAt: new Date().toISOString().slice(0, 10),
       unlock: { mode: 'server', wrappedDek: wrapped },
       deleteToken: server.deleteToken,
+      project: about.project,
     };
+    if (about.participantId) meta.participantId = about.participantId;
     await this.db.put('meta', meta, 'store');
     this.meta = meta;
     this.dek = dek;

@@ -11,6 +11,8 @@ Changing anything in the local store, the store key service, the Content Securit
 1. [What we protect](#what-we-protect)
 2. [Local store](#local-store)
 3. [Store keys](#store-keys)
+   - [Projects and participants](#projects-and-participants)
+   - [Password reset](#password-reset)
 4. [Session hygiene](#session-hygiene)
 5. [XSS and code integrity](#xss-and-code-integrity)
 6. [Server](#server)
@@ -28,9 +30,10 @@ The participant's data download package, and everything derived from it, stays o
 | --- | --- | --- |
 | The next user of a shared lab computer | Opens the browser after the participant left | Data is encrypted at rest. The key is only released by the server for the participant's password. The store auto-locks when idle. |
 | Someone with a copy of the disk | A stolen laptop or backup image | The disk holds only ciphertext and a wrapped data key. The key that unwraps it is on the server, and the password can only be guessed online, under a lockout. |
-| Someone with a copy of the server's database | A leaked backup | The database holds no keys, only per-store salts and password hashes. Keys also need the master key, which is kept apart. Even with the keys, the data itself is on participants' devices. |
+| Someone with a copy of the server's database | A leaked backup | The database holds no keys, only per-store salts and password hashes. Keys also need the store master key, which is kept apart. Even with the keys, the data itself is on participants' devices. |
 | A script injected into the page (XSS) | A crafted title in an imported file | The data is never rendered as HTML. Trusted Types are enforced. CSP blocks other origins. The data key is non-extractable and lives in a worker. |
 | A network attacker | Café Wi-Fi | TLS everywhere, with HSTS. |
+| A researcher of the project | Wants to read a participant's local data | A password reset needs the participant's device too, and only works for participants with an id in that project. The server never has the data. |
 | A malicious importer script | A shared importer tries to exfiltrate | A QuickJS sandbox with no network or DOM (see [plugins.md](plugins.md)). |
 
 **Out of scope**, stated honestly:
@@ -58,9 +61,11 @@ IndexedDB is used as a key-value store for encrypted blobs. It is never queried 
 
 A file is one logical blob, but it is encrypted in slices because WebCrypto's AES-GCM has no streaming interface. Encrypting a 2 GB Takeout in one call would need the plaintext and ciphertext in memory at once, and some browsers (Safari in particular) handle very large single IndexedDB values badly. Slices keep peak memory small and let us move them to OPFS later without changing the encryption.
 
-Object stores (database `combray`, format version 2):
+There is one store per project on each device, in its own IndexedDB database named `combray-{project id}`. A password, and the key it releases, only ever covers one project. The overview page at `/` lists the projects that have a store on this device by reading these databases locally, without asking the server.
 
-- `meta`: the store id (issued by the server), the wrapped data key and the delete token. No content.
+Object stores (format version 2):
+
+- `meta`: the project (its id and public name), the participant id if any, the store id (issued by the server), the wrapped data key and the delete token. No content.
 - `index`: for each dataset, a random id, its kind, the chunk count, the total size rounded up to a power of two (so exact sizes do not show), and the format version. No names, dates or content.
 - `manifests`: for each dataset, the encrypted manifest (name, file path, dates, summary).
 - `chunks`: the encrypted chunks and slices.
@@ -80,12 +85,12 @@ Format 1 (the passphrase-locked store from before any release) is dropped on upg
 The data stays on the device and the key stays on the server. Neither alone can read the data. Implemented in `crates/combray-server/src/keys.rs` (server) and `apps/web/src/worker/keyService.ts` (client).
 
 ```
- device (IndexedDB)                               server (combray.sqlite + master key)
+ device (IndexedDB)                               server (combray.sqlite + store master key)
  ─────────────────                                ─────────────────────────────────────
  ciphertext  ◄── AES-256-GCM ── DEK               store id, KEK salt, Argon2id(password),
  wrapped DEK = AES-KW(KEK, DEK)                   failure count, delete-token hash
  store id, delete token
-                                                  KEK = HKDF-SHA-256(master key, KEK salt,
+                                                  KEK = HKDF-SHA-256(store master key, KEK salt,
         ── POST /stores/{id}/unlock {password} ─►        "combray/store-kek/v1/" || store id)
         ◄──────────────── { kek } ──────────────
  import KEK (non-extractable) → unwrap DEK → wipe KEK bytes
@@ -107,14 +112,14 @@ The server holds a key encryption key (KEK). The DEK that encrypts the data is c
 
 - The data key is never sent over the network or stored on the server.
 - The server key can be rotated, or a second way to unlock added (for example, a facilitator recovery), by re-wrapping a 32-byte key instead of re-encrypting gigabytes.
-- AES-KW's integrity check detects a wrong KEK. If the server's master key has been replaced, the client says the store can no longer be opened instead of showing garbage.
+- AES-KW's integrity check detects a wrong KEK. If the server's store master key has been replaced, the client says the store can no longer be opened instead of showing garbage.
 
 Against an attacker who has only the device or only the server, this is exactly as strong as a server-held DEK.
 
 ### How the server derives and protects keys
 
-- **KEK = HKDF-SHA-256(master key, per-store random 32-byte salt, `combray/store-kek/v1/` + store id).** The database stores only the salt. A copy of the database without the master key gives no keys. Deleting the row is enough to crypto-shred the store, and SQLite runs with `secure_delete` so deleted rows are overwritten.
-- **The master key** is 32 random bytes in a file outside the data directory (a Docker secret in the compose setup). Back it up separately from the data, because losing it makes every store unreadable. The server creates the file on first start if it is missing, with mode 0600. If it is configured at a read-only path, the server refuses to start rather than inventing a key.
+- **KEK = HKDF-SHA-256(store master key, per-store random 32-byte salt, `combray/store-kek/v1/` + store id).** The database stores only the salt. A copy of the database without the store master key gives no keys. Deleting the row is enough to crypto-shred the store, and SQLite runs with `secure_delete` so deleted rows are overwritten.
+- **The store master key** (not to be confused with a researcher's private key, which decrypts donations and never touches the server) is 32 random bytes in a file outside the data directory (a Docker secret in the compose setup). Back it up separately from the data, because losing it makes every store unreadable. The server creates the file on first start if it is missing, with mode 0600. If it is configured at a read-only path, the server refuses to start rather than inventing a key.
 - **Store ids** are 128 random bits, issued by the server.
 - **Responses that carry a KEK** have `Cache-Control: no-store`.
 - The client imports the KEK as a **non-extractable AES-KW key** and overwrites the received bytes right away.
@@ -142,10 +147,39 @@ An earlier design also wrapped the DEK with a non-extractable "device key" store
 ### Known limits
 
 - **The server sees the password** (over TLS) while it checks it. A password-authenticated key exchange (for example OPAQUE) would avoid that. It is a candidate for later, but it does not help against the out-of-scope case of a malicious server, which could serve altered code anyway.
-- **Server and device together** (master key, database and a copy of the disk) can decrypt without the password once the Argon2 hash is cracked. Mixing a password-derived secret into the KEK would only raise the cost to that of cracking the hash, so we do not.
-- **A forgotten password means lost data**, unless a recovery path is designed later (see open questions). Participants can always import their export again.
-- **The master key cannot be rotated yet.** Rotating it would mean re-wrapping on each device at its next unlock.
+- **Server and device together** (store master key, database and a copy of the disk) can decrypt without the password once the Argon2 hash is cracked. Mixing a password-derived secret into the KEK would only raise the cost to that of cracking the hash, so we do not.
+- **A forgotten password means lost data for anonymous participants.** Participants with an id can get a [reset link](#password-reset). Anyone can import their export again.
+- **The store master key cannot be rotated yet.** Rotating it would mean re-wrapping on each device at its next unlock.
 - **Orphaned records** (a device whose browser data was cleared) stay on the server until a retention policy removes them. They are useless without the device data.
+
+### Projects and participants
+
+A server hosts many projects. A participant opens `https://combray.example.edu/{project}/`, and every store belongs to exactly one project. Project ids are lowercase letters, digits and dashes. `api` and `assets` are reserved, because the web client is served at those paths.
+
+Each project config says how participants are identified (`participants.mode`):
+
+| Mode | Who can take part | Password reset |
+| --- | --- | --- |
+| `anonymous` | Anyone with the project link. Ids in links are ignored. | No: a forgotten password means starting over |
+| `optional` (default) | Anyone; a participant id from the link is kept when there is one | Only for participants with an id |
+| `required` | Only participants with an id that matches the project's pattern | Yes |
+
+- **Participant ids come in the link's fragment**: `/{project}/#id=P1234`. Browsers never send the fragment to the server, so the id does not end up in any proxy or access log. The client removes it from the address bar straight away, so it is not on screen for the next person. It is kept in the tab's `sessionStorage` until the store exists, so a reload does not lose it.
+- **The server enforces the policy** when a store is created. Ids are 1 to 64 characters from `A-Z a-z 0-9 . _ -`, and the whole id must match the project's `participants.pattern` (a regular expression, with Rust's `regex` crate, which runs in linear time). The pattern is never sent to clients. That gives the "allowed part of the id" check.
+- **Participant ids are pseudonyms.** Only the researchers know who is behind them, and the server stores them with the store record because a reset needs them. Ids must never be names, emails or student numbers.
+- **Email or phone instead of ids** would let participants identify themselves without a researcher, at the cost of the server holding contact details. We do not do this for now (see open questions).
+
+### Password reset
+
+Only for stores with a participant id. The researcher is in charge of the people in their project:
+
+1. The participant tells the researcher they forgot their password. The researcher checks who they are, in whatever way the study uses (in the lab, by their usual contact details).
+2. The researcher creates a reset link for that project and participant id. Until the researcher UI exists, this is a server command: `combray-server reset-link <project> <participant-id>`, which prints `https://…/{project}/#reset=<token>`.
+3. The participant opens the link **on the device that holds their data**, and chooses a new password. The server replaces the password hash, lifts any lockout, and returns the same KEK, so the existing data opens again. On a device without a store for that project, the client explains that the link has to be opened where the data is.
+
+The token is 32 random bytes in the link's fragment. The server stores only its SHA-256, together with the project, the participant id and an expiry of 72 hours. It works once, only for that participant's stores in that project, and is used up in the same transaction that checks it. Reset requests share the per-IP rate limit with unlock attempts.
+
+**What this means:** whoever can create reset links for a project (its researchers, and for now the server operator) can choose a new password for a participant's store. With access to the participant's device too, for example a shared lab computer, they could then open that participant's local data. We accept this because researchers are responsible for their participants, and on a lab computer they already have physical access. A study that should not allow it uses `anonymous` mode. Every reset is visible to the participant, because their old password stops working.
 
 ### Sessions, later
 
@@ -236,7 +270,7 @@ Vega compiles expressions with `new Function`, which our CSP forbids. If we adop
 
 - **Logs** contain the method, the route *template* (for example `/api/v1/stores/{id}/unlock`, without the id), the status and the duration. Never URLs, bodies, headers, passwords, store ids or IPs. Errors are logged by class only.
 - **Input:** store ids are validated before any lookup, and project ids are restricted to `[a-z0-9-]`, which rules out path traversal. Request bodies to the key service are capped at 8 KiB. Passwords are capped at 1,024 bytes.
-- **Container:** distroless base image, non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`. The data directory is the only writable volume, and the master key comes in as a read-only Docker secret.
+- **Container:** distroless base image, non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`. The data directory is the only writable volume, and the store master key comes in as a read-only Docker secret.
 - **Storage:** SQLite in the data directory, with WAL and `secure_delete`. It holds no participant data and no keys.
 
 ## Transport
@@ -271,19 +305,23 @@ The researcher decides, for every path in a platform's tree, what happens to it.
 | AES-256-GCM with random nonces and context-binding AAD | AES-CBC + HMAC; ChaCha20-Poly1305 | Native in WebCrypto, authenticated, hardware-accelerated |
 | KEK on the server, wrapped DEK on the device | Key on the device; passphrase KDF on the device; encrypted cookie | Only option where neither the disk nor the server alone suffices, guessing is online-only, and crypto-shredding works |
 | Wrap the DEK instead of keeping it on the server | Server stores the DEK | The data key never leaves the device; rotation and extra unlock paths without re-encryption |
-| KEK derived with HKDF from a master key and a per-store salt | Random KEK stored encrypted in the database | Same protection, no key material in the database, deletion is crypto-shredding |
+| KEK derived with HKDF from a store master key and a per-store salt | Random KEK stored encrypted in the database | Same protection, no key material in the database, deletion is crypto-shredding |
 | Argon2id (19 MiB, t=2) with a per-store lockout | PBKDF2, bcrypt, rate limiting only | Memory-hard, OWASP-recommended; the lockout makes short passwords workable |
 | No passphrase or no-server mode | Offline fallback | It brings back offline guessing, and no study needs it yet |
 | No device-key layer | Device key + server secret | It sits on the same disk as the data, so it adds nothing |
 | Delete token for crypto-shredding | Require the password to delete | Participants who forgot their password can still delete cleanly, and the token gives no read access |
+| One store and one key per project per device | One store per browser | A forgotten password or a deleted store only affects one study; researchers are in charge of their own participants |
+| Participant ids in the link fragment, pattern checked on the server | Ids in the path or query; client-side checks | Fragments stay out of logs; the server is the only place a check can be trusted |
+| Researcher-issued reset links that keep the KEK | No recovery; a facilitator-held second wrap of the DEK; email recovery | Recovery without a second key path and without contact details on the server; the participant's device is still needed |
 | Strict CSP + Trusted Types with one restrictive default policy | CSP only; named policies everywhere | It blocks every DOM XSS sink, and Vite and React work with it |
 | No SRI for now | SRI on all scripts | Same-origin scripts gain nothing; revisit if anything is ever loaded cross-origin |
 | Reproducible builds and published hashes | "Signed code only" | No browser standard enforces signed code for a normal website |
 
 ## Open questions
 
-- **Password recovery.** Should a facilitator be able to reset a participant's password in the lab, for example by wrapping the DEK a second time under a facilitator-released key? It is useful for multi-session studies, but it adds a second way in.
+- **Identity by email or phone**, as an alternative to researcher-issued participant ids. It would allow self-service password reset, but the server would hold contact details. For now, we stick to participant ids.
+- **Who may create reset links** once researcher accounts exist: every researcher of a project, or only its owners? And should a project be able to switch resets off while still using ids?
 - **OPAQUE** (or another password-authenticated key exchange), so the server never sees passwords. It is worth it if it can be done with audited libraries on both sides.
 - **Retention** of orphaned store records: expire them after a project's end date, or after N months unused?
-- **Master key rotation** procedure.
+- **Store master key rotation** procedure.
 - **Who reviews this?** An internal review before Phase 2 and an external audit before a large study (open question 16).

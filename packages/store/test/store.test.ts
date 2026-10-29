@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { LocalStore, StoreLockedError, WrongKeyError, type ServerStore } from '../src';
 
 let n = 0;
+const about = { project: { id: 'willow', name: { en: 'Willow study' } }, participantId: 'P1234' };
 
 /** What the key service would return: a fresh store id, KEK and delete token. */
 function serverStore(): ServerStore & { copy: () => Uint8Array<ArrayBuffer> } {
@@ -32,7 +33,7 @@ describe('LocalStore', () => {
   it('creates, stores and reads back datasets in chunks', async () => {
     const store = await newStore();
     expect(store.exists).toBe(false);
-    await store.create(serverStore());
+    await store.create(serverStore(), about);
     const id = await store.putDataset({ name: 'Synthetic history' }, items, 5);
     expect(await store.getItems(id)).toEqual(items);
     expect(await store.listDatasets()).toEqual([{ id, manifest: { name: 'Synthetic history' } }]);
@@ -40,7 +41,7 @@ describe('LocalStore', () => {
 
   it('stores empty datasets', async () => {
     const store = await newStore();
-    await store.create(serverStore());
+    await store.create(serverStore(), about);
     const id = await store.putDataset({ name: 'empty' }, []);
     expect(await store.getItems(id)).toEqual([]);
   });
@@ -48,9 +49,11 @@ describe('LocalStore', () => {
   it('locks, and unlocks only with the right KEK', async () => {
     const store = await newStore();
     const server = serverStore();
-    await store.create(server);
+    await store.create(server, about);
     expect(store.storeId).toBe(server.storeId);
     expect(store.deleteToken).toBe('token');
+    expect(store.project).toEqual(about.project);
+    expect(store.participantId).toBe('P1234');
     const id = await store.putDataset({ name: 'x' }, items);
     store.lock();
     await expect(store.getItems(id)).rejects.toBeInstanceOf(StoreLockedError);
@@ -63,7 +66,7 @@ describe('LocalStore', () => {
   it('wipes the KEK bytes it was given', async () => {
     const store = await newStore();
     const server = serverStore();
-    await store.create(server);
+    await store.create(server, about);
     expect(server.kek.every((b) => b === 0)).toBe(true);
     store.lock();
     const kek = server.copy();
@@ -73,7 +76,7 @@ describe('LocalStore', () => {
 
   it('stores files as encrypted slices and reads them back whole', async () => {
     const store = await newStore();
-    await store.create(serverStore());
+    await store.create(serverStore(), about);
     const bytes = crypto.getRandomValues(new Uint8Array(10_000));
     const id = await store.putFile({ name: 'watch-history.json' }, new Blob([bytes]), 4096);
     const blob = await store.getFile(id, 'application/json');
@@ -88,7 +91,7 @@ describe('LocalStore', () => {
   it('rejects file slices that were reordered', async () => {
     const store = await newStore();
     const server = serverStore();
-    await store.create(server);
+    await store.create(server, about);
     const id = await store.putFile({ name: 'f' }, new Blob([new Uint8Array(100).fill(1)]), 50);
     store.close();
     const db = await openDB(store.dbName);
@@ -119,7 +122,7 @@ describe('LocalStore', () => {
   it('survives reopening the database', async () => {
     const first = await newStore();
     const server = serverStore();
-    await first.create(server);
+    await first.create(server, about);
     const id = await first.putDataset({ name: 'kept' }, items);
     first.close();
     const second = await LocalStore.open(first.dbName);
@@ -132,7 +135,7 @@ describe('LocalStore', () => {
 
   it('keeps no plaintext in IndexedDB', async () => {
     const store = await newStore();
-    await store.create(serverStore());
+    await store.create(serverStore(), about);
     await store.putDataset({ name: 'Secret dataset name' }, [{ title: 'very private search' }]);
     await store.putFile({ name: 'Secret file name' }, new Blob(['very private file']));
     store.close();
@@ -162,7 +165,7 @@ describe('LocalStore', () => {
   it('rejects chunks moved between datasets', async () => {
     const store = await newStore();
     const server = serverStore();
-    await store.create(server);
+    await store.create(server, about);
     const a = await store.putDataset({ name: 'a' }, [1]);
     const b = await store.putDataset({ name: 'b' }, [2]);
     store.close();
@@ -178,7 +181,7 @@ describe('LocalStore', () => {
 
   it('deletes datasets and destroys the whole store', async () => {
     const store = await newStore();
-    await store.create(serverStore());
+    await store.create(serverStore(), about);
     const id = await store.putDataset({ name: 'gone' }, items, 5);
     await store.deleteDataset(id);
     expect(await store.listDatasets()).toEqual([]);

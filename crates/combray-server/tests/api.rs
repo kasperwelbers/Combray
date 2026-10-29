@@ -32,11 +32,21 @@ fn fixture() -> Fixture {
         r#"{"id":"willow","name":"Willow study"}"#,
     )
     .unwrap();
+    std::fs::write(
+        data.join("projects/oak.json"),
+        r#"{"id":"oak","participants":{"mode":"required","pattern":"P[0-9]{4}"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        data.join("projects/elm.json"),
+        r#"{"id":"elm","participants":{"mode":"anonymous"}}"#,
+    )
+    .unwrap();
     std::fs::write(data.join("projects/broken.json"), "{not json").unwrap();
     let config = Config {
         web_dir: web,
         db_path: data.join("combray.sqlite"),
-        master_key_file: dir.path().join("secrets/master.key"),
+        store_master_key_file: dir.path().join("secrets/store-master.key"),
         data_dir: data,
         client_ip_header: Some(HeaderName::from_static("x-forwarded-for")),
         // Cheap hashing keeps the tests fast; production uses the OWASP default.
@@ -99,7 +109,7 @@ async fn create_full(f: &Fixture, password: &str) -> (String, String, String) {
         f,
         "/api/v1/stores",
         "192.0.2.1",
-        json!({ "password": password }),
+        json!({ "project": "willow", "password": password }),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
@@ -227,7 +237,7 @@ async fn keks_survive_a_restart_but_not_a_new_master_key() {
         kek.as_str()
     );
 
-    std::fs::write(&f.config.master_key_file, [7u8; 32]).unwrap();
+    std::fs::write(&f.config.store_master_key_file, [7u8; 32]).unwrap();
     let rekeyed = Fixture {
         app: app(f.config.clone()).unwrap(),
         config: f.config.clone(),
@@ -246,7 +256,7 @@ async fn rejects_short_passwords_and_unknown_stores() {
         &f,
         "/api/v1/stores",
         "192.0.2.1",
-        json!({ "password": "short" }),
+        json!({ "project": "willow", "password": "short" }),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -289,7 +299,7 @@ async fn rate_limits_new_stores_per_ip() {
         &f,
         "/api/v1/stores",
         "192.0.2.1",
-        json!({ "password": "madeleine in tea" }),
+        json!({ "project": "willow", "password": "madeleine in tea" }),
     )
     .await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
@@ -298,7 +308,7 @@ async fn rate_limits_new_stores_per_ip() {
         &f,
         "/api/v1/stores",
         "192.0.2.9",
-        json!({ "password": "madeleine in tea" }),
+        json!({ "project": "willow", "password": "madeleine in tea" }),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -336,4 +346,137 @@ async fn the_database_holds_no_keys_or_passwords() {
         assert!(!text.contains("madeleine in tea"));
         assert!(!text.contains(&kek));
     }
+}
+
+async fn create_in(f: &Fixture, project: &str, participant: Option<&str>) -> (StatusCode, Value) {
+    let (status, _, body) = post(
+        f,
+        "/api/v1/stores",
+        "192.0.2.5",
+        json!({ "project": project, "participant_id": participant, "password": "madeleine in tea" }),
+    )
+    .await;
+    (status, body)
+}
+
+#[tokio::test]
+async fn stores_belong_to_projects_that_exist() {
+    let f = fixture();
+    for project in ["missing", "api", "../oak"] {
+        let (status, body) = create_in(&f, project, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{project}");
+        assert_eq!(body["error"], "no_such_project");
+    }
+}
+
+#[tokio::test]
+async fn enforces_the_projects_participant_policy() {
+    let f = fixture();
+    let (status, body) = create_in(&f, "oak", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "participant_required");
+    for bad in ["Q1234", "P123", "P1234 ", "P1234\nP"] {
+        let (status, body) = create_in(&f, "oak", Some(bad)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+        assert_eq!(body["error"], "invalid_participant");
+    }
+    assert_eq!(
+        create_in(&f, "oak", Some("P1234")).await.0,
+        StatusCode::CREATED
+    );
+    // Anonymous projects ignore ids; optional ones accept any well-formed id.
+    assert_eq!(
+        create_in(&f, "elm", Some("P1234")).await.0,
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        create_in(&f, "willow", Some("anything-1")).await.0,
+        StatusCode::CREATED
+    );
+}
+
+#[tokio::test]
+async fn the_served_config_hides_the_participant_pattern() {
+    let f = fixture();
+    let (status, _, body) = get(&f, "/api/v1/p/oak/config").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("required"));
+    assert!(!body.contains("P[0-9]"));
+}
+
+async fn reset(f: &Fixture, id: &str, token: &str, password: &str) -> (StatusCode, Value) {
+    let (status, _, body) = post(
+        f,
+        &format!("/api/v1/stores/{id}/reset"),
+        "192.0.2.6",
+        json!({ "token": token, "password": password }),
+    )
+    .await;
+    (status, body)
+}
+
+#[tokio::test]
+async fn a_reset_link_sets_a_new_password_and_keeps_the_kek() {
+    let f = fixture();
+    let (_, body) = create_in(&f, "oak", Some("P1234")).await;
+    let id = body["store_id"].as_str().unwrap().to_owned();
+    let kek = body["kek"].as_str().unwrap().to_owned();
+    let (_, other) = create_in(&f, "oak", Some("P9999")).await;
+    let other = other["store_id"].as_str().unwrap().to_owned();
+    // Lock the store out first: a reset also lifts the lockout.
+    for _ in 0..6 {
+        unlock(&f, &id, "forgotten it").await;
+    }
+
+    let keys = combray_server::key_service(&f.config).unwrap();
+    let token = keys.create_reset_token("oak", "P1234").unwrap();
+
+    // Not for another participant's store, and not with a made-up token.
+    assert_eq!(
+        reset(&f, &other, &token, "a new password").await.0,
+        StatusCode::FORBIDDEN
+    );
+    let fake = keys.create_reset_token("willow", "P1234").unwrap();
+    assert_eq!(
+        reset(&f, &id, &fake, "a new password").await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        reset(&f, &id, "nonsense", "a new password").await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        reset(&f, &id, &token, "short").await.0,
+        StatusCode::BAD_REQUEST
+    );
+
+    let (status, body) = reset(&f, &id, &token, "a new password").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["kek"], kek.as_str());
+    assert_eq!(
+        unlock(&f, &id, "a new password").await.2["kek"],
+        kek.as_str()
+    );
+    assert_eq!(
+        unlock(&f, &id, "madeleine in tea").await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    // Used up.
+    assert_eq!(
+        reset(&f, &id, &token, "another one!").await.0,
+        StatusCode::FORBIDDEN
+    );
+}
+
+#[tokio::test]
+async fn anonymous_stores_cannot_be_reset() {
+    let f = fixture();
+    let (_, body) = create_in(&f, "elm", None).await;
+    let id = body["store_id"].as_str().unwrap().to_owned();
+    let keys = combray_server::key_service(&f.config).unwrap();
+    let token = keys.create_reset_token("elm", "P1234").unwrap();
+    assert_eq!(
+        reset(&f, &id, &token, "a new password").await.0,
+        StatusCode::FORBIDDEN
+    );
 }

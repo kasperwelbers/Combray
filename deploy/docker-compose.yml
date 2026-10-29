@@ -2,9 +2,9 @@
 # See docs/deployment.md. From this directory, once:
 #
 #   mkdir -p secrets combray-data && cp -r examples/projects combray-data/
-#   head -c 32 /dev/urandom > secrets/master.key && chmod 600 secrets/master.key
+#   head -c 32 /dev/urandom > secrets/store-master.key && chmod 600 secrets/store-master.key
 #
-# Back up secrets/master.key separately from combray-data. Then:
+# Back up secrets/store-master.key separately from combray-data. Then:
 #
 #   COMBRAY_DOMAIN=combray.example.edu docker compose up -d
 #
@@ -20,10 +20,12 @@ services:
       RUST_LOG: info
       # Caddy sets this; its last entry is the real client IP, used only for rate limiting.
       COMBRAY_CLIENT_IP_HEADER: x-forwarded-for
-    secrets: [combray_master_key]
+      # Used by `combray-server reset-link` to print full links.
+      COMBRAY_PUBLIC_URL: https://${COMBRAY_DOMAIN:-localhost}
+    secrets: [combray_store_master_key]
     volumes:
       # Project configs in ./combray-data/projects/{id}.json; store key records in
-      # ./combray-data/combray.sqlite (no keys in it without the master key).
+      # ./combray-data/combray.sqlite (no keys in it without the store master key).
       - ./combray-data:/data
     read_only: true
     cap_drop: [ALL]
@@ -43,8 +45,8 @@ services:
     depends_on: [combray]
 
 secrets:
-  combray_master_key:
-    file: ./secrets/master.key
+  combray_store_master_key:
+    file: ./secrets/store-master.key
 
 volumes:
   caddy-data:

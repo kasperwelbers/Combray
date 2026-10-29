@@ -22,10 +22,18 @@
     "storeGone": "The key for this space no longer exists, so its data cannot be opened anymore. You can start over below and add your data again.",
     "working": "One moment…",
     "forgot": "Forgot the password? Start over",
-    "confirmDelete": "This deletes everything that was added on this computer. It cannot be undone. Continue?",
+    "confirmDelete": "This deletes everything you added for this study on this computer. It cannot be undone. Continue?",
     "autoLocked": "We locked your data because Combray was not used for a while.",
     "lock": "Lock",
-    "deleteAll": "Delete everything from this computer"
+    "deleteAll": "Delete everything for this study from this computer",
+    "participant": "You are taking part as {{id}}.",
+    "invalidParticipant": "This personal link does not seem quite right. Could you check it with the researchers?",
+    "resetTitle": "Choose a new password",
+    "resetIntro": "The researchers sent you this link so you can choose a new password. Your data on this computer stays as it was.",
+    "resetInvalid": "This link has already been used or has expired. Please ask the researchers for a new one.",
+    "reset": "Save my new password",
+    "askReset": "Forgot the password? The researchers can send you a link to choose a new one. Or:",
+    "startOver": "start over"
   },
   "home": {
     "title": "Your memories",
@@ -116,5 +124,29 @@
     "channel": "channel",
     "words": "words",
     "domain": "website"
+  },
+  "projects": {
+    "title": "Your studies on this computer",
+    "empty": "There is nothing here yet. To take part in a study, open the link you received from the researchers.",
+    "all": "See your studies on this computer",
+    "as": "as {{id}}"
+  },
+  "notice": {
+    "not-found": {
+      "title": "We could not find this study",
+      "text": "Please check the link you received from the researchers."
+    },
+    "unreachable": {
+      "title": "We could not reach Combray",
+      "text": "Is this computer connected to the internet? Please try again in a moment."
+    },
+    "needs-id": {
+      "title": "This study uses personal links",
+      "text": "Please open the personal link you received from the researchers, so your data is kept for you."
+    },
+    "reset-no-store": {
+      "title": "Open this link on your own computer",
+      "text": "This link lets you choose a new password for data you added before, on another computer. Please open it on the computer where you added your data."
+    }
   }
 }

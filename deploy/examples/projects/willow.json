@@ -1,0 +1,5 @@
+{
+  "id": "willow",
+  "name": { "en": "Willow diary study", "nl": "Wilg-dagboekstudie" },
+  "participants": { "mode": "required", "pattern": "W-[0-9]{4}" }
+}

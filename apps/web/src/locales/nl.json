@@ -22,10 +22,18 @@
     "storeGone": "De sleutel van deze plek bestaat niet meer, dus de gegevens kunnen niet meer worden geopend. Je kunt hieronder opnieuw beginnen en je gegevens opnieuw toevoegen.",
     "working": "Een moment…",
     "forgot": "Wachtwoord vergeten? Opnieuw beginnen",
-    "confirmDelete": "Hiermee verwijder je alles wat op deze computer is toegevoegd. Dit kan niet ongedaan worden gemaakt. Doorgaan?",
+    "confirmDelete": "Hiermee verwijder je alles wat je voor dit onderzoek op deze computer hebt toegevoegd. Dit kan niet ongedaan worden gemaakt. Doorgaan?",
     "autoLocked": "We hebben je gegevens vergrendeld omdat Combray een tijdje niet is gebruikt.",
     "lock": "Vergrendelen",
-    "deleteAll": "Alles van deze computer verwijderen"
+    "deleteAll": "Alles voor dit onderzoek van deze computer verwijderen",
+    "participant": "Je doet mee als {{id}}.",
+    "invalidParticipant": "Deze persoonlijke link lijkt niet helemaal te kloppen. Wil je hem even nakijken met de onderzoekers?",
+    "resetTitle": "Kies een nieuw wachtwoord",
+    "resetIntro": "De onderzoekers hebben je deze link gestuurd zodat je een nieuw wachtwoord kunt kiezen. Je gegevens op deze computer blijven zoals ze waren.",
+    "resetInvalid": "Deze link is al gebruikt of verlopen. Vraag de onderzoekers om een nieuwe.",
+    "reset": "Mijn nieuwe wachtwoord bewaren",
+    "askReset": "Wachtwoord vergeten? De onderzoekers kunnen je een link sturen om een nieuw te kiezen. Of:",
+    "startOver": "opnieuw beginnen"
   },
   "home": {
     "title": "Je herinneringen",
@@ -116,5 +124,29 @@
     "channel": "kanaal",
     "words": "woorden",
     "domain": "website"
+  },
+  "projects": {
+    "title": "Je onderzoeken op deze computer",
+    "empty": "Hier is nog niets. Om mee te doen aan een onderzoek open je de link die je van de onderzoekers hebt gekregen.",
+    "all": "Bekijk je onderzoeken op deze computer",
+    "as": "als {{id}}"
+  },
+  "notice": {
+    "not-found": {
+      "title": "We konden dit onderzoek niet vinden",
+      "text": "Kijk de link die je van de onderzoekers hebt gekregen nog even na."
+    },
+    "unreachable": {
+      "title": "We konden Combray niet bereiken",
+      "text": "Is deze computer verbonden met internet? Probeer het zo nog eens."
+    },
+    "needs-id": {
+      "title": "Dit onderzoek werkt met persoonlijke links",
+      "text": "Open de persoonlijke link die je van de onderzoekers hebt gekregen, zodat je gegevens voor jou bewaard worden."
+    },
+    "reset-no-store": {
+      "title": "Open deze link op je eigen computer",
+      "text": "Met deze link kies je een nieuw wachtwoord voor gegevens die je eerder op een andere computer hebt toegevoegd. Open hem op de computer waar je je gegevens hebt toegevoegd."
+    }
   }
 }

@@ -138,6 +138,22 @@ export interface ImportProgress {
 export interface StoreStatus {
   exists: boolean;
   unlocked: boolean;
+  /** The participant id this store was created with, if any. */
+  participantId?: string;
+}
+
+/** A project as the client sees it: its public config. */
+export interface ProjectInfo {
+  id: string;
+  name?: Localized;
+  participants: { mode: 'anonymous' | 'optional' | 'required' };
+}
+
+/** A project that has a store on this device. */
+export interface LocalProject {
+  id: string;
+  name?: Localized;
+  participantId?: string;
 }
 
 /** Why a store could not be created or opened. `retryAfter` is in seconds. */
@@ -145,7 +161,21 @@ export type KeyServiceProblem =
   | { status: 'too-many-attempts'; retryAfter: number }
   | { status: 'unreachable' };
 
-export type CreateResult = { status: 'ok' } | { status: 'invalid-password' } | KeyServiceProblem;
+export type CreateResult =
+  | { status: 'ok' }
+  | { status: 'invalid-password' }
+  | { status: 'invalid-participant' }
+  | { status: 'participant-required' }
+  | { status: 'no-such-project' }
+  | KeyServiceProblem;
+
+export type ResetResult =
+  | { status: 'ok' }
+  | { status: 'invalid-password' }
+  /** Used, expired, or not for this store. */
+  | { status: 'invalid-token' }
+  | { status: 'store-gone' }
+  | KeyServiceProblem;
 
 export type UnlockResult =
   | { status: 'ok' }
@@ -156,9 +186,15 @@ export type UnlockResult =
 
 /** The data worker's API. All parsing, encryption and querying happen behind it. */
 export interface DataApi {
+  /** Projects with a store on this device. Read locally; the server is not asked. */
+  localProjects(): Promise<LocalProject[]>;
+  /** Switch to a project's store. Every call below works on the open project. */
+  openProject(projectId: string): Promise<void>;
   status(): Promise<StoreStatus>;
-  create(password: string): Promise<CreateResult>;
+  create(password: string, project: ProjectInfo, participantId?: string): Promise<CreateResult>;
   unlock(password: string): Promise<UnlockResult>;
+  /** Choose a new password with a reset link from the researchers; unlocks on success. */
+  resetPassword(token: string, password: string): Promise<ResetResult>;
   lock(): Promise<void>;
   destroy(): Promise<void>;
   importFiles(

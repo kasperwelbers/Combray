@@ -22,6 +22,7 @@ base64 = "0.23.1"
 getrandom = "0.4.3"
 subtle = "2.6.1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
+regex = "1.13.1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
