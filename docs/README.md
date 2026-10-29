@@ -17,7 +17,7 @@ Suggested reading order:
 10. [design-identity.md](design-identity.md): the warm look and feel
 11. [roadmap.md](roadmap.md) and [open-questions.md](open-questions.md)
 
-Decision records live in [decisions/](decisions/): [0001 server language](decisions/0001-server-language.md), [0002 modular components](decisions/0002-modular-components.md) [0003 TypeScript core and key tool](decisions/0003-typescript-core-and-key-tool.md) and [0004 server-held store keys](decisions/0004-server-held-store-keys.md).
+Decision records live in [decisions/](decisions/): [0001 server language](decisions/0001-server-language.md), [0002 modular components](decisions/0002-modular-components.md) [0003 TypeScript core and key tool](decisions/0003-typescript-core-and-key-tool.md) [0004 server-held store keys](decisions/0004-server-held-store-keys.md) and [0005 projects scope stores](decisions/0005-projects-scope-stores.md).
 
 ## Glossary
 

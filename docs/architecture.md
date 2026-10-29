@@ -111,14 +111,17 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 | `DELETE /api/v1/projects/{id}/donations/{d}` | Studio | Delete a donation (withdrawal) |
 | `GET /api/v1/p/{id}/config` | Web client | Signed project config |
 | `POST /api/v1/sessions` | Web client | Exchange a participant code for a session token |
-| `POST /api/v1/stores` | Web client | Create a store key for a password; returns store id, KEK and delete token (built) |
+| `POST /api/v1/stores` | Web client | Create a store key for a project (and participant id), protected by a password; returns store id, KEK and delete token (built) |
 | `POST /api/v1/stores/{id}/unlock` | Web client | Release the KEK for the store's password (built) |
+| `POST /api/v1/stores/{id}/reset` | Web client | Set a new password with a researcher's one-time reset token; returns the same KEK (built) |
 | `POST /api/v1/stores/{id}/delete` | Web client | Forget the KEK, with the delete token: crypto-shredding (built) |
 | `POST /api/v1/enrich` | Web client | Submit a batch of URLs; returns a job id |
 | `GET /api/v1/enrich/{job}/events` | Web client | Server-sent events with metadata as it arrives |
 | `PUT /api/v1/vault/{blob}` | Web client | Encrypted remote copy of the local store (optional) |
 | `POST /api/v1/donations` | Web client | Upload an encrypted donation envelope |
 | `POST /api/v1/assistant` | Web client | Optional AI helper proxy |
+
+**Projects in the web client.** Participants open `/{project}/`, with an optional participant id in the fragment (`#id=…`). Each project has its own encrypted store on the device, and `/` lists the projects with data on this computer ([ADR 0005](decisions/0005-projects-scope-stores.md)).
 
 **Accounts and roles.** Server admins (university IT) manage researcher accounts and quotas; researchers own projects and can add collaborators; participants have only session tokens bound to one project. Researcher login supports passkeys (WebAuthn) and, for universities, SSO via OIDC or SAML (e.g. SURFconext) as an option.
 

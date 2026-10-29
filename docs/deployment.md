@@ -28,7 +28,7 @@ combray-data/
 
 No object storage is needed: donations and vault blobs live in this directory by default. S3 is an optional backend.
 
-The **master key** (32 random bytes) from which every store's key is derived comes from a file outside the data directory (`COMBRAY_MASTER_KEY_FILE`, a Docker secret in the compose setup), so a backup of the data directory alone contains no usable keys. Back it up separately: losing it makes every participant's local store unreadable. See [security.md](security.md#store-keys).
+The **store master key** (32 random bytes) from which every store's key is derived comes from a file outside the data directory (`COMBRAY_STORE_MASTER_KEY_FILE`, a Docker secret in the compose setup), so a backup of the data directory alone contains no usable keys. Back it up separately: losing it makes every participant's local store unreadable. See [security.md](security.md#store-keys).
 
 ## Docker compose
 
@@ -41,9 +41,9 @@ services:
     restart: unless-stopped
     environment:
       COMBRAY_PUBLIC_URL: https://combray.example.edu
-      COMBRAY_MASTER_KEY_FILE: /run/secrets/combray_master_key
+      COMBRAY_STORE_MASTER_KEY_FILE: /run/secrets/combray_store_master_key
       # COMBRAY_S3_URL: s3://combray-donations
-    secrets: [combray_master_key]
+    secrets: [combray_store_master_key]
     volumes:
       - ./combray-data:/data
     read_only: true
@@ -62,8 +62,8 @@ services:
   llm:             # local model for the AI helper (llama.cpp/Ollama) (profile: ai)
 
 secrets:
-  combray_master_key:
-    file: ./secrets/master_key
+  combray_store_master_key:
+    file: ./secrets/store-master.key
 
 volumes:
   caddy-data:
@@ -83,10 +83,20 @@ volumes:
 
 Everything in Studio is also available as CLI commands (`combray project create`, `combray project register`, `combray donations decrypt`, and so on) for those who prefer scripts.
 
+## Password reset links
+
+Until the researcher UI exists, the operator creates reset links on the researcher's behalf, after the researcher has verified who the participant is:
+
+```sh
+docker compose exec combray combray-server reset-link <project> <participant-id>
+```
+
+It prints a one-time link (valid for 72 hours) that the participant opens on the computer that holds their data. Set `COMBRAY_PUBLIC_URL` to have it print a full URL. See [security.md](security.md#password-reset).
+
 ## Operations
 
 - Health endpoint, structured logs without data values, Prometheus metrics (counts and timings only).
-- Backups: the data directory and the bucket contain only ciphertext and metadata; the master key and project private keys are backed up separately.
+- Backups: the data directory and the bucket contain only ciphertext and metadata; the store master key and project private keys are backed up separately.
 - Upgrades: database migrations run on startup; the binary refuses to start if a migration would lose data without an explicit flag.
 - Releases: signed binaries for Linux (x86_64, aarch64), macOS and Windows, and a multi-arch image on GHCR, with published SPA bundle hashes.
 

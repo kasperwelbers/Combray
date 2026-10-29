@@ -20,7 +20,7 @@ Privacy is the reason a participant can trust Combray with years of their search
 | Next user of a shared lab machine | Opens the browser after the participant left | Local data | Encrypted store; key released by the server only for the participant's password; auto-lock and explicit end-of-session wipe |
 | Someone with a copy of the disk | Stolen laptop, backup image | Local data | Data key wrapped by a server-held key that is never written to the device; password guessing only online, under a lockout |
 | Curious or compromised server operator | Admin of the shared university server browses its storage | Donations, vault copies | End-to-end encryption; private key only in the researcher's Studio; vault needs a participant secret too |
-| Compromised storage | Stolen server disk or leaked S3 credentials | Donations, vault copies | Ciphertext only; store keys kept separately under a master key |
+| Compromised storage | Stolen server disk or leaked S3 credentials | Donations, vault copies | Ciphertext only; store keys kept separately under a store master key |
 | Network attacker | Café Wi-Fi in browser mode | Everything in transit | TLS everywhere; payloads already encrypted |
 | Future quantum adversary | Records ciphertext now, decrypts in 2040 | Donations | Hybrid X25519 + ML-KEM-768 (X-Wing) |
 | Malicious importer or plugin | A shared importer script tries to exfiltrate data | Local data | QuickJS and WASM sandboxes without network or DOM access |
@@ -41,11 +41,12 @@ Data imported by the participant is stored in IndexedDB, as in DigitalFootprints
 ```
   DEK            random AES-256 key, non-extractable, only in the data worker; never leaves the device
    │ wrapped with AES-KW under
-  KEK            = HKDF-SHA-256(server master key, per-store salt, label || store id)
+  KEK            = HKDF-SHA-256(store master key, per-store salt, label || store id)
                    released by the server's key service only for the store's password
                    (Argon2id, per-store lockout, per-IP rate limits)
 ```
 
+- **One store per project.** Each study has its own store and key on the device. Participants with an id can get a one-time reset link from the researchers ([ADR 0005](decisions/0005-projects-scope-stores.md)).
 - **Server unlock is the only mode.** There is no passphrase or browser-only mode, and no device-key layer (see [security.md](security.md#no-passphrase-only-mode) for why).
 - **Participant secret** (later, optional): a high-entropy recovery code for portable vaults, which the server never stores.
 

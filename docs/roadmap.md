@@ -17,6 +17,7 @@ Goal: import a Google Takeout and a TikTok export, explore them, entirely in the
 - [x] Importer spec format and runner ([reference](importer-spec.md)); QuickJS sandbox; converter for old data-donation-importers recipes; first platform packs (Google Takeout: YouTube, search, browsing; TikTok) with synthetic fixtures.
 - [x] Encrypted local store, data worker, Comlink. Raw files kept as encrypted blobs.
 - [x] Store-key service on the server (password unlock, Argon2id, lockout, crypto-shredding), pulled forward from Phase 2; passphrase unlock removed ([ADR 0004](decisions/0004-server-held-store-keys.md)).
+- [x] Projects in the web client (`/{project}/`), one store per project, participant ids from the link with a server-side pattern check, researcher-issued password reset links ([ADR 0005](decisions/0005-projects-scope-stores.md)).
 - [x] XSS hardening: Trusted Types, safe links, banned HTML sinks ([security.md](security.md)).
 - [x] Tree browser, structure view, memory lane, timeline and top items (linked: choosing a bar or an item filters memory lane).
 - [x] Design system v0: palette, madeleine placeholder, town placeholder. [ ] Self-hosted fonts.
