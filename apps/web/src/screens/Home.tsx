@@ -1,8 +1,9 @@
-import { useRef, useState, type DragEvent } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { localize } from '@combray/core';
 
+import { Dropzone } from '../components/Dropzone';
 import type { DatasetSummary, ImportProgress, TableSummary, Upload } from '../worker/api';
 import { data, importFiles } from '../worker/client';
 
@@ -13,43 +14,10 @@ interface Props {
   onOpenTable: (table: TableSummary) => void;
 }
 
-/** Files from a drop. Dropped folders are read recursively with their relative paths. */
-async function droppedFiles(event: DragEvent): Promise<Upload[]> {
-  const entries = [...event.dataTransfer.items]
-    .map((item) => item.webkitGetAsEntry?.())
-    .filter((e): e is FileSystemEntry => !!e);
-  if (!entries.some((e) => e.isDirectory)) return fromInput(event.dataTransfer.files);
-  const files: Upload[] = [];
-  async function walk(entry: FileSystemEntry, prefix: string): Promise<void> {
-    if (entry.isFile) {
-      const file = await new Promise<File>((resolve, reject) =>
-        (entry as FileSystemFileEntry).file(resolve, reject),
-      );
-      files.push({ file, path: prefix + file.name });
-      return;
-    }
-    const reader = (entry as FileSystemDirectoryEntry).createReader();
-    for (;;) {
-      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
-      if (batch.length === 0) break;
-      for (const child of batch) await walk(child, `${prefix}${entry.name}/`);
-    }
-  }
-  for (const entry of entries) await walk(entry, '');
-  return files;
-}
-
-function fromInput(list: FileList | null): Upload[] {
-  return [...(list ?? [])].map((file) => ({ file, path: file.webkitRelativePath || file.name }));
-}
-
 export function Home({ datasets, onChanged, onOpen, onOpenTable }: Props) {
   const { t, i18n } = useTranslation();
   const [progress, setProgress] = useState<ImportProgress>();
   const [error, setError] = useState(false);
-  const [over, setOver] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
 
   async function run(files: Upload[]) {
     if (files.length === 0) return;
@@ -79,49 +47,7 @@ export function Home({ datasets, onChanged, onOpen, onOpenTable }: Props) {
       <section className="card" aria-labelledby="import-title">
         <h2 id="import-title">{t('import.title')}</h2>
         <p>{t('import.intro')}</p>
-        <div
-          className={`dropzone${over ? ' over' : ''}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={async (e) => {
-            e.preventDefault();
-            setOver(false);
-            if (!busy) await run(await droppedFiles(e));
-          }}
-        >
-          <div className="actions">
-            <button className="button" type="button" disabled={busy} onClick={() => fileInput.current?.click()}>
-              {t('import.chooseFiles')}
-            </button>
-            <button className="button quiet" type="button" disabled={busy} onClick={() => folderInput.current?.click()}>
-              {t('import.chooseFolder')}
-            </button>
-          </div>
-          <span className="meta">{t('import.drop')}</span>
-          <input
-            ref={fileInput}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              void run(fromInput(e.target.files));
-              e.target.value = '';
-            }}
-          />
-          <input
-            ref={folderInput}
-            type="file"
-            hidden
-            {...{ webkitdirectory: '' }}
-            onChange={(e) => {
-              void run(fromInput(e.target.files));
-              e.target.value = '';
-            }}
-          />
-        </div>
+        <Dropzone busy={busy} onFiles={run} />
         <div aria-live="polite">
           {progress && (
             <p className="message" style={{ marginTop: '1rem' }}>

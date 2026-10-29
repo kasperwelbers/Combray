@@ -9,10 +9,7 @@ import {
   extractShape,
   flatten,
   matchingImporters,
-  parseEntries,
-  parseFile,
   runImporter,
-  type FileEntry,
   type FlatNode,
   type Row,
   type TreeNode,
@@ -37,6 +34,7 @@ import type {
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
+import { parseUpload } from './upload';
 import { rows, timeline, topItems } from './tables';
 
 const DB_PREFIX = 'combray-';
@@ -141,34 +139,6 @@ async function runImporters(
     sandbox.dispose();
   }
   return tables;
-}
-
-async function parseUpload(
-  uploads: Upload[],
-  onProgress: (p: ImportProgress) => void,
-): Promise<{ tree: TreeNode; source: SourceManifest['source'] }> {
-  const first = uploads[0];
-  if (!first) throw new Error('no files');
-  if (uploads.length === 1 && !first.path.includes('/')) {
-    onProgress({ step: 'reading', files: 1 });
-    const bytes = new Uint8Array(await first.file.arrayBuffer());
-    onProgress({ step: 'parsing' });
-    const tree = parseFile(first.file.name, bytes);
-    return { tree, source: tree.kind === 'dir' ? 'archive' : 'file' };
-  }
-  const entries: FileEntry[] = [];
-  for (const { file, path } of uploads) {
-    entries.push({ path, bytes: new Uint8Array(await file.arrayBuffer()) });
-    onProgress({ step: 'reading', files: entries.length });
-  }
-  // A picked folder gives paths like `Takeout/YouTube/...`: use the folder as the root.
-  const tops = new Set(entries.map((e) => e.path.split('/')[0]));
-  const [top] = tops;
-  const nested = tops.size === 1 && top !== undefined && entries.every((e) => e.path.includes('/'));
-  const name = nested ? top : `${uploads.length} files`;
-  const stripped = nested ? entries.map((e) => ({ ...e, path: e.path.slice(top.length + 1) })) : entries;
-  onProgress({ step: 'parsing' });
-  return { tree: parseEntries(name, stripped), source: 'folder' };
 }
 
 const api: DataApi = {

@@ -6,6 +6,10 @@ const FLOAT = /^-?(\d+\.\d*|\.\d+|\d+(\.\d*)?[eE][-+]?\d+)$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?\s?(Z|UTC|[+-]\d{2}:?\d{2})?)?$/;
 const DMY_DATE = /^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}( \d{1,2}:\d{2}(:\d{2})?)?$/;
 const WRITTEN_DATE = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}, \d{4}/i;
+// Day first, in English, Dutch, German and French: "4 mrt 2024", "4. März 2024", "4 févr. 2024".
+const MONTHS =
+  'jan|feb|febr|mar|mrt|maa|mär|apr|avr|may|mei|mai|jun|juin|jul|juil|aug|août|sep|sept|oct|okt|nov|dec|dez|déc|janv|févr';
+const DAY_FIRST_DATE = new RegExp(`^\\d{1,2}\\.? (${MONTHS})[a-zäéû]*\\.? \\d{4}\\b`, 'i');
 const URL_LIKE = /^(https?:\/\/|www\.)\S+$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -16,7 +20,9 @@ export function inferType(raw: string): ValueType {
   if (BOOL.test(s)) return 'bool';
   if (INT.test(s)) return 'int';
   if (FLOAT.test(s)) return 'float';
-  if (ISO_DATE.test(s) || DMY_DATE.test(s) || WRITTEN_DATE.test(s)) return 'date-like';
+  if (ISO_DATE.test(s) || DMY_DATE.test(s) || WRITTEN_DATE.test(s) || DAY_FIRST_DATE.test(s)) {
+    return 'date-like';
+  }
   if (URL_LIKE.test(s)) return 'url-like';
   if (EMAIL.test(s)) return 'email-like';
   return 'string';

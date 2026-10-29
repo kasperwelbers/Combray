@@ -84,7 +84,8 @@ export function screenName(name: string): string {
   return screenPattern(name) ?? name;
 }
 
-function elementName(tag: string, attrs: Record<string, string>): string {
+/** The shape name of an element: its tag, id and sorted classes, screened. */
+export function elementName(tag: string, attrs: Record<string, string>): string {
   // Tags are already lowercased by the HTML parser; the root of a file is named after the file.
   let name = screenName(tag);
   if (attrs.id !== undefined) name += `#${screenName(attrs.id)}`;

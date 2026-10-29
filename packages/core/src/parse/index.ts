@@ -173,3 +173,36 @@ export function parseZip(
   const entries = Object.entries(files).map(([path, data]) => ({ path, bytes: data }));
   return parseEntries(name, entries, options, depth);
 }
+
+/**
+ * The root of an upload as project trees see it (docs/tree-decisions.md#upload-points-and-the-nameless-root):
+ * without a name, so the participant's file or folder name is never recorded. An archive whose
+ * entries all sit in one folder (`Takeout/`) is replaced by that folder, so a zip and the same
+ * folder picked directly give the same tree.
+ */
+export function uploadRoot(tree: TreeNode, archive: boolean): TreeNode {
+  const [only] = tree.kind === 'dir' ? tree.children : [];
+  const root = archive && tree.kind === 'dir' && tree.children.length === 1 && only?.kind === 'dir' ? only : tree;
+  return root.kind === 'text' ? root : { ...root, name: '' };
+}
+
+/**
+ * Merge directory trees into one, for archives split into parts (Google Takeout's
+ * `takeout-…-001.zip`, `-002.zip`): directories with the same name merge, other entries are
+ * kept side by side. The parts' own names are dropped. See docs/tree-decisions.md.
+ */
+export function mergeDirs(name: string, parts: DirNode[]): DirNode {
+  const root: DirNode = { kind: 'dir', name, children: [] };
+  const into = (target: DirNode, source: DirNode) => {
+    for (const child of source.children) {
+      const existing =
+        child.kind === 'dir'
+          ? target.children.find((c): c is DirNode => c.kind === 'dir' && c.name === child.name)
+          : undefined;
+      if (existing && child.kind === 'dir') into(existing, child);
+      else target.children.push(child.kind === 'dir' ? mergeDirs(child.name, [child]) : child);
+    }
+  };
+  for (const part of parts) into(root, part);
+  return root;
+}
