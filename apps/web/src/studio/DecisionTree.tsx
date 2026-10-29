@@ -1,7 +1,7 @@
-import { isLeaf, localize, type EffectiveState, type LeafDecision, type NodePath, type ProjectNode } from '@combray/core';
+import { isDecidable, isLeaf, localize, type EffectiveState, type LeafDecision, type NodePath, type ProjectNode } from '@combray/core';
 import { useTranslation } from 'react-i18next';
 
-import { foldChain, isUndecided, pathKey } from './model';
+import { foldChain, formsTable, isUndecided, pathKey } from './model';
 
 const ICONS: Record<ProjectNode['kind'], string> = {
   dir: '📁',
@@ -19,7 +19,6 @@ export interface TreeActions {
   select: (path: NodePath) => void;
   setLeaf: (path: NodePath, decision: LeafDecision) => void;
   toggleIgnore: (path: NodePath) => void;
-  toggleTable: (path: NodePath) => void;
   toggleOpen: (path: NodePath) => void;
 }
 
@@ -63,6 +62,7 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
 
   const state = states.get(node) ?? 'show';
   const leaf = isLeaf(node);
+  const decidable = isDecidable(node);
   const ignoredAbove = state === 'ignore' && top.node.decision !== 'ignore' && node.decision !== 'ignore';
   const isOpen = open.has(pathKey(path));
   const isSelected = selected !== undefined && pathKey(selected) === pathKey(path);
@@ -102,9 +102,11 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
             <span className="tag">{t('studio.aliases', { count: node.aliases.length })}</span>
           )}
           {node.lifter !== undefined && <span className="tag">{t('studio.lifter')}</span>}
+          {formsTable(node) && <span className="tag table-tag">{t('studio.tableTag')}</span>}
+          {node.name === '{*}' && <span className="tag">{t('studio.keysTag')}</span>}
         </span>
         <span className="decision-controls">
-          {leaf ? (
+          {decidable ? (
             ignoredAbove ? (
               <span className="meta">{t('studio.ignoredAbove')}</span>
             ) : (
@@ -132,15 +134,6 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
                 onClick={() => actions.toggleIgnore(top.path)}
               >
                 {t('studio.decision.ignore')}
-              </button>
-              <button
-                type="button"
-                className="seg seg-table"
-                aria-pressed={node.table === true}
-                disabled={state === 'ignore'}
-                onClick={() => actions.toggleTable(path)}
-              >
-                {t('studio.table')}
               </button>
             </span>
           )}

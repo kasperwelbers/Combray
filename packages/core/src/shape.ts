@@ -154,6 +154,51 @@ function withChildren(shape: Shape, children: Shape[]): Shape {
   return children.length > 0 ? { ...shape, children } : shape;
 }
 
+/** At least this many different keys across rows before keys can count as data. */
+export const SPARSE_MIN_KEYS = 5;
+/** And no key in more than this share of the rows that have the map. */
+export const SPARSE_MAX_SHARE = 0.5;
+
+function collapsedShape(map: Shape): Shape {
+  return withChildren(
+    { kind: map.kind, name: map.name, collapsed: true, count: countBucket(map.children?.length ?? 0) },
+    mergeAll((map.children ?? []).map((c) => ({ ...c, name: COLLAPSED_NAME }))),
+  );
+}
+
+/**
+ * Maps inside list items whose keys are data across the rows, such as `comments: {bob: …,
+ * sarah: …}` in each tweet: many different keys, and none of them in more than half of the
+ * rows that have the map. They are collapsed to `{*}` in every row before the rows merge.
+ * Optional fields do not trigger this, because the same keys come back in many rows. With few
+ * rows this cannot be told apart from coincidence; researchers can then set it by hand.
+ */
+function collapseSparseKeys(items: Shape[]): Shape[] {
+  const keys = new Map<string, Map<string, number>>();
+  const rows = new Map<string, number>();
+  for (const item of items) {
+    for (const child of item.children ?? []) {
+      if ((child.kind !== 'map' && child.kind !== 'dir') || child.collapsed) continue;
+      const id = `${child.kind}:${child.name}`;
+      rows.set(id, (rows.get(id) ?? 0) + 1);
+      const counts = keys.get(id) ?? new Map<string, number>();
+      for (const k of new Set((child.children ?? []).map((c) => c.name))) counts.set(k, (counts.get(k) ?? 0) + 1);
+      keys.set(id, counts);
+    }
+  }
+  const sparse = new Set(
+    [...keys].filter(([id, counts]) => {
+      const n = rows.get(id)!;
+      return n >= 2 && counts.size >= SPARSE_MIN_KEYS && Math.max(...counts.values()) <= n * SPARSE_MAX_SHARE;
+    }).map(([id]) => id),
+  );
+  if (sparse.size === 0) return items;
+  return items.map((item) => ({
+    ...item,
+    children: item.children?.map((c) => (sparse.has(`${c.kind}:${c.name}`) ? collapsedShape(c) : c)),
+  }));
+}
+
 /** Extract the shape of a tree. Values are never copied into the shape. */
 export function extractShape(node: TreeNode): Shape {
   switch (node.kind) {
@@ -166,7 +211,7 @@ export function extractShape(node: TreeNode): Shape {
     case 'list':
       return withChildren(
         { kind: 'list', name: screenName(node.name), count: countBucket(node.children.length) },
-        mergeAll(node.children.map((c) => ({ ...extractShape(c), name: ITEM_NAME }))),
+        mergeAll(collapseSparseKeys(node.children.map((c) => ({ ...extractShape(c), name: ITEM_NAME })))),
       );
     case 'element':
       return withChildren(

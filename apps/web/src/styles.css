@@ -821,8 +821,7 @@ main.wide {
   background: var(--paper-deep);
 }
 
-.seg-donate[aria-pressed='true'],
-.seg-table[aria-pressed='true'] {
+.seg-donate[aria-pressed='true'] {
   background: var(--madeleine);
   color: #2b1d0f;
 }
@@ -914,4 +913,47 @@ main.wide {
 .cell-items {
   margin: 0.25rem 0 0;
   padding-left: 1.2rem;
+}
+
+.table-tag {
+  border-color: var(--dusk);
+  color: var(--dusk);
+}
+
+.preview {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 1000px) {
+  .preview {
+    grid-template-columns: 16rem minmax(0, 1fr);
+  }
+}
+
+.table-map ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.table-map ul ul {
+  padding-left: 1.2rem;
+  border-left: 1px dotted var(--line);
+}
+
+.table-map li {
+  padding: 0.15rem 0;
+}
+
+.table-link[aria-current='true'] {
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.preview-main h3 {
+  margin-bottom: 0.25rem;
 }

@@ -24,13 +24,11 @@ export interface ImporterEntry {
   path: NodePath;
   kind: NodeKind;
   decision?: ProjectNode['decision'];
-  table?: true;
   label?: Localized;
   description?: Localized;
   aliases?: Alias[];
   lifter?: string;
   raw?: true;
-  unnest?: ProjectNode['unnest'];
 }
 
 export interface ImporterFile {
@@ -46,7 +44,7 @@ export class ProjectFileError extends Error {
   }
 }
 
-const SETTINGS = ['decision', 'table', 'label', 'description', 'aliases', 'lifter', 'raw', 'unnest'] as const;
+const SETTINGS = ['decision', 'label', 'description', 'aliases', 'lifter', 'raw'] as const;
 const STRUCTURE = ['types', 'count', 'mime', 'collapsed'] as const;
 
 function shapeOf(node: ProjectNode): Shape {
@@ -181,9 +179,7 @@ export function parseImporterFile(json: unknown): ImporterFile {
     check(Array.isArray(e.path) && e.path.every((p) => typeof p === 'string'), `${at}: path must be a list of names`);
     check(typeof e.kind === 'string' && KINDS.has(e.kind as NodeKind), `${at}: unknown kind`);
     if (e.decision !== undefined) check(['ignore', 'show', 'donate'].includes(e.decision as string), `${at}: unknown decision`);
-    if (e.table !== undefined) check(e.table === true, `${at}: table must be true`);
     if (e.raw !== undefined) check(e.raw === true, `${at}: raw must be true`);
-    if (e.unnest !== undefined) check(['count', 'longer', 'wider'].includes(e.unnest as string), `${at}: unknown unnest`);
     if (e.lifter !== undefined) check(typeof e.lifter === 'string', `${at}: lifter must be a string`);
     if (e.label !== undefined) checkLocalized(e.label, `${at}: label`);
     if (e.description !== undefined) checkLocalized(e.description, `${at}: description`);

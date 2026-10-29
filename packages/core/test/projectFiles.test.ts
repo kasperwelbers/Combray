@@ -9,14 +9,12 @@ import {
   ProjectFileError,
   projectTreeFromShape,
   setDecision,
-  setTable,
   splitProjectTree,
 } from '../src';
 import { watchHistory } from './fixtures';
 
 function decided() {
   let tree = projectTreeFromShape(extractShape(watchHistory));
-  tree = setTable(tree, [], true);
   tree = setDecision(tree, ['[*]', 'time'], 'donate');
   getNode(tree, ['[*]', 'time'])!.label = { en: 'Watched at', nl: 'Bekeken op' };
   getNode(tree, ['[*]', 'title'])!.aliases = ['titel', { regex: '^Title$', flags: 'i' }];
@@ -27,8 +25,8 @@ describe('project files', () => {
   it('split into structure and settings, and join back to the same tree', () => {
     const tree = decided();
     const { structure, importer } = splitProjectTree(tree, 'YouTube');
-    expect(JSON.stringify(structure)).not.toMatch(/decision|label|aliases|table/);
-    expect(importer.entries.map((e) => e.path)).toEqual([[], ['[*]', 'time'], ['[*]', 'title']]);
+    expect(JSON.stringify(structure)).not.toMatch(/decision|label|aliases/);
+    expect(importer.entries.map((e) => e.path)).toEqual([['[*]', 'time'], ['[*]', 'title']]);
     const roundTrip = JSON.parse(JSON.stringify({ structure, importer }));
     const { tree: joined, pending } = joinProjectTree(
       parseStructureFile(roundTrip.structure),

@@ -7,7 +7,7 @@ import {
   parseStructureFile,
   projectTreeFromShape,
   setDecision,
-  setTable,
+  setKeysAreData,
   getNode,
   type ImporterEntry,
   type ImporterFile,
@@ -195,7 +195,12 @@ export function Studio() {
         else next.add(key);
         return next;
       }),
-    setLeaf: (path: NodePath, decision: LeafDecision) => tree && setTree(setDecision(tree, path, decision)),
+    setLeaf: (path: NodePath, decision: LeafDecision) => {
+      if (!tree) return;
+      const overridden = decision === 'ignore' ? ignoreOverrides(tree, path).length : 0;
+      if (overridden > 0 && !window.confirm(t('studio.confirmIgnore', { count: overridden }))) return;
+      setTree(setDecision(tree, path, decision));
+    },
     toggleIgnore: (path: NodePath) => {
       if (!tree) return;
       const node = getNode(tree, path);
@@ -204,11 +209,18 @@ export function Studio() {
       if (overridden > 0 && !window.confirm(t('studio.confirmIgnore', { count: overridden }))) return;
       setTree(setDecision(tree, path, 'ignore'));
     },
-    toggleTable: (path: NodePath) => tree && setTree(setTable(tree, path, getNode(tree, path)?.table !== true)),
   };
 
   function patch(path: NodePath, change: NodePatch) {
     if (tree) setTree(patchNode(tree, path, change));
+  }
+
+  function keysAreData(path: NodePath) {
+    if (!tree || !window.confirm(t('studio.confirmKeys'))) return;
+    const result = setKeysAreData(tree, path);
+    setTree(result.tree);
+    setSelected(path);
+    setMessage({ text: t('studio.merged', { count: result.conflicts.length }) });
   }
 
   function merge(from: NodePath, into: NodePath) {
@@ -320,6 +332,7 @@ export function Studio() {
                   states={states}
                   onPatch={patch}
                   onMerge={merge}
+                  onKeysAreData={keysAreData}
                 />
               ) : (
                 <p className="meta">{t('studio.selectHelp')}</p>

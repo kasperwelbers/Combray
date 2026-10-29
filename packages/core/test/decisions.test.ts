@@ -12,7 +12,7 @@ import {
   mergeShape,
   projectTreeFromShape,
   setDecision,
-  setTable,
+  setKeysAreData,
   normalizeTree,
   type ProjectNode,
 } from '../src';
@@ -54,18 +54,16 @@ describe('effectiveStates', () => {
   });
 });
 
-describe('setDecision and setTable', () => {
+describe('setDecision', () => {
   it('allows show and donate on leaves only', () => {
     expect(() => setDecision(base(), ['[*]'], 'show')).toThrow(DecisionError);
     expect(() => setDecision(base(), ['[*]', 'subtitles'], 'donate')).toThrow(DecisionError);
-    expect(() => setTable(base(), ['[*]', 'time'], true)).toThrow(DecisionError);
   });
 
   it('does not change the input tree', () => {
     const tree = base();
     setDecision(tree, ['[*]', 'time'], 'donate');
-    setTable(tree, [], true);
-    expect(JSON.stringify(tree)).not.toMatch(/decision|table/);
+    expect(JSON.stringify(tree)).not.toMatch(/decision/);
   });
 
   it('lists the decisions an ignore would override', () => {
@@ -207,5 +205,42 @@ describe('single and repeated elements', () => {
     tree = setDecision(tree, ['div.row', 'a', '@href'], 'donate');
     const merged = mergeShape(tree, shapeOf(list(3))).tree;
     expect(getNode(merged, ['div.row', 'a', '[*]', '@href'])!.decision).toBe('donate');
+  });
+});
+
+describe('keys that are data', () => {
+  const tweets = (n: number) =>
+    jsonToTree(
+      't.json',
+      Array.from({ length: n }, (_, i) => ({ text: `t${i}`, comments: { [`user${i}a`]: 'hey', [`user${i}b`]: 'yo' } })),
+    );
+
+  it('are collapsed automatically when keys differ across rows', () => {
+    const tree = projectTreeFromShape(extractShape(tweets(4)));
+    const comments = getNode(tree, ['[*]', 'comments'])!;
+    expect(comments.collapsed).toBe(true);
+    expect(comments.children!.map((c) => c.name)).toEqual(['{*}']);
+    expect(JSON.stringify(tree)).not.toContain('user');
+  });
+
+  it('can be set by hand, without keeping the keys as aliases', () => {
+    const shape = extractShape(jsonToTree('a.json', [{ comments: { anna: 'hi', bob: 'hey' } }]));
+    const tree = projectTreeFromShape(shape);
+    expect(getNode(tree, ['[*]', 'comments', 'anna'])).toBeDefined();
+    const { tree: keyed } = setKeysAreData(tree, ['[*]', 'comments']);
+    expect(getNode(keyed, ['[*]', 'comments'])!.children!.map((c) => c.name)).toEqual(['{*}']);
+    expect(JSON.stringify(keyed)).not.toMatch(/anna|bob/);
+    // New keys in later shapes map to the same position, and are never added by name.
+    const later = mergeShape(keyed, extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }])));
+    expect(later.added).toEqual([]);
+    expect(JSON.stringify(later.tree)).not.toContain('carl');
+    const compared = compareShape(keyed, extractShape(jsonToTree('c.json', [{ comments: { dora: { x: 1 } } }])));
+    expect(JSON.stringify(compared)).not.toContain('dora');
+  });
+
+  it('take a decision of their own for the keys', () => {
+    const tree = projectTreeFromShape(extractShape(tweets(4)));
+    const decided = setDecision(tree, ['[*]', 'comments', '{*}'], 'donate');
+    expect(effectiveStates(decided).get(getNode(decided, ['[*]'])!)).toBe('donate');
   });
 });

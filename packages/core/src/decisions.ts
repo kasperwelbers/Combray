@@ -2,12 +2,13 @@
  * Project trees: the union of the shapes a project has seen, with the researcher's decisions.
  *
  * See docs/tree-decisions.md. A project tree holds structure only, like a shape. Show and
- * donate are set on leaves; inner nodes can only be ignored (which covers everything below
- * them) or marked as tables. An inner node's effective state is derived from its leaves.
+ * donate are set on leaves, and on `{*}` nodes for their keys; other inner nodes can only be
+ * ignored (which covers everything below them). An inner node's effective state is derived
+ * from its leaves. Tables are not marked: they are inferred from the structure (derive.ts).
  */
 import type { Localized } from './importer/spec';
 import { globMatch } from './path';
-import { ITEM_NAME, mergeAll, type CountBucket, type Shape } from './shape';
+import { COLLAPSED_NAME, countBucket, ITEM_NAME, mergeAll, type CountBucket, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
 export type LeafDecision = 'undecided' | 'ignore' | 'show' | 'donate';
@@ -21,18 +22,17 @@ export interface ProjectNode {
   /** Canonical name, as in shapes: keys, `[*]` for list items, `{*}` for collapsed keys. */
   name: string;
   aliases?: Alias[];
-  /** `show` and `donate` on leaves only; `ignore` on any node. Absent means undecided. */
+  /**
+   * `show` and `donate` on leaves, and on `{*}` nodes for their keys; `ignore` on any node.
+   * Absent means undecided.
+   */
   decision?: Exclude<LeafDecision, 'undecided'>;
-  /** Inner nodes only: rows below this node form a table. */
-  table?: true;
   /**
    * Inner nodes only: a sandboxed function from this node's subtree to a map. The node then
    * counts as a leaf: its children are hidden from decisions and its one decision covers
    * every key the lifter outputs.
    */
   lifter?: string;
-  /** Repeated inner nodes only: how a list below a table's rows is shown by default. */
-  unnest?: 'count' | 'longer' | 'wider';
   /** Donated leaves only: donate the value as in the file instead of transformed. */
   raw?: true;
   label?: Localized;
@@ -63,6 +63,14 @@ export function isLeaf(node: { kind: NodeKind; lifter?: string }): boolean {
   return LEAF_KINDS.has(node.kind) || node.lifter !== undefined;
 }
 
+/**
+ * Nodes with their own show or donate decision: leaves, and `{*}` nodes, whose keys are data
+ * (the people who replied, the dates of a diary).
+ */
+export function isDecidable(node: { kind: NodeKind; name: string; lifter?: string }): boolean {
+  return isLeaf(node) || node.name === COLLAPSED_NAME;
+}
+
 /** True if `name` is the node's canonical name or matches one of its aliases. */
 export function nameMatches(node: ProjectNode, name: string): boolean {
   if (node.name === name) return true;
@@ -79,6 +87,8 @@ export function matchChild(
   kind: NodeKind,
   name: string,
 ): ProjectNode | undefined {
+  // Below a map whose keys are data, every key is the one `{*}` position.
+  if (parent.collapsed) name = COLLAPSED_NAME;
   const children = parent.children ?? [];
   // A canonical name wins over an alias of a sibling.
   return (
@@ -222,8 +232,9 @@ export function mergeShape(
       if (isNullOnly(child) && twins.length > 0) continue;
       const nullTwin = twins.find(isNullOnly);
       const others = (node.children ?? []).filter((c) => c !== nullTwin);
-      node.children = [...others, fromShape(child)];
-      added.push([...path, child.name]);
+      const named = node.collapsed ? { ...child, name: COLLAPSED_NAME } : child;
+      node.children = [...others, fromShape(named)];
+      added.push([...path, named.name]);
     }
   };
   visit(tree, unifyElementTwins(shape), []);
@@ -247,7 +258,8 @@ export function effectiveStates(root: ProjectNode): Map<ProjectNode, EffectiveSt
       // Below a lifter, nodes are input to the lifter, not imported themselves.
       for (const child of node.children ?? []) visit(child, true);
     } else {
-      state = 'ignore';
+      // The keys of a `{*}` node are a field of their own, shown unless decided otherwise.
+      state = node.name === COLLAPSED_NAME ? (node.decision ?? 'show') : 'ignore';
       for (const child of node.children ?? []) {
         const s = visit(child, false);
         if (s === 'donate') state = 'donate';
@@ -263,7 +275,7 @@ export function effectiveStates(root: ProjectNode): Map<ProjectNode, EffectiveSt
 
 /** Paths of the leaves below `node` (inclusive) with an explicit show or donate decision. */
 function decidedLeaves(node: ProjectNode, path: NodePath, out: NodePath[] = []): NodePath[] {
-  if (isLeaf(node) && (node.decision === 'show' || node.decision === 'donate')) out.push(path);
+  if (isDecidable(node) && (node.decision === 'show' || node.decision === 'donate')) out.push(path);
   if (node.lifter !== undefined) return out;
   for (const child of node.children ?? []) decidedLeaves(child, [...path, child.name], out);
   return out;
@@ -280,14 +292,14 @@ export function ignoreOverrides(root: ProjectNode, path: NodePath): NodePath[] {
 }
 
 /**
- * Set a decision. `show` and `donate` are only allowed on leaves. Decisions below an ignored
+ * Set a decision. `show` and `donate` are only allowed on leaves and `{*}` nodes. Decisions below an ignored
  * node are kept, so un-ignoring restores them; they have no effect while it is ignored.
  */
 export function setDecision(root: ProjectNode, path: NodePath, decision: LeafDecision): ProjectNode {
   const tree = structuredClone(root);
   const node = getNode(tree, path);
   if (!node) throw new DecisionError(`no node at ${path.join('/')}`);
-  if ((decision === 'show' || decision === 'donate') && !isLeaf(node)) {
+  if ((decision === 'show' || decision === 'donate') && !isDecidable(node)) {
     throw new DecisionError(`${decision} is only possible on leaves, not on ${node.kind} nodes`);
   }
   if (decision === 'undecided') delete node.decision;
@@ -295,23 +307,10 @@ export function setDecision(root: ProjectNode, path: NodePath, decision: LeafDec
   return tree;
 }
 
-/** Mark or unmark an inner node as a table. */
-export function setTable(root: ProjectNode, path: NodePath, table: boolean): ProjectNode {
-  const tree = structuredClone(root);
-  const node = getNode(tree, path);
-  if (!node) throw new DecisionError(`no node at ${path.join('/')}`);
-  if (isLeaf(node) && node.lifter === undefined) {
-    throw new DecisionError('only inner nodes can be tables');
-  }
-  if (table) node.table = true;
-  else delete node.table;
-  return tree;
-}
-
 export interface MergeConflict {
   /** Path of the merged node, under the target. */
   path: NodePath;
-  field: 'decision' | 'table' | 'label' | 'description';
+  field: 'decision' | 'label' | 'description';
 }
 
 /**
@@ -349,7 +348,7 @@ export function mergeNodes(
       }
     }
     absorb(dst, toShape({ ...src, children: undefined }));
-    for (const field of ['decision', 'table', 'label', 'description'] as const) {
+    for (const field of ['decision', 'label', 'description'] as const) {
       if (src[field] === undefined) continue;
       if (dst[field] === undefined) (dst as unknown as Record<string, unknown>)[field] = src[field];
       else if (JSON.stringify(dst[field]) !== JSON.stringify(src[field])) {
@@ -393,16 +392,59 @@ export function compareShape(root: ProjectNode, shape: Shape): ShapeComparison {
       if (match) visit(match, child, [...path, child.name]);
       else if (item) visit(item, { ...child, name: ITEM_NAME }, [...path, child.name, ITEM_NAME]);
       else if (single) for (const i of child.children ?? []) visit(single, i, [...path, child.name]);
-      else unknown.push({ path: [...path, child.name], shape: child });
+      else if (node.collapsed) {
+        unknown.push({ path: [...path, COLLAPSED_NAME], shape: { ...child, name: COLLAPSED_NAME } });
+      } else unknown.push({ path: [...path, child.name], shape: child });
     }
   };
   visit(root, unifyElementTwins(shape), []);
   const states = effectiveStates(root);
   const missing: NodePath[] = [];
   const findMissing = (node: ProjectNode, path: NodePath) => {
-    if (isLeaf(node) && states.get(node) === 'donate' && !seen.has(node)) missing.push(path);
+    const donated = isLeaf(node)
+      ? states.get(node) === 'donate'
+      : node.name === COLLAPSED_NAME && node.decision === 'donate' && states.get(node) !== 'ignore';
+    if (donated && !seen.has(node)) missing.push(path);
     for (const child of node.children ?? []) findMissing(child, [...path, child.name]);
   };
   findMissing(root, []);
   return { unknown, missing };
+}
+
+/**
+ * Treat the keys of a map or directory as data: its children become one `{*}` position, as
+ * the shape extractor does for maps it recognises as dictionaries (usernames, dates). Children
+ * merge per kind; their names are dropped, not kept as aliases, because they are data.
+ */
+export function setKeysAreData(
+  root: ProjectNode,
+  path: NodePath,
+): { tree: ProjectNode; conflicts: MergeConflict[] } {
+  const node = getNode(root, path);
+  if (!node) throw new DecisionError(`no node at ${path.join('/')}`);
+  if (node.kind !== 'map' && node.kind !== 'dir') throw new DecisionError('only maps and folders have keys');
+  if (node.collapsed) return { tree: root, conflicts: [] };
+  const tree = structuredClone(root);
+  const target = getNode(tree, path)!;
+  const conflicts: MergeConflict[] = [];
+  const children = target.children ?? [];
+  const kinds = [...new Set(children.map((c) => c.kind))];
+  const merged: ProjectNode[] = [];
+  for (const kind of kinds) {
+    const [first, ...rest] = children.filter((c) => c.kind === kind);
+    // Merge into a temporary parent so names that repeat across kinds do not clash.
+    const scratch: ProjectNode = { kind: 'map', name: '', children: [{ ...first!, name: COLLAPSED_NAME }, ...rest] };
+    let scratchTree = scratch;
+    for (const other of rest) {
+      const result = mergeNodes(scratchTree, [other.name], [COLLAPSED_NAME]);
+      scratchTree = result.tree;
+      conflicts.push(...result.conflicts.map((c) => ({ ...c, path: [...path, ...c.path] })));
+    }
+    const entry = scratchTree.children![0]!;
+    delete entry.aliases;
+    merged.push(entry);
+  }
+  const count = countBucket(children.length);
+  Object.assign(target, { collapsed: true, count, children: merged });
+  return { tree, conflicts };
 }

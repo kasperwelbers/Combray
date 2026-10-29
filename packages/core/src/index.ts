@@ -14,7 +14,8 @@ export {
   mergeShape,
   effectiveStates,
   setDecision,
-  setTable,
+  setKeysAreData,
+  isDecidable,
   ignoreOverrides,
   mergeNodes,
   compareShape,
@@ -33,7 +34,7 @@ export type {
   MergeConflict,
   ShapeComparison,
 } from './decisions';
-export { deriveTables, deriveRows } from './derive';
+export { deriveTables, deriveRows, KEY_COLUMN, VALUE_COLUMN } from './derive';
 export type { TableDef, ColumnDef, DerivedRow } from './derive';
 export {
   splitProjectTree,

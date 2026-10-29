@@ -1,4 +1,4 @@
-import { extractShape, jsonToTree, projectTreeFromShape, setDecision, setTable, effectiveStates } from '@combray/core';
+import { extractShape, jsonToTree, projectTreeFromShape, setDecision, effectiveStates } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
 import { countDecisions, foldChain, fromFiles, patchNode, toFiles, undecidedBelow } from '../src/studio/model';
@@ -13,13 +13,12 @@ const tree = () =>
   );
 
 describe('studio model', () => {
-  it('folds runs of single-child groups, but not through lists or tables', () => {
+  it('folds runs of single-child groups, but not into the rows of a table or past a label', () => {
     const t = tree();
     const youtube = t.children![0]!.children!.find((c) => c.name === 'YouTube')!;
     expect(foldChain(youtube, ['Takeout', 'YouTube']).map((c) => c.node.name)).toEqual(['YouTube', 'history']);
-    const marked = setTable(t, ['Takeout', 'YouTube'], true);
-    const markedYoutube = marked.children![0]!.children!.find((c) => c.name === 'YouTube')!;
-    expect(foldChain(markedYoutube, ['Takeout', 'YouTube'])).toHaveLength(1);
+    youtube.label = { en: 'YouTube' };
+    expect(foldChain(youtube, ['Takeout', 'YouTube'])).toHaveLength(1);
   });
 
   it('counts decisions and undecided leaves', () => {

@@ -66,7 +66,7 @@ const api: StudioApi = {
     const tables = deriveTables(projectTree);
     const out: PreviewTable[] = tables.map((t) => ({
       name: t.name,
-      implicit: t.implicit,
+      keyed: t.keyed === true,
       record: t.rows === undefined,
       ...(t.parent !== undefined ? { parent: t.parent } : {}),
       state: t.state,

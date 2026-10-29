@@ -1,5 +1,6 @@
 import {
   getNode,
+  isDecidable,
   isLeaf,
   type Alias,
   type EffectiveState,
@@ -11,7 +12,7 @@ import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { LANGUAGES } from '../i18n';
-import { isRepeatedName, type NodePatch } from './model';
+import { formsTable, type NodePatch } from './model';
 
 interface Props {
   tree: ProjectNode;
@@ -19,6 +20,7 @@ interface Props {
   states: Map<ProjectNode, EffectiveState>;
   onPatch: (path: NodePath, patch: NodePatch) => void;
   onMerge: (from: NodePath, into: NodePath) => void;
+  onKeysAreData: (path: NodePath) => void;
 }
 
 function textOf(value: Localized | undefined, language: string): string {
@@ -39,8 +41,8 @@ function aliasText(alias: Alias): string {
   return typeof alias === 'string' ? alias : `/${alias.regex}/${alias.flags ?? ''}`;
 }
 
-/** Settings of the selected node: label, description, aliases, merging, unnesting. */
-export function NodePanel({ tree, path, states, onPatch, onMerge }: Props) {
+/** Settings of the selected node: label, description, aliases, merging, keys as data. */
+export function NodePanel({ tree, path, states, onPatch, onMerge, onKeysAreData }: Props) {
   const { t } = useTranslation();
   const node = getNode(tree, path);
   const parent = getNode(tree, path.slice(0, -1));
@@ -82,7 +84,9 @@ export function NodePanel({ tree, path, states, onPatch, onMerge }: Props) {
         {node.types && ` · ${node.types.map((type) => t(`type.${type}`)).join(', ')}`}
         {node.count && ` · × ${node.count}`} · {t(`studio.state.${state}`)}
       </p>
-      <p className="meta">{leaf ? t('studio.leafHelp') : t('studio.innerHelp')}</p>
+      <p className="meta">
+        {leaf ? t('studio.leafHelp') : formsTable(node) ? t('studio.tableHelp') : t('studio.innerHelp')}
+      </p>
 
       <fieldset className="panel-group">
         <legend>{t('studio.label')}</legend>
@@ -97,7 +101,7 @@ export function NodePanel({ tree, path, states, onPatch, onMerge }: Props) {
         ))}
       </fieldset>
 
-      {leaf && (
+      {(leaf || node.name === '{*}') && (
         <fieldset className="panel-group">
           <legend>{t('studio.description')}</legend>
           <p className="meta">{t('studio.descriptionHelp')}</p>
@@ -116,7 +120,7 @@ export function NodePanel({ tree, path, states, onPatch, onMerge }: Props) {
         </fieldset>
       )}
 
-      {leaf && node.decision === 'donate' && (
+      {isDecidable(node) && node.decision === 'donate' && (
         <label className="check">
           <input
             type="checkbox"
@@ -127,21 +131,23 @@ export function NodePanel({ tree, path, states, onPatch, onMerge }: Props) {
         </label>
       )}
 
-      {!leaf && isRepeatedName(node.name) && (
-        <label className="field">
-          <span>{t('studio.unnest')}</span>
-          <select
-            value={node.unnest ?? 'count'}
-            onChange={(e) => onPatch(path, { unnest: e.target.value as NonNullable<ProjectNode['unnest']> })}
-          >
-            {(['count', 'longer', 'wider'] as const).map((u) => (
-              <option key={u} value={u}>
-                {t(`studio.unnestOption.${u}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+      {(node.kind === 'map' || node.kind === 'dir') && (
+        <fieldset className="panel-group">
+          <legend>{t('studio.keysTitle')}</legend>
+          {node.collapsed ? (
+            <p className="meta">{t('studio.keysAreData')}</p>
+          ) : (
+            <>
+              <p className="meta">{t('studio.keysHelp')}</p>
+              <button className="button quiet" type="button" onClick={() => onKeysAreData(path)}>
+                {t('studio.makeKeysData')}
+              </button>
+            </>
+          )}
+        </fieldset>
       )}
+
+      {node.name === '{*}' && <p className="meta">{t('studio.keysDecisionHelp')}</p>}
 
       <fieldset className="panel-group">
         <legend>{t('studio.aliasesTitle')}</legend>

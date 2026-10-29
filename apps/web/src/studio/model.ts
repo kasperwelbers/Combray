@@ -4,6 +4,7 @@
  */
 import {
   getNode,
+  isDecidable,
   isLeaf,
   joinProjectTree,
   splitProjectTree,
@@ -20,7 +21,7 @@ export const pathKey = (path: NodePath) => JSON.stringify(path);
 export const isRepeatedName = (name: string) => name === '[*]' || name === '{*}';
 
 /** Settings a researcher edits in the side panel. */
-export type NodePatch = Partial<Pick<ProjectNode, 'label' | 'description' | 'aliases' | 'unnest' | 'raw'>>;
+export type NodePatch = Partial<Pick<ProjectNode, 'label' | 'description' | 'aliases' | 'raw'>>;
 
 /** A copy of the tree with `patch` applied to one node; `undefined` values remove a setting. */
 export function patchNode(tree: ProjectNode, path: NodePath, patch: NodePatch): ProjectNode {
@@ -35,9 +36,14 @@ export function patchNode(tree: ProjectNode, path: NodePath, patch: NodePatch): 
   return copy;
 }
 
-/** Leaves whose researcher decision is still open (and that no ignore above covers). */
+/** Fields whose researcher decision is still open (and that no ignore above covers). */
 export function isUndecided(node: ProjectNode, states: Map<ProjectNode, EffectiveState>): boolean {
-  return isLeaf(node) && node.decision === undefined && states.get(node) !== 'ignore';
+  return isDecidable(node) && node.decision === undefined && states.get(node) !== 'ignore';
+}
+
+/** A list of objects or a map whose keys are data: its entries are the rows of a table. */
+export function formsTable(node: ProjectNode): boolean {
+  return (node.children ?? []).some((c) => (c.name === '[*]' && !isLeaf(c)) || c.name === '{*}');
 }
 
 export interface Counts {
@@ -51,11 +57,13 @@ export interface Counts {
 export function countDecisions(tree: ProjectNode, states: Map<ProjectNode, EffectiveState>): Counts {
   const counts: Counts = { leaves: 0, undecided: 0, show: 0, donate: 0, ignore: 0 };
   const visit = (node: ProjectNode) => {
-    if (isLeaf(node)) {
+    if (isDecidable(node)) {
       counts.leaves++;
       if (isUndecided(node, states)) counts.undecided++;
-      else counts[states.get(node) ?? 'show']++;
-      return;
+      // The keys of a `{*}` node count with their own decision, not the state of what is inside.
+      else if (isLeaf(node)) counts[states.get(node) ?? 'show']++;
+      else counts[states.get(node) === 'ignore' ? 'ignore' : (node.decision ?? 'show')]++;
+      if (isLeaf(node)) return;
     }
     for (const child of node.children ?? []) visit(child);
   };
@@ -81,7 +89,7 @@ export function undecidedBelow(
 
 /**
  * A run of inner nodes shown as one row: each has exactly one child, which is again an inner
- * node, and none of them is a table, has a label, or is a repeated node (whose count matters).
+ * node, and none of them has a label, is a repeated node, or holds one (those are tables).
  * Returns the nodes of the run with their paths, top first.
  */
 export function foldChain(node: ProjectNode, path: NodePath): { node: ProjectNode; path: NodePath }[] {
@@ -96,7 +104,7 @@ export function foldChain(node: ProjectNode, path: NodePath): { node: ProjectNod
       !only ||
       isLeaf(current) ||
       isLeaf(only) ||
-      current.table ||
+      current.collapsed ||
       current.label !== undefined ||
       isRepeatedName(current.name) ||
       isRepeatedName(only.name)

@@ -21,7 +21,8 @@ export interface PreviewRow {
 
 export interface PreviewTable {
   name: Localized;
-  implicit: boolean;
+  /** True for a table of key and value rows (a map whose keys are data). */
+  keyed: boolean;
   /** True for a single record: fields outside any repeated node. */
   record: boolean;
   parent?: number;
