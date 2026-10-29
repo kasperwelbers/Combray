@@ -289,6 +289,10 @@ The researcher decides, for every path in a platform's tree, what happens to it.
   - *No, for another reason.*
 - **Structure only.** Paths come from the shape extractor, which drops values, collapses dictionary-like keys (usernames, dates used as keys) and screens names that look like emails, numbers or tokens (see [universal-importer.md](universal-importer.md#structure-metadata)). Showing the paths before sending is the last check, for the rare key that is private anyway.
 
+## Researcher workspace
+
+The researcher workspace (`/studio/`) works on the researcher's own exports. They are parsed in a separate worker and kept only in its memory: nothing is written to IndexedDB or sent anywhere, and closing the tab drops them. What is kept between visits is a draft of the project tree in `localStorage`: the structure (names screened as in shapes) and the researcher's settings, never values. Values from the exports are shown only in the "view as participant" preview, as React text, like everywhere else. `studio` is reserved as a project id.
+
 ## Supply chain
 
 - Lockfiles (`pnpm-lock.yaml`, `Cargo.lock`) are committed, and CI installs with `--frozen-lockfile` and `--locked`.

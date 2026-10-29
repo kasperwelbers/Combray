@@ -12,7 +12,7 @@ Combray is a data donation tool for qualitative, lab-supported research. Partici
 
 See [docs/architecture.md](docs/architecture.md#monorepo-layout). Three separately deployable components ([ADR 0002](docs/decisions/0002-modular-components.md), amended by [ADR 0003](docs/decisions/0003-typescript-core-and-key-tool.md)): a small **local key tool** for researchers (key pairs, config signing, decryption; the private key never leaves it), the **web client** for participants (plus, later, a browser researcher UI), and a shared, multi-tenant **Combray server** (store keys, enrichment, encrypted donation storage).
 
-- `apps/web` participant web client: React + TypeScript SPA (Vite). All parsing, encryption and querying run in `src/worker/data.worker.ts`.
+- `apps/web` participant web client: React + TypeScript SPA (Vite). All parsing, encryption and querying run in `src/worker/data.worker.ts`. The researcher workspace is `src/studio/` (served at `/studio/`).
 - `packages/core` tree model, parsers, path language, shape extraction (TypeScript; Rust/WASM only for measured bottlenecks)
 - `packages/store` encrypted IndexedDB store (WebCrypto); keys from the server's key service ([ADR 0004](docs/decisions/0004-server-held-store-keys.md))
 - `importers` platform packs: importer specs (YAML) with synthetic fixtures; format in [docs/importer-spec.md](docs/importer-spec.md)

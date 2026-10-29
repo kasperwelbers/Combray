@@ -1,6 +1,6 @@
 # Tree decisions: importers as filters on the tree
 
-Status: **design, not built**. Agreed with Kasper on 2026-10-29. It replaces the table-oriented importer spec ([importer-spec.md](importer-spec.md)) over time. It builds on the tree model and shapes in [universal-importer.md](universal-importer.md) and on the structure-metadata consent flow in [security.md](security.md#structure-metadata-and-consent).
+Status: **partly built** (see [Implementation plan](#implementation-plan)). Agreed with Kasper on 2026-10-29. It replaces the table-oriented importer spec ([importer-spec.md](importer-spec.md)) over time. It builds on the tree model and shapes in [universal-importer.md](universal-importer.md) and on the structure-metadata consent flow in [security.md](security.md#structure-metadata-and-consent).
 
 ## Idea
 
@@ -79,13 +79,15 @@ We handle HTML in three layers. Each produces a tree, so decisions, tables and a
 
 **Layer 1: normalisation (automatic).** A normalised view on top of the parsed tree. The raw tree is unchanged.
 
-- **Element names.** An element is named by its tag plus the classes it has in *every* repeated row at that position. Classes that vary between equivalent elements (`mdl-cell--6-col` on one `content-cell`, `mdl-cell--12-col` on another) are dropped, so the same thing stays one node. Classes that are stable tell siblings apart (`header-cell`, `content-cell`, `caption`) more reliably than position. Ids only count when they are the same in every row.
-- **Implicit lists.** When an element has three or more children with the same name, they become a virtual list `div.outer-cell[*]` with a count bucket.
-- **Positional text.** Text nodes are split at `<br>` and numbered among their siblings: `#text[0]`, `#text[1]`. Inferred types are kept per position, so the shape says "text 1 is date-like".
+- **Implicit lists.** When an element has two or more children with the same tag and the same set of classes, they become a list, named like the elements (`div.mdl-cell.….outer-cell`). Rows repeat their classes exactly; cells within a row usually differ in one (`mdl-cell--6-col` and `--12-col`), so they stay separate positions.
+- **Element names.** Inside list rows, an element keeps only the classes it has at that position in *every* row (positions are matched by tag, first class and order). Classes that vary between rows are dropped, so the same thing stays one node. Ids only count when they are the same in every row.
+- **Single or repeated.** An element that is single in one place and repeated in another (one link in a row, or three) is one node in the project tree: the single element counts as the list's only item. The same goes for a JSON key that is `null` in some records and a list or map in others.
+- **Positional text.** Text nodes are numbered among their text siblings: `#text[0]`, `#text[1]` (`<br>` already separates them). Each becomes a value with an inferred type, so the shape says "text 1 is date-like".
+- **Data attributes.** `href`, `src`, `datetime`, `title`, `alt`, `value` and `content` become values named `@href` and so on. Empty elements (`<br>`, empty cells) are dropped.
 - **Semantic HTML.** A `<table>` with header cells becomes a list of maps keyed by header. A `<dl>` becomes a map from `dt` to `dd`. Header text is only used as a key when it matches a label or alias in the project tree, because the participant's shape never contains text (see the privacy note below).
-- **Wrapper folding.** Chains of single-child elements without meaningful classes fold into one step.
+- **Wrapper folding.** Chains of single-child elements fold into one step in the researcher UI.
 
-After normalisation, Google My Activity is a list of `outer-cell` rows with leaves such as `content-cell[0]/#text[0]` (string), `content-cell[0]/a/@href` (url-like) and `content-cell[0]/#text[1]` (date-like). That is a table with typed but unnamed columns.
+After normalisation, Google My Activity is a list of `outer-cell` rows with leaves such as `content-cell…body-1/#text[0]` (string, "Searched for"), `a/@href` (url-like), `a/#text[0]` (the query) and `#text[1]` (date-like). That is an implicit table with typed but unnamed columns, named after the file. Semantic HTML (`<table>`, `<dl>`) is not handled yet.
 
 **Layer 2: labels from the researcher.** The researcher works on their own export in the researcher UI, so they see the values next to the positions. They label the date-like text `date` and the link `url`. Types do most of the work, since there is usually one date-like and one url-like position per row. Participants only see labels.
 
@@ -105,6 +107,7 @@ A project defines **upload points**, each for one platform: "TikTok (zip or JSON
 - **There are no file nodes.** Files and folders inside the root are ordinary nodes, matched by name and aliases like keys inside a file. Paths start at the root: `Takeout/YouTube and YouTube Music/history/watch-history.json/[*]/title`, or `[*]/Date` for a single CSV.
 - **The format comes from sniffing the content**, with the extension as a hint, not from the name.
 - **Split archives merge.** Google Takeout can come as `takeout-…-001.zip`, `-002.zip`. An upload point accepts several and merges them into one root.
+- **One top folder in an archive is unwrapped.** A zip whose entries all sit in `Takeout/` gives the same tree as picking the `Takeout` folder itself: the root holds `Chrome/`, `YouTube and YouTube Music/` and so on.
 - **Per-user names inside the root** (`messages/inbox/johnsmith_1234/`) go through the existing dictionary collapse and name screening, so they become `inbox/{*}/`.
 
 This also limits the size of the project tree. Ten participants with ten differently named files produce one tree, and identical structure is stored once because the tree is a union. The client still caps how many new paths it offers to send at once (around 500), and shows a summary instead of a long list when there are many.
@@ -183,11 +186,11 @@ The current runner stays until the derivation covers all platform packs. Dataset
 
 ## Implementation plan
 
-1. **Core.** Project tree types, effective decisions, alias matching, and comparing a participant shape with a project tree (known, unknown, missing) in `@combray/core`, with tests on the existing fixtures.
-2. **Nameless root and upload points.** Root without a name, content sniffing, merging split zips, upload points in the project config.
-3. **Table derivation.** Table nodes, implicit tables, shortest unique suffix, nested tables, `unnest`. Shared with the planned unfold for views.
-4. **HTML normalisation.** Implicit lists, positional text, `<table>` and `<dl>`, wrapper folding; matching changes in `extractShape`. Try it on the Google My Activity fixtures and on team members' own exports before tuning further.
-5. **Researcher UI.** Tree with decisions, table markers, labels, merging and suggestions, "view as participant".
+1. **Core** (built: `decisions.ts`, `projectFiles.ts`). Project tree types, effective decisions, alias matching, merging, comparing a participant shape with a project tree (known, unknown, missing), and the two JSON files.
+2. **Nameless root and upload points** (partly built: `uploadRoot`, `mergeDirs`). Root without a name, unwrapping one top folder, merging split zips. Still to do: upload points in the project config.
+3. **Table derivation** (built: `derive.ts`). Table nodes, implicit tables, shortest unique suffix, nested tables. `unnest` is stored but `longer` and `wider` are not applied yet; conversions (`as`) are not applied yet.
+4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins. Still to do: `<table>` and `<dl>`, and tuning on team members' own exports.
+5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, table markers, labels, descriptions, aliases, merging, unnest defaults and "view as participant", saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. Still to do: merge suggestions, lifter editing, registering the files with a server project.
 6. **Participant UI.** Collections, other data, breadcrumbs with folding, nested table navigation.
 7. **Consent flows.** Sending unknown paths, then missing-field requests in the donation step.
 8. **Conversion.** Convert the platform packs to project trees and retire the row/field runner once the outputs match.
