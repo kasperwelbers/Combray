@@ -9,9 +9,11 @@ import {
   extractShape,
   flatten,
   matchingImporters,
+  mergeDirs,
   parseEntries,
   parseFile,
   runImporter,
+  type DirNode,
   type FileEntry,
   type FlatNode,
   type Row,
@@ -155,6 +157,17 @@ async function parseUpload(
     onProgress({ step: 'parsing' });
     const tree = parseFile(first.file.name, bytes);
     return { tree, source: tree.kind === 'dir' ? 'archive' : 'file' };
+  }
+  // Several zips (a Takeout split into parts) become one archive.
+  if (uploads.every((u) => !u.path.includes('/') && /\.zip$/i.test(u.file.name))) {
+    const parts: DirNode[] = [];
+    for (const { file } of uploads) {
+      const tree = parseFile(file.name, new Uint8Array(await file.arrayBuffer()));
+      if (tree.kind === 'dir') parts.push(tree);
+      onProgress({ step: 'reading', files: parts.length });
+    }
+    onProgress({ step: 'parsing' });
+    return { tree: mergeDirs(`${uploads.length} archives`, parts), source: 'archive' };
   }
   const entries: FileEntry[] = [];
   for (const { file, path } of uploads) {

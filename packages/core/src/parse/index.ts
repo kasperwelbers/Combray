@@ -173,3 +173,24 @@ export function parseZip(
   const entries = Object.entries(files).map(([path, data]) => ({ path, bytes: data }));
   return parseEntries(name, entries, options, depth);
 }
+
+/**
+ * Merge directory trees into one, for archives split into parts (Google Takeout's
+ * `takeout-…-001.zip`, `-002.zip`): directories with the same name merge, other entries are
+ * kept side by side. The parts' own names are dropped. See docs/tree-decisions.md.
+ */
+export function mergeDirs(name: string, parts: DirNode[]): DirNode {
+  const root: DirNode = { kind: 'dir', name, children: [] };
+  const into = (target: DirNode, source: DirNode) => {
+    for (const child of source.children) {
+      const existing =
+        child.kind === 'dir'
+          ? target.children.find((c): c is DirNode => c.kind === 'dir' && c.name === child.name)
+          : undefined;
+      if (existing && child.kind === 'dir') into(existing, child);
+      else target.children.push(child.kind === 'dir' ? mergeDirs(child.name, [child]) : child);
+    }
+  };
+  for (const part of parts) into(root, part);
+  return root;
+}
