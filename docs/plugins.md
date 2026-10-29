@@ -18,7 +18,7 @@ A WASM module can only do what its imports allow. Combray gives plugins **no imp
 Additional limits:
 
 - Memory cap per instance (configurable, e.g. 256 MB) and a time budget per call (via fuel metering or worker termination).
-- Modules are loaded from the study config or a platform pack, pinned by hash, and their manifest is shown to the researcher when configuring a study.
+- Modules are loaded from the project config or a platform pack, pinned by hash, and their manifest is shown to the researcher when configuring a study.
 
 ## Interface
 

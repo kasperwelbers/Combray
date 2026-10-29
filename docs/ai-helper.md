@@ -27,7 +27,7 @@ What may go to the model:
 
 - **Shapes** as defined in [universal-importer.md](universal-importer.md#structure-metadata): file and key names (after dictionary collapsing and name screening), node kinds, value types, bucketed counts, HTML tag/id/class.
 - **Dataset descriptions**: dataset names, field names and types, time range at coarse granularity (year), bucketed sizes.
-- **Non-sensitive classifier outputs**: the label set of a local classifier and, where the study allows it, aggregate counts per label at coarse buckets (e.g. "music: many, news: few"). Classifier plugins declare in their manifest whether their labels are safe to share, and the study config must enable this explicitly.
+- **Non-sensitive classifier outputs**: the label set of a local classifier and, where the study allows it, aggregate counts per label at coarse buckets (e.g. "music: many, news: few"). Classifier plugins declare in their manifest whether their labels are safe to share, and the project config must enable this explicitly.
 - **Help knowledge**: platform instructions and Combray documentation.
 
 What never goes to the model: values, items, titles, URLs, search queries, usernames, free-text annotations, or any output of a classifier that is not declared safe.
@@ -67,7 +67,7 @@ Example: "find data about my music interests and visualise it" might become `lis
 Because the model sees only metadata, hosting is a smaller privacy question than usual, but still a choice per study:
 
 - **Local models** in a lab deployment (llama.cpp or Ollama in the compose stack), so nothing leaves the lab network.
-- **Remote models through the server**, for example Claude via the Anthropic API, through the Combray server's `/assistant` proxy, so API keys never reach the browser. The study config states which provider is used.
+- **Remote models through the server**, for example Claude via the Anthropic API, through the Combray server's `/assistant` proxy, so API keys never reach the browser. The project config states which provider is used.
 - **In-browser models** via WebGPU (e.g. WebLLM) are an option for help-only use.
 
 ## Research integrity

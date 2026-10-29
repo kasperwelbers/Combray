@@ -5,7 +5,7 @@ These documents describe what Combray should become and why. They are written to
 Suggested reading order:
 
 1. [vision.md](vision.md): who it is for and the principles everything else follows from
-2. [architecture.md](architecture.md): the moving parts and the monorepo
+2. [architecture.md](architecture.md): the three components (Studio, web client, server) and the monorepo
 3. [privacy-and-encryption.md](privacy-and-encryption.md): threat model and crypto
 4. [universal-importer.md](universal-importer.md): files as trees, importer specs
 5. [enrichment.md](enrichment.md): URL metadata with consent
@@ -16,7 +16,7 @@ Suggested reading order:
 10. [design-identity.md](design-identity.md): the warm look and feel
 11. [roadmap.md](roadmap.md) and [open-questions.md](open-questions.md)
 
-Decision records live in [decisions/](decisions/). The first one is [0001-server-language.md](decisions/0001-server-language.md).
+Decision records live in [decisions/](decisions/): [0001 server language](decisions/0001-server-language.md) and [0002 modular components](decisions/0002-modular-components.md).
 
 ## Glossary
 
@@ -29,6 +29,8 @@ Decision records live in [decisions/](decisions/). The first one is [0001-server
 | **Importer** | A declarative spec that selects paths from a tree and converts them into a dataset. Successor of the "recipe". |
 | **Dataset** | The result of running an importer: a tree (often a list of records) stored encrypted in the browser. |
 | **Enrichment** | Fetching public metadata (title, thumbnail, description) for URLs in a dataset, via the server, with consent. |
-| **Study** | A researcher's configuration: which importers, visualisations, questions and donation targets, plus the study public key. |
+| **Project** | A study as configured in Studio and registered on a server: importers, views, questions, donation pipeline, plus the project public key. |
+| **Studio** | Combray Studio, the researcher tool that runs on the researcher's own computer and holds the project private key. |
+| **Server** | A Combray server, typically one per university, shared by many researchers and projects. |
 | **Session** | One participant's sitting, usually with lab staff present. A participant may have several sessions (diary use). |
 | **Probe** | A visualisation paired with a question or reflection prompt. |

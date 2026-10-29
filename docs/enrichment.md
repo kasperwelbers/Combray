@@ -30,7 +30,7 @@ The problem with existing tools is timing: enrichment takes long, so either the 
 
 ## What gets sent
 
-The participant consents to a **concrete, bounded selection**, not to "enrichment" in general. Study configs define selection presets, for example:
+The participant consents to a **concrete, bounded selection**, not to "enrichment" in general. project configs define selection presets, for example:
 
 - the top *N* items by count (profiles watched, channels, domains)
 - items in a time window the participant is looking at

@@ -114,7 +114,7 @@ This lets researchers share importers with confidence that an importer cannot qu
 
 ### Importer Studio
 
-The data-donation-importers GUI showed that researchers write recipes fastest when they can see their own data. Importer Studio is a researcher mode of the SPA:
+The data-donation-importers GUI showed that researchers write recipes fastest when they can see their own data. Importer Studio is part of Combray Studio, the local researcher tool:
 
 - Drop in a DDP (your own, or a synthetic one). It stays local, like everything else.
 - Browse the tree. Click a node to mark it as rows or as a field; Combray proposes the path, generalised over siblings (`[3]` → `[*]`) and language variants it has seen in shapes.

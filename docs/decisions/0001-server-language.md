@@ -7,7 +7,7 @@
 
 The server must be easy to deploy (one small binary or one small Docker image, no runtime to install), secure, and capable of fetching a lot of URL metadata quickly. It should do as little as possible. Node and Electron are ruled out because of install size and dependency surface. The two candidates are Rust and Go.
 
-What the server does (see [architecture.md](../architecture.md#server)): serve static files, sessions and auth, a key wrapping service, an enrichment fetch queue with a cache, donation intake to disk or S3, and an optional AI proxy. It also ships alongside a researcher CLI that generates keys and decrypts donations.
+What the server does (see [architecture.md](../architecture.md#combray-server)): serve static files, sessions and auth, a key wrapping service, an enrichment fetch queue with a cache, donation intake to disk or S3, and an optional AI proxy. It ships alongside Combray Studio, the local researcher tool that generates keys and decrypts donations, built from the same workspace ([ADR 0002](0002-modular-components.md)).
 
 ## Options
 

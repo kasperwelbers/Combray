@@ -8,7 +8,7 @@ Privacy is the reason a participant can trust Combray with years of their search
 
 1. **Local by default.** Imported data lives in the participant's browser, encrypted at rest.
 2. **Explicit, specific consent for every outbound flow.** Enrichment, donation and structure metadata each have their own consent step with a preview of exactly what is sent. The AI helper never receives data at all, only structure metadata (see [ai-helper.md](ai-helper.md)).
-3. **End-to-end encryption for donations.** Donations are encrypted in the browser to the study's public key. The server stores ciphertext and cannot read it.
+3. **End-to-end encryption for donations.** Donations are encrypted in the browser to the project's public key, whose private key exists only in the researcher's local Studio. The server stores ciphertext and cannot read it.
 4. **Separation of keys and data.** No single machine or credential holds both the encrypted data and the key to open it.
 5. **Minimal server knowledge.** The server learns as little as possible about who requested what, and keeps even less.
 6. **Post-quantum by default for long-lived secrets.** Donations may be stored for ten years or more, so "harvest now, decrypt later" is a real concern. Donation encryption uses a hybrid classical plus post-quantum KEM.
@@ -19,14 +19,14 @@ Privacy is the reason a participant can trust Combray with years of their search
 | --- | --- | --- | --- |
 | Next user of a shared lab machine | Opens the browser after the participant left | Local data | Encrypted store; key needs server login; auto-lock and explicit end-of-session wipe |
 | Someone with a copy of the disk | Stolen laptop, backup image | Local data | Store key wrapped by a server-held key that is never written to disk |
-| Curious or compromised server operator | Admin browses the database or bucket | Donations, vault copies | End-to-end encryption; private key not on the server; vault needs a participant secret too |
-| Compromised bucket | Leaked S3 credentials | Donations, vault copies | Ciphertext only; separate credentials from the key vault |
+| Curious or compromised server operator | Admin of the shared university server browses its storage | Donations, vault copies | End-to-end encryption; private key only in the researcher's Studio; vault needs a participant secret too |
+| Compromised storage | Stolen server disk or leaked S3 credentials | Donations, vault copies | Ciphertext only; store keys kept separately under a master key |
 | Network attacker | Café Wi-Fi in browser mode | Everything in transit | TLS everywhere; payloads already encrypted |
 | Future quantum adversary | Records ciphertext now, decrypts in 2040 | Donations | Hybrid X25519 + ML-KEM-768 (X-Wing) |
 | Malicious importer or plugin | A shared importer script tries to exfiltrate data | Local data | QuickJS and WASM sandboxes without network or DOM access |
 | AI model provider | Hosted model logs prompts | Local data | The helper only ever receives structure metadata; instructions run locally |
 | Enrichment observer | Server or its logs link a participant to the URLs they watched | Behavioural profile | Consent-scoped, sanitised URL batches; unlinkable cache; no URL logging (see [enrichment.md](enrichment.md)) |
-| Substituted study key | Attacker swaps the public key in the study config | Donations | Signed study configs, pinned signing key, fingerprint shown to staff and participant |
+| Substituted project key | Server or attacker swaps the public key in a project config | Donations | Configs signed in Studio; signing key fingerprint in the participant link's URL fragment; fingerprint shown to staff and participant |
 
 Out of scope, stated honestly: malware running as the participant on the same machine while the store is unlocked; a compromised server that serves malicious JavaScript to the browser (an inherent limit of web apps; see "Code integrity" below for mitigations); participants who screenshot or retype their own data.
 
@@ -80,7 +80,7 @@ For large stores, multi-session diary studies or moving between lab machines, th
 
 - **Same-device vault**: the DEK is wrapped only with device-derived keys. The bucket holds opaque blobs that are useless anywhere else. If the browser profile is lost, the data is lost, which is acceptable for a backup of data the participant can re-import.
 - **Portable vault**: the DEK is additionally wrapped with a KEK from the server secret plus the participant secret. The server operator alone cannot decrypt (no participant secret); a participant who loses the code loses the data.
-- The key service and vault storage use separate credentials and, on a VM deployment, separate volumes. Leaking the bucket does not leak keys; leaking the key database does not leak data.
+- The key service and vault storage use separate credentials and, on a VM deployment, separate volumes. Leaking the vault storage does not leak keys; leaking the key database does not leak data.
 
 ## Consent layer
 
@@ -113,8 +113,8 @@ Candidate libraries (to confirm in a spike, with shared test vectors between cli
 ```
 CombrayDonation v1
 ├─ header (authenticated, not encrypted)
-│   ├─ version, study_id, key_id (fingerprint of study public key)
-│   ├─ hpke_enc (X-Wing encapsulation, 1120 bytes)
+│   ├─ version, project_id, key_ids (fingerprints of project public keys)
+│   ├─ hpke_enc per recipient key (X-Wing encapsulation, 1120 bytes each)
 │   ├─ chunk_size, chunk_count
 │   └─ created_at (rounded to the day)
 ├─ chunk 0..n  AEAD(content_key, nonce_i, data_i, aad = H(header) || i || is_last)
@@ -125,17 +125,31 @@ Decrypted, the payload is a manifest plus data: selected datasets and items, ans
 
 ### Key management
 
-- The researcher creates the study key pair with `combray study keygen` on their own machine. The private key is written encrypted with a passphrase (Argon2id plus AEAD, age-style). Recommended: keep it offline, with a backup with the data steward.
-- Optional **key vault** for teams that need server-side custody: a separate container with its own volume and credentials, which stores the private key encrypted under a passphrase that is not on the server. Decryption still happens in the CLI on a researcher's machine; the server never decrypts.
-- **Signed study configs.** Each study config, including the public key, is signed with the researcher's signing key (Ed25519, optionally hybrid with ML-DSA-65). The client verifies the signature against a pinned signing key fingerprint (built into the deployment config or the study link). The donation screen shows a short fingerprint ("encrypted for Study Willow, key 7F3A-91C2") that lab staff can check.
-- Key rotation: a study can list several public keys; new donations use the newest.
+The project key pair is created and held in **Combray Studio**, the researcher tool on the researcher's own computer (see [architecture.md](architecture.md#combray-studio-researcher-tool)). The shared server only ever receives the public key.
+
+- **Creation.** Studio generates an X-Wing key pair for encryption and an Ed25519 key pair (optionally hybrid with ML-DSA-65) for signing project configs.
+- **The researcher is responsible for the private key**, and Studio makes that easy to do well:
+  - an encrypted key file (passphrase, Argon2id plus AEAD, age-style), saved where the researcher chooses;
+  - a printable **recovery sheet** (the key as words or a QR code) to keep in a locked drawer or with the data steward;
+  - suggestions per situation: university-managed encrypted storage, a second copy with a co-investigator, never in email or shared drives in plain form;
+  - Studio refuses to register the project until the researcher has confirmed at least one backup, and can test a backup by decrypting a test envelope.
+- **Decryption happens only in Studio**, on the researcher's machine. Studio downloads ciphertext from the server and decrypts locally.
+- **Signed project configs.** Each config, including the public key, is signed in Studio. The web client verifies the signature before encrypting anything. Because one university server hosts many projects, the client needs a trust anchor the server cannot change: the participant link carries the signing key fingerprint in the URL fragment (`https://combray.uni.nl/p/willow#k=7F3A91C2…`), which browsers never send to the server. Printed participant cards carry the same link as a QR code. The donation screen also shows a short fingerprint ("encrypted for project Willow, key 7F3A-91C2") that lab staff can check against Studio.
+- **Key rotation.** A project can list several public keys; new donations use the newest. Studio keeps old private keys to decrypt older donations.
+- **Collaborators.** A project can have several researcher keys; donations are encrypted to all of them (one HPKE encapsulation per recipient), so a team does not need to share one private key.
+
+### Optional: passkey-protected key backup
+
+Later, a researcher may opt in to storing a copy of the private key on the server, encrypted under a key derived from a **passkey** (WebAuthn with the PRF extension, which gives a per-credential secret only the authenticator can produce). The server then holds a blob it cannot open; the researcher can recover the key on a new computer with their passkey.
+
+The catch is where the PRF secret is evaluated. If the passkey ceremony runs in a page served by the shared server, that page's JavaScript sees the secret, and a compromised server could take it. The ceremony must therefore run in Studio, not in server-served code, which raises questions about which relying-party ID the passkey is bound to and whether synced passkeys work for it. This needs a design spike before it is offered.
 
 ## Server-side data minimisation
 
 - No request bodies or URLs in logs. Access logs record method, route template, status and duration only. IP addresses are not stored by default.
 - Participant identifiers are pseudonymous codes; the mapping to real identities, if any, stays with the researcher (e.g. in the survey tool).
 - The enrichment cache is not linked to sessions (see [enrichment.md](enrichment.md)).
-- Retention settings per study; the server can crypto-shred a participant's server secret to make their local store and portable vault unreadable.
+- Retention settings per project; the server can crypto-shred a participant's server secret to make their local store and portable vault unreadable.
 
 ## Code integrity
 
@@ -155,6 +169,7 @@ Not a substitute for a DPIA, but Combray should ship with: a data flow descripti
 
 - Is the device key plus server secret combination worth its complexity, or is server secret only (in memory) enough for lab settings?
 - Should participants be able to unlock with a QR code on a card (scan with the lab webcam) instead of typing a code?
-- Do we want a hybrid signature (Ed25519 + ML-DSA) on study configs from v1, or Ed25519 only and upgrade later? Signatures are verified at use time, so the quantum risk is lower than for encryption.
+- Is the passkey-protected key backup worth offering, given that the passkey ceremony must run in Studio rather than in server-served code?
+- Do we want a hybrid signature (Ed25519 + ML-DSA) on project configs from v1, or Ed25519 only and upgrade later? Signatures are verified at use time, so the quantum risk is lower than for encryption.
 - Who reviews the crypto design? A university security group, or an external audit once the format is stable?
 - Size bucket padding: what granularity is acceptable given storage costs?

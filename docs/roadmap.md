@@ -18,13 +18,14 @@ Goal: import a Google Takeout and a TikTok export, explore them, entirely in the
 - First views: memory lane, timeline, top items, tree browser.
 - Design system v0: palette, type, madeleine placeholder, town placeholder.
 
-## Phase 2: server and donation
+## Phase 2: Studio, server and donation
 
-Goal: a lab can run sessions with participant codes and receive encrypted donations.
+Goal: a researcher with no programming experience creates a project in Studio, registers it on a shared server, runs sessions, and decrypts donations locally.
 
-- `combray serve`: embedded SPA, study configs, participant codes and sessions, key service (server unlock), donation intake to filesystem.
-- `combray-crypto`: HPKE with X-Wing, envelope format, test vectors shared with the client.
-- CLI: `study keygen/sign`, `participants create`, `donations pull/decrypt/export`.
+- Combray Studio v0: create project, generate keys with guided backup, configure from platform packs, register on a server, create participant codes, download and decrypt donations, export.
+- Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, store-key service (server unlock), donation storage on its own disk.
+- `combray-crypto`: HPKE with X-Wing, envelope format, signatures, key files; test vectors shared with the client.
+- CLI equivalents of the Studio functions for power users.
 - Donation flow: preview, exclusions, consent receipts, probes and answers.
 - Docker image and compose file; deployment guide.
 - External review of the crypto design.
@@ -39,7 +40,7 @@ Goal: TikTok and YouTube data become recognisable within a minute.
 
 ## Phase 4: reflection and research tooling
 
-- Probe library and study builder in the researcher UI.
+- Probe library and full project configuration in Studio.
 - Facilitated mode and diary (multi-session) mode; remote vault.
 - Importer Studio; structure metadata in donations; `combray shapes`.
 - Illustration and logo by a designer; full Dutch and English copy.
@@ -52,4 +53,4 @@ Goal: TikTok and YouTube data become recognisable within a minute.
 
 ## Later
 
-- S3 storage; Windows service install; Tauri wrapper if labs want a desktop app; network and map views; public importer registry; Component Model plugins.
+- Passkey-protected private-key backup on the server; S3 storage; Windows service install; Tauri wrapper if labs want a desktop app; network and map views; public importer registry; Component Model plugins.

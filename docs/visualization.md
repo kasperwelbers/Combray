@@ -30,7 +30,7 @@ The query engine in `combray-core` then **unfolds** the tree automatically:
 3. Fields at sibling lists that would cause a cross product are flagged; the view either aggregates one of them first (e.g. "number of channels") or asks the researcher to choose.
 4. Aggregate locally: counts, sums, distinct counts, time bucketing (hour, day, week, month), top-N, rolling windows.
 
-The participant never sees this. The researcher sees the resulting grain in the study builder ("one row per channel per video watched") so the meaning of counts is clear.
+The participant never sees this. The researcher sees the resulting grain in the Studio ("one row per channel per video watched") so the meaning of counts is clear.
 
 Hot paths (unfolding, grouping, time bucketing over millions of nodes) are implemented in Rust compiled to WASM and run in the query worker. Results are small, so they are cheap to send to the main thread for rendering.
 
@@ -59,7 +59,7 @@ Views link: selecting a period in the timeline filters memory lane and top items
 
 ## Probes: questions attached to views
 
-A **probe** is a view plus a question or prompt. Study configs define probes, building on the question forms in DigitalFootprintsLab:
+A **probe** is a view plus a question or prompt. project configs define probes, building on the question forms in DigitalFootprintsLab:
 
 ```yaml
 probe: meaningful-creators
@@ -93,6 +93,6 @@ As in DigitalFootprintsLab, participants can remove items at any point (a search
 
 ## Open questions
 
-- Vega-Lite, Observable Plot, or a smaller custom layer? Vega-Lite is the most declarative (good for study configs and the AI helper) but heavy; Plot is lighter but less specifiable. Recommendation: Vega-Lite, loaded lazily.
+- Vega-Lite, Observable Plot, or a smaller custom layer? Vega-Lite is the most declarative (good for project configs and the AI helper) but heavy; Plot is lighter but less specifiable. Recommendation: Vega-Lite, loaded lazily.
 - Do we want a "story" export for participants (a personal summary they can keep, like a printed booklet of their year), and how does that interact with privacy?
 - How far should views be configurable by researchers versus fixed per platform pack?

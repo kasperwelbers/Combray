@@ -12,8 +12,11 @@ Combray is a data donation tool for qualitative, lab-supported research. Partici
 
 The monorepo layout is proposed in [docs/architecture.md](docs/architecture.md#monorepo-layout). In short:
 
-- `apps/web` React + TypeScript SPA (Vite)
-- `crates/` Rust workspace: `combray-core` (tree, schema, paths, aggregation; compiled to native and WASM), `combray-crypto`, `combray-server`, `combray-cli`
+Three separately deployable components ([ADR 0002](docs/decisions/0002-modular-components.md)): **Combray Studio** (local researcher tool that holds the project private key), the **web client** for participants, and a shared, multi-tenant **Combray server** (store keys, enrichment, encrypted donation storage).
+
+- `apps/web` participant web client: React + TypeScript SPA (Vite)
+- `apps/studio` researcher tool UI, served on localhost by `combray-studio`
+- `crates/` Rust workspace: `combray-core` (tree, schema, paths, aggregation; compiled to native and WASM), `combray-crypto`, `combray-server`, `combray-studio`
 - `importers/` declarative importer specs with synthetic fixtures
 - `deploy/` docker compose and example configs
 - `docs/` design documents and decision records (`docs/decisions/NNNN-*.md`)
@@ -25,7 +28,7 @@ Build and test commands will be added here once the skeleton exists.
 These apply to every change, however small.
 
 1. **No participant data leaves the browser without explicit, specific consent.** That includes enrichment requests, telemetry and error reports. If a new feature needs to send anything, it must go through the consent layer described in [docs/privacy-and-encryption.md](docs/privacy-and-encryption.md).
-2. **Donations are encrypted client-side to the study's public key.** The server must never need, and never receive, plaintext donation data or the researcher's private key.
+2. **Donations are encrypted client-side to the project's public key.** The server must never need, and never receive, plaintext donation data or the researcher's private key. Only Studio, on the researcher's machine, decrypts.
 3. **Never log data values.** Server logs may contain request counts, timings and error classes, never URLs, usernames, file contents, or paths from a participant's tree. Client console logging of data is debug-only and stripped from production builds.
 4. **Schema metadata contains structure only.** Keys, types, HTML tag/id/class, bucketed counts. No values, and dictionary-like keys (usernames, dates used as keys) are collapsed. See [docs/universal-importer.md](docs/universal-importer.md#structure-metadata).
 5. **No real participant data in the repo.** Fixtures are synthetic. Do not commit real takeout files, even your own.

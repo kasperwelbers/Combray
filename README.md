@@ -19,8 +19,8 @@ Most data donation tools are designed for survey participants who donate remotel
 ## What makes Combray different
 
 - **Presentation first.** The core of the tool is showing participants their own data in ways that are rich, warm and easy to understand, and asking them questions about it. Donation is one possible step at the end, not the point of the interface.
-- **Local first, browser capable.** Combray runs on a lab laptop or a university VM with a single command, and the client also works as a plain website in the browser.
-- **Private by construction.** Data is stored encrypted in the browser. Nothing reaches a server without explicit consent, and donated data is encrypted in the browser to the researcher's key with hybrid post-quantum encryption, so the server only ever holds ciphertext.
+- **Modular and easy to deploy.** A university sets up one Combray server with docker compose; researchers use it from Combray Studio, a local tool that needs no programming. It can also all run on a single lab laptop, and the participant client works as a plain website in the browser.
+- **Private by construction.** Data is stored encrypted in the browser. Nothing reaches a server without explicit consent, and donated data is encrypted in the browser to the researcher's key with hybrid post-quantum encryption, so the server only ever holds ciphertext. The private key stays with the researcher, in Studio.
 - **Enrichment with consent.** Takeout data is often thin: a list of URLs or usernames. With the participant's consent, Combray can send a minimal, sanitised set of URLs (for example "the top 25 TikTok profiles I watched") to the server, which fetches public metadata such as titles and thumbnails so the data becomes something people recognise.
 - **One universal importer.** Every file (JSON, CSV, HTML, XML, and whole zip archives) becomes a tree. Importers are small declarative specs that mark which paths to keep and how to convert them, with sandboxed JavaScript (QuickJS) for the odd case. The structure of donated files, stripped of all values, can be shared to help researchers maintain importers.
 - **Trees, not just tables.** Data is presented as it is. Charts that need tables unfold the tree on demand, and all aggregation happens locally in web workers (with Rust compiled to WebAssembly for the heavy parts).
@@ -30,25 +30,23 @@ Most data donation tools are designed for survey participants who donate remotel
 
 ## Planned architecture at a glance
 
+Combray is three modular parts. A university runs **one shared server**; any researcher, without programming, uses it from **Combray Studio** on their own computer; participants only need a **browser**.
+
 ```
-┌──────────────────────── participant's browser ────────────────────────┐
-│  React SPA                                                            │
-│   ├─ import: zip/files ─► universal tree ─► importer specs            │
-│   ├─ encrypted store (IndexedDB, AES-GCM, non-extractable keys)       │
-│   ├─ web workers: aggregation (Rust/WASM), QuickJS, WASM plugins       │
-│   ├─ explore & reflect: visualisations, questions, annotations        │
-│   └─ donate: preview ─► consent ─► encrypt to researcher key (HPKE)   │
-└───────────────┬───────────────────────────────┬───────────────────────┘
-                │ consented URLs only            │ ciphertext only
-┌───────────────▼───────────────────────────────▼───────────────────────┐
-│  combray server (single binary, Docker image)                         │
-│   ├─ serves the SPA and study configs                                 │
-│   ├─ sessions and key unwrapping for the local store                  │
-│   ├─ enrichment: fetch public URL metadata, shared cache              │
-│   └─ receives encrypted donations ─► disk or S3                       │
-└───────────────────────────────────────────────────────────────────────┘
-        researcher's private key lives offline or in a separate vault
+ researcher's computer            university server                participant's browser
+┌─────────────────────┐ register ┌──────────────────────────┐ SPA, ┌──────────────────────────┐
+│ Combray Studio      ├─────────►│ Combray server           ├─────►│ Web client (React SPA)   │
+│ • create project    │ signed   │ • project registry       │config│ • import ─► tree         │
+│ • private key 🔑    │ config + │ • store keys for the     │◄─────┤ • encrypted IndexedDB    │
+│   (never leaves)    │ pub key  │   participants' local    │unlock│ • workers, Rust/WASM     │
+│ • importers, views, │          │   encrypted stores       │      │ • explore and reflect    │
+│   questions         │◄─────────┤ • enrichment + cache     │◄─────┤ • consented URLs only    │
+│ • decrypt, export   │ cipher-  │ • donation storage       │◄─────┤ • donate: encrypted to   │
+│   (locally only)    │ text     │   (own disk storage)     │cipher│   the project public key │
+└─────────────────────┘          └──────────────────────────┘ text └──────────────────────────┘
 ```
+
+The server never sees unencrypted donation data and never holds the key to decrypt it.
 
 See [docs/architecture.md](docs/architecture.md) for the full picture.
 
@@ -57,7 +55,8 @@ See [docs/architecture.md](docs/architecture.md) for the full picture.
 | Document | What it covers |
 | --- | --- |
 | [Vision and use cases](docs/vision.md) | Who Combray is for, research scenarios, guiding principles |
-| [Architecture](docs/architecture.md) | Monorepo layout, client, server, workers, WASM |
+| [Architecture](docs/architecture.md) | Studio, web client and shared server; monorepo layout; workers and WASM |
+| [Modular components (ADR 0002)](docs/decisions/0002-modular-components.md) | Why researcher tool, web client and server are separate |
 | [Server language (ADR 0001)](docs/decisions/0001-server-language.md) | Rust or Go, with a recommendation |
 | [Privacy and encryption](docs/privacy-and-encryption.md) | Threat model, local encryption, key handling, donation crypto |
 | [Universal tree importer](docs/universal-importer.md) | Files as trees, path language, importer specs, schema metadata, QuickJS |

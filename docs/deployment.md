@@ -1,27 +1,34 @@
 # Deployment
 
-Researchers and IT staff should be able to run Combray with one command, on hardware they already have, and understand what is running.
+Combray has three components (see [architecture.md](architecture.md)): **Studio** on each researcher's computer, the **web client** in participants' browsers, and a shared **server**. The intended setup is that a university runs one server, and any researcher, with no programming experience, uses it from Studio.
 
 ## Targets
 
 | Target | How | Who |
 | --- | --- | --- |
-| **Lab laptop** | Download one binary, run `combray serve`, open `http://localhost:8080` | A researcher running sessions in a room |
-| **University VM** | `docker compose up -d` with TLS through Caddy | Research support / IT, several lab machines and remote participants |
-| **Browser only** | Static files on any web host | Remote, low-touch studies without enrichment |
+| **University server** | `docker compose up -d` on a VM, TLS through Caddy | University IT or research support, once, for all researchers |
+| **Researcher tool** | Download Combray Studio for Windows, macOS or Linux, double-click | Every researcher |
+| **Lab laptop** | One `combray-server` binary on the laptop, plus Studio | A lab without a university server, or offline sessions |
+| **Browser only** | Static bundle exported from Studio, on any web host | Remote, low-touch studies without enrichment |
 
-## Single binary
+## Combray Studio
 
-The `combray` binary (Rust, statically linked) embeds the built SPA, so it has no runtime dependencies. It stores state in a data directory:
+A single signed binary per platform. It starts a local web UI on `127.0.0.1` (random port, per-launch token) and opens it in the default browser. It keeps its own data folder (projects, encrypted private key files, downloaded donations, exports) in the user's documents or app-data directory, and never listens on the network. Updates are offered from inside Studio and verified against release signatures.
+
+## Server as a single binary
+
+The `combray-server` binary (Rust, statically linked) embeds the built web client, so it has no runtime dependencies. It is multi-tenant: many researchers and projects on one installation. It stores state in its own data directory:
 
 ```
 combray-data/
 ├── combray.toml        config
-├── combray.sqlite      studies, sessions, receipts, enrichment cache
-├── studies/            signed study configs and platform packs
+├── combray.sqlite      researcher accounts, projects, sessions, receipts, enrichment cache
+├── projects/           signed project configs and platform packs
 ├── donations/          encrypted envelopes (unless S3 is configured)
 └── keys/               server secrets for local-store unlock (encrypted with the master key)
 ```
+
+No object storage is needed: donations and vault blobs live in this directory by default. S3 is an optional backend.
 
 The master key that protects `keys/` comes from an environment variable or a file outside the data directory (e.g. a Docker secret), so a backup of the data directory alone does not contain usable keys.
 
@@ -32,7 +39,7 @@ A sketch of the default stack:
 ```yaml
 services:
   combray:
-    image: ghcr.io/kasperwelbers/combray:latest
+    image: ghcr.io/kasperwelbers/combray-server:latest
     restart: unless-stopped
     environment:
       COMBRAY_PUBLIC_URL: https://combray.example.edu
@@ -74,24 +81,28 @@ volumes:
 - No enrichment and no server-side AI proxy.
 - Donations either go to a configured endpoint that accepts Combray envelopes (for example a minimal intake service, or an existing platform like OSD2F if it adds support), or are downloaded by the participant as an encrypted file to upload elsewhere.
 
-## Study setup, end to end
+## A project, end to end
 
-1. `combray study keygen --study willow` on the researcher's own machine. Keep the private key safe.
-2. Write `willow.study.yaml`: platform packs, importers, probes, enrichers, donation pipeline, public key.
-3. `combray study sign willow.study.yaml`, then upload to the server (CLI or researcher UI).
-4. Create participant codes (`combray participants create --study willow --count 40`), print them on cards.
-5. Run sessions.
-6. `combray donations pull --study willow` and `combray donations decrypt` on the researcher's machine; export to Parquet or CSV.
+1. **IT** sets up the university server once and creates researcher accounts (or enables SSO).
+2. **The researcher** installs Studio and creates a project. Studio generates the key pair and walks them through saving the private key (encrypted key file, printed recovery sheet, a copy with the data steward).
+3. In Studio, they pick platform packs, importers, views and questions, and preview the participant experience.
+4. They connect Studio to the university server, log in, and register the project. Studio uploads the signed config and public key.
+5. Studio creates participant codes and printable cards with QR links (which carry the signing key fingerprint, see [privacy-and-encryption.md](privacy-and-encryption.md#key-management)).
+6. Sessions run in the lab: participants open the link in a browser.
+7. The researcher downloads encrypted donations in Studio and decrypts and exports them locally.
+
+Everything in Studio is also available as CLI commands (`combray project create`, `combray project register`, `combray donations decrypt`, and so on) for those who prefer scripts.
 
 ## Operations
 
 - Health endpoint, structured logs without data values, Prometheus metrics (counts and timings only).
-- Backups: the data directory and the bucket contain only ciphertext and metadata; the master key and study private keys are backed up separately.
+- Backups: the data directory and the bucket contain only ciphertext and metadata; the master key and project private keys are backed up separately.
 - Upgrades: database migrations run on startup; the binary refuses to start if a migration would lose data without an explicit flag.
 - Releases: signed binaries for Linux (x86_64, aarch64), macOS and Windows, and a multi-arch image on GHCR, with published SPA bundle hashes.
 
 ## Open questions
 
 - Do we need Windows lab laptops as a first-class target (likely yes in many universities), and should the binary install itself as a service there?
-- Should the researcher UI (study builder, Importer Studio, donation dashboard) be part of the same server, or a separate admin binary? Recommendation: same binary, separate authenticated routes.
+- Should the server have a small admin web UI for IT (accounts, quotas, health), or is a CLI enough? Recommendation: CLI first.
+- Should Studio be code-signed and notarised from the first release? Unsigned binaries trigger scary warnings on Windows and macOS, which matters for non-technical researchers. Recommendation: yes.
 - Is S3 needed in v1, or is the filesystem plus regular backups enough for most labs?
