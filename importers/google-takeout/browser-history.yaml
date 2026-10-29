@@ -1,0 +1,19 @@
+id: google-takeout/browser-history
+version: 1
+platform: google-takeout
+name:
+  en: Chrome browsing history
+  nl: Chrome-browsergeschiedenis
+match:
+  file: "**/{BrowserHistory.json,History.json}"
+select:
+  rows: "Browser History/[*]"
+  fields:
+    title: { path: title }
+    url: { path: url, as: url }
+    domain: { from: url, as: domain }
+    date: { path: time_usec, as: datetime, format: epoch-us }
+    transition: { path: page_transition }
+# Searches are imported separately; leave out the result pages.
+where: "url !~* 'google\\.[a-z.]+/search'"
+display: { date: date, title: title, url: url, group_by: [domain] }

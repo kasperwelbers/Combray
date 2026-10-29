@@ -1,0 +1,22 @@
+id: google-takeout/search-history
+version: 1
+platform: google-takeout
+name:
+  en: Google searches
+  nl: Google-zoekopdrachten
+match:
+  file: "**/{My Activity,Mijn activiteit,Meine Aktivitäten}/{Search,Zoeken,Suche}/{MyActivity.json,MijnActiviteit.json,MeineAktivitäten.json}"
+select:
+  rows: "[*]"
+  fields:
+    action: { path: title }
+    query:
+      from: action
+      transform:
+        - replace: { pattern: "^(Searched for|Gezocht naar|Gesucht nach) ", with: "" }
+    url: { path: titleUrl, as: url }
+    date: { path: time, as: datetime }
+    words: { from: query, transform: [tokenize] }
+# Keep searches only, not visits to result pages.
+where: "action ~ '^(Searched for|Gezocht naar|Gesucht nach) '"
+display: { date: date, title: query, url: url, group_by: [words] }

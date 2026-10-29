@@ -1,0 +1,30 @@
+{
+  "google-takeout/search-history-html": [
+    {
+      "action": "Gezocht naar",
+      "query": "meidoorn",
+      "url": "https://www.google.com/search?q=meidoorn",
+      "date": "2024-03-05T11:00:00",
+      "words": [
+        "meidoorn"
+      ]
+    }
+  ],
+  "google-takeout/youtube-subscriptions": [
+    {
+      "channel": "Tante Léonie bakt",
+      "channel_url": "http://www.youtube.com/channel/UCleonie000000",
+      "channel_id": "UCleonie000000"
+    }
+  ],
+  "google-takeout/youtube-watch-history-html": [
+    {
+      "title": "Madeleines bakken",
+      "url": "https://www.youtube.com/watch?v=madeleine01",
+      "channel": "Tante Léonie bakt",
+      "channel_url": "https://www.youtube.com/channel/UCleonie000000",
+      "date": "2024-03-04T10:20:30",
+      "caption": "Producten: YouTube"
+    }
+  ]
+}

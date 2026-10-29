@@ -1,0 +1,30 @@
+id: google-takeout/youtube-watch-history
+version: 1
+platform: google-takeout
+name:
+  en: YouTube watch history
+  nl: YouTube-kijkgeschiedenis
+description:
+  en: Videos you watched on YouTube, with their channels.
+  nl: Video's die je op YouTube hebt bekeken, met hun kanalen.
+match:
+  file: "**/{watch-history.json,kijkgeschiedenis.json,Wiedergabeverlauf.json,historique-des-vidéos.json}"
+select:
+  rows: "[*]"
+  fields:
+    title:
+      path: title
+      transform:
+        - replace: { pattern: "^(Watched|Bekeken|Angesehen|Vous avez regardé) ", with: "" }
+    url: { path: titleUrl, as: url }
+    channel: { path: "subtitles/[0]/name" }
+    channel_url: { path: "subtitles/[0]/url", as: url }
+    date: { path: time, as: datetime }
+    from_ads: { path: "details/[0]/name" }
+    video_id:
+      from: url
+      transform:
+        - match: { pattern: "[?&]v=([^&]+)", group: 1 }
+# Rows that came from ads have a details entry ("From Google Ads").
+where: "from_ads == null"
+display: { date: date, title: title, url: url, group_by: [channel] }

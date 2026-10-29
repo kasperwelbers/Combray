@@ -1,0 +1,20 @@
+{
+  "Browser History": [
+    {
+      "favicon_url": "https://recipes.example/favicon.ico",
+      "page_transition": "LINK",
+      "title": "Madeleines - A Recipe",
+      "ptoken": {},
+      "url": "https://www.recipes.example/madeleines",
+      "client_id": "c0ffee",
+      "time_usec": 1709280010000000
+    },
+    {
+      "page_transition": "GENERATED",
+      "title": "madeleine recipe - Google Search",
+      "url": "https://www.google.com/search?q=madeleine+recipe",
+      "client_id": "c0ffee",
+      "time_usec": 1709280000000000
+    }
+  ]
+}

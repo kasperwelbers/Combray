@@ -1,0 +1,24 @@
+id: google-takeout/youtube-watch-history-html
+version: 1
+platform: google-takeout
+name:
+  en: YouTube watch history (older HTML export)
+  nl: YouTube-kijkgeschiedenis (oudere HTML-export)
+match:
+  file: "**/{watch-history.html,kijkgeschiedenis.html,Wiedergabeverlauf.html}"
+select:
+  rows: "**/div.outer-cell"
+  fields:
+    title: { path: "**/div.content-cell/a", nth: 0 }
+    url: { path: "**/div.content-cell/a/@href", nth: 0, as: url }
+    channel: { path: "**/div.content-cell/a", nth: 1 }
+    channel_url: { path: "**/div.content-cell/a/@href", nth: 1, as: url }
+    # The date is the last line of text in the content cells that looks like a date and time.
+    date:
+      path: "**/div.content-cell/#text"
+      all: true
+      script: "(lines) => lines.filter((l) => /\\d{4}/.test(l) && /\\d:\\d\\d/.test(l)).pop() ?? null"
+      as: datetime
+    caption: { path: "**/.mdl-typography--caption", join: " " }
+where: "caption !~* 'Google Ads|Google Advertenties|Google Anzeigen'"
+display: { date: date, title: title, url: url, group_by: [channel] }

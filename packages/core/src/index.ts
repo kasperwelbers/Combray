@@ -8,3 +8,4 @@ export { parseFile, parseEntries, parseZip, decodeText, jsonToTree } from './par
 export type { ParseOptions, FileEntry } from './parse';
 export { flatten, unflatten, locationOf } from './flat';
 export type { FlatNode } from './flat';
+export * from './importer';

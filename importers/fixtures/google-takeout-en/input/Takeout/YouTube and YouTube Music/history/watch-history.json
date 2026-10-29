@@ -1,0 +1,57 @@
+[
+  {
+    "header": "YouTube",
+    "title": "Watched How to bake madeleines",
+    "titleUrl": "https://www.youtube.com/watch?v=madeleine01",
+    "subtitles": [
+      {
+        "name": "Aunt Léonie Bakes",
+        "url": "https://www.youtube.com/channel/UCleonie000000"
+      }
+    ],
+    "time": "2024-03-01T09:15:00.000Z",
+    "products": [
+      "YouTube"
+    ],
+    "activityControls": [
+      "YouTube watch history"
+    ]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Lime blossom tea, three ways",
+    "titleUrl": "https://www.youtube.com/watch?v=tilleul0002",
+    "subtitles": [
+      {
+        "name": "Tisane Channel",
+        "url": "https://www.youtube.com/channel/UCtisane00000"
+      }
+    ],
+    "time": "2024-03-02T18:40:12.345Z",
+    "products": [
+      "YouTube"
+    ]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Buy a new kettle",
+    "titleUrl": "https://www.youtube.com/watch?v=advert00003",
+    "time": "2024-03-02T18:45:00.000Z",
+    "details": [
+      {
+        "name": "From Google Ads"
+      }
+    ],
+    "products": [
+      "YouTube"
+    ]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched a video that has been removed",
+    "time": "2024-03-03T07:00:00.000Z",
+    "products": [
+      "YouTube"
+    ]
+  }
+]

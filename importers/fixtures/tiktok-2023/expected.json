@@ -1,0 +1,32 @@
+{
+  "tiktok/likes": [
+    {
+      "date": "2023-01-15T08:12:50",
+      "url": "https://www.tiktokv.com/share/video/7189000000000000001/"
+    }
+  ],
+  "tiktok/searches": [
+    {
+      "date": "2023-01-14T21:00:00",
+      "query": "madeleine dipped in tea",
+      "words": [
+        "madeleine",
+        "dipped",
+        "in",
+        "tea"
+      ]
+    }
+  ],
+  "tiktok/watch-history": [
+    {
+      "date": "2023-01-15T08:12:44",
+      "url": "https://www.tiktokv.com/share/video/7189000000000000001/",
+      "video_id": "7189000000000000001"
+    },
+    {
+      "date": "2023-01-15T08:13:02",
+      "url": "https://www.tiktokv.com/share/video/7189000000000000002/",
+      "video_id": "7189000000000000002"
+    }
+  ]
+}

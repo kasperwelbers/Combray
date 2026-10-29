@@ -1,0 +1,39 @@
+{
+  "Activity": {
+    "Video Browsing History": {
+      "VideoList": [
+        {
+          "Date": "2023-01-15 08:12:44",
+          "Link": "https://www.tiktokv.com/share/video/7189000000000000001/"
+        },
+        {
+          "Date": "2023-01-15 08:13:02",
+          "Link": "https://www.tiktokv.com/share/video/7189000000000000002/"
+        }
+      ]
+    },
+    "Search History": {
+      "SearchList": [
+        {
+          "Date": "2023-01-14 21:00:00",
+          "SearchTerm": "madeleine dipped in tea"
+        }
+      ]
+    },
+    "Like List": {
+      "ItemFavoriteList": [
+        {
+          "Date": "2023-01-15 08:12:50",
+          "Link": "https://www.tiktokv.com/share/video/7189000000000000001/"
+        }
+      ]
+    }
+  },
+  "Profile": {
+    "Profile Information": {
+      "ProfileMap": {
+        "userName": "synthetic_user"
+      }
+    }
+  }
+}

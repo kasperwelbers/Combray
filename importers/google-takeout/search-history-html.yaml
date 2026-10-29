@@ -1,0 +1,22 @@
+id: google-takeout/search-history-html
+version: 1
+platform: google-takeout
+name:
+  en: Google searches (older HTML export)
+  nl: Google-zoekopdrachten (oudere HTML-export)
+match:
+  file: "**/{My Activity,Mijn activiteit,Meine Aktivitäten}/{Search,Zoeken,Suche}/{MyActivity.html,MijnActiviteit.html,MeineAktivitäten.html}"
+select:
+  rows: "**/div.outer-cell"
+  fields:
+    action: { path: "**/div.content-cell/#text", nth: 0 }
+    query: { path: "**/div.content-cell/a", nth: 0 }
+    url: { path: "**/div.content-cell/a/@href", nth: 0, as: url }
+    date:
+      path: "**/div.content-cell/#text"
+      all: true
+      script: "(lines) => lines.filter((l) => /\\d{4}/.test(l) && /\\d:\\d\\d/.test(l)).pop() ?? null"
+      as: datetime
+    words: { from: query, transform: [tokenize] }
+where: "action ~ '^(Searched for|Gezocht naar|Gesucht nach)'"
+display: { date: date, title: query, url: url, group_by: [words] }

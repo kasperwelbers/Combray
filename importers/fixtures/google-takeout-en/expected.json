@@ -1,0 +1,87 @@
+{
+  "google-takeout/browser-history": [
+    {
+      "title": "Madeleines - A Recipe",
+      "url": "https://www.recipes.example/madeleines",
+      "domain": "recipes.example",
+      "date": "2024-03-01T08:00:10.000Z",
+      "transition": "LINK"
+    }
+  ],
+  "google-takeout/search-history": [
+    {
+      "action": "Searched for madeleine recipe",
+      "query": "madeleine recipe",
+      "url": "https://www.google.com/search?q=madeleine+recipe",
+      "date": "2024-03-01T08:00:00.000Z",
+      "words": [
+        "madeleine",
+        "recipe"
+      ]
+    }
+  ],
+  "google-takeout/youtube-search-history": [
+    {
+      "query": "hawthorn hedges in spring",
+      "url": "https://www.youtube.com/results?search_query=hawthorn+hedges+in+spring",
+      "date": "2024-02-28T20:01:00.000Z",
+      "words": [
+        "hawthorn",
+        "hedges",
+        "in",
+        "spring"
+      ]
+    },
+    {
+      "query": "church steeple bells",
+      "url": "https://www.youtube.com/results?search_query=church+steeple+bells",
+      "date": "2024-02-29T08:30:00.000Z",
+      "words": [
+        "church",
+        "steeple",
+        "bells"
+      ]
+    }
+  ],
+  "google-takeout/youtube-subscriptions": [
+    {
+      "channel": "Aunt Léonie Bakes",
+      "channel_url": "http://www.youtube.com/channel/UCleonie000000",
+      "channel_id": "UCleonie000000"
+    },
+    {
+      "channel": "Tisane Channel",
+      "channel_url": "http://www.youtube.com/channel/UCtisane00000",
+      "channel_id": "UCtisane00000"
+    }
+  ],
+  "google-takeout/youtube-watch-history": [
+    {
+      "title": "How to bake madeleines",
+      "url": "https://www.youtube.com/watch?v=madeleine01",
+      "channel": "Aunt Léonie Bakes",
+      "channel_url": "https://www.youtube.com/channel/UCleonie000000",
+      "date": "2024-03-01T09:15:00.000Z",
+      "from_ads": null,
+      "video_id": "madeleine01"
+    },
+    {
+      "title": "Lime blossom tea, three ways",
+      "url": "https://www.youtube.com/watch?v=tilleul0002",
+      "channel": "Tisane Channel",
+      "channel_url": "https://www.youtube.com/channel/UCtisane00000",
+      "date": "2024-03-02T18:40:12.000Z",
+      "from_ads": null,
+      "video_id": "tilleul0002"
+    },
+    {
+      "title": "a video that has been removed",
+      "url": null,
+      "channel": null,
+      "channel_url": null,
+      "date": "2024-03-03T07:00:00.000Z",
+      "from_ads": null,
+      "video_id": null
+    }
+  ]
+}
