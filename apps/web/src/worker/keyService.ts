@@ -5,7 +5,7 @@
  */
 import type { ServerStore } from '@combray/store';
 
-import type { CreateResult, UnlockResult } from './api';
+import type { CreateResult, ResetResult, UnlockResult } from './api';
 
 const BASE = '/api/v1/stores';
 
@@ -35,9 +35,11 @@ function retryAfter(response: Response): number | undefined {
 }
 
 export async function createServerStore(
+  project: string,
+  participantId: string | undefined,
   password: string,
 ): Promise<{ ok: true; store: ServerStore } | { ok: false; result: Exclude<CreateResult, { status: 'ok' }> }> {
-  const response = await post('', { password });
+  const response = await post('', { project, participant_id: participantId ?? null, password });
   if (!response) return { ok: false, result: { status: 'unreachable' } };
   if (response.status === 201) {
     const body = (await response.json()) as { store_id: string; kek: string; delete_token: string };
@@ -46,7 +48,18 @@ export async function createServerStore(
       store: { storeId: body.store_id, kek: fromBase64Url(body.kek), deleteToken: body.delete_token },
     };
   }
-  if (response.status === 400) return { ok: false, result: { status: 'invalid-password' } };
+  if (response.status === 400 || response.status === 404) {
+    const error = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+    const status =
+      error === 'invalid_participant'
+        ? 'invalid-participant'
+        : error === 'participant_required'
+          ? 'participant-required'
+          : error === 'no_such_project'
+            ? 'no-such-project'
+            : 'invalid-password';
+    return { ok: false, result: { status } };
+  }
   if (response.status === 429) return { ok: false, result: { status: 'too-many-attempts', retryAfter: retryAfter(response) ?? 60 } };
   return { ok: false, result: { status: 'unreachable' } };
 }
@@ -67,6 +80,31 @@ export async function fetchKek(
       const wait = retryAfter(response);
       return { ok: false, result: wait ? { status: 'wrong-password', retryAfter: wait } : { status: 'wrong-password' } };
     }
+    case 404:
+      return { ok: false, result: { status: 'store-gone' } };
+    case 429:
+      return { ok: false, result: { status: 'too-many-attempts', retryAfter: retryAfter(response) ?? 60 } };
+    default:
+      return { ok: false, result: { status: 'unreachable' } };
+  }
+}
+
+export async function resetPassword(
+  storeId: string,
+  token: string,
+  password: string,
+): Promise<{ ok: true; kek: Uint8Array<ArrayBuffer> } | { ok: false; result: Exclude<ResetResult, { status: 'ok' }> }> {
+  const response = await post(`/${encodeURIComponent(storeId)}/reset`, { token, password });
+  if (!response) return { ok: false, result: { status: 'unreachable' } };
+  switch (response.status) {
+    case 200: {
+      const body = (await response.json()) as { kek: string };
+      return { ok: true, kek: fromBase64Url(body.kek) };
+    }
+    case 400:
+      return { ok: false, result: { status: 'invalid-password' } };
+    case 403:
+      return { ok: false, result: { status: 'invalid-token' } };
     case 404:
       return { ok: false, result: { status: 'store-gone' } };
     case 429:

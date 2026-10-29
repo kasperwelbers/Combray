@@ -27,23 +27,28 @@ import type {
   FileManifest,
   DatasetSummary,
   ImportProgress,
+  LocalProject,
   SourceManifest,
+  StoreStatus,
   TableManifest,
   TableSummary,
   Upload,
 } from './api';
-import { createServerStore, deleteServerStore, fetchKek } from './keyService';
+import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
 import { rows, timeline, topItems } from './tables';
 
+const DB_PREFIX = 'combray-';
+let projectId: string | undefined;
 let store: LocalStore<DatasetManifest> | undefined;
 // Decrypted datasets, kept in memory while unlocked and dropped on lock.
 const cache = new Map<string, FlatNode[]>();
 const tableCache = new Map<string, { manifest: TableManifest; rows: Row[] }>();
 
 async function getStore(): Promise<LocalStore<DatasetManifest>> {
-  store ??= await LocalStore.open<DatasetManifest>();
+  if (!projectId) throw new Error('no project open');
+  store ??= await LocalStore.open<DatasetManifest>(DB_PREFIX + projectId);
   return store;
 }
 
@@ -167,17 +172,61 @@ async function parseUpload(
 }
 
 const api: DataApi = {
-  async status() {
-    const s = await getStore();
-    return { exists: s.exists, unlocked: s.unlocked };
+  async localProjects() {
+    const projects: LocalProject[] = [];
+    for (const { name } of await indexedDB.databases()) {
+      if (!name?.startsWith(DB_PREFIX)) continue;
+      const s = await LocalStore.open(name);
+      const project = s.project;
+      if (project) {
+        const entry: LocalProject = { id: project.id };
+        if (project.name) entry.name = project.name as NonNullable<LocalProject['name']>;
+        if (s.participantId) entry.participantId = s.participantId;
+        projects.push(entry);
+      }
+      s.close();
+    }
+    return projects.sort((a, b) => a.id.localeCompare(b.id));
   },
 
-  async create(password) {
+  async openProject(id) {
+    if (id === projectId) return;
+    cache.clear();
+    tableCache.clear();
+    store?.close();
+    store = undefined;
+    projectId = id;
+  },
+
+  async status() {
     const s = await getStore();
-    const created = await createServerStore(password);
+    const status: StoreStatus = { exists: s.exists, unlocked: s.unlocked };
+    if (s.participantId) status.participantId = s.participantId;
+    return status;
+  },
+
+  async create(password, project, participantId) {
+    const s = await getStore();
+    if (project.id !== projectId) throw new Error('another project is open');
+    const id = project.participants.mode === 'anonymous' ? undefined : participantId;
+    const created = await createServerStore(project.id, id, password);
     if (!created.ok) return created.result;
-    await s.create(created.store);
+    await s.create(created.store, { project: { id: project.id, name: project.name }, participantId: id });
     return { status: 'ok' };
+  },
+
+  async resetPassword(token, password) {
+    const s = await getStore();
+    if (!s.storeId) throw new Error('no store on this device yet');
+    const reset = await resetPassword(s.storeId, token, password);
+    if (!reset.ok) return reset.result;
+    try {
+      await s.unlock(reset.kek);
+      return { status: 'ok' };
+    } catch (error) {
+      if (error instanceof WrongKeyError) return { status: 'store-gone' };
+      throw error;
+    }
   },
 
   async unlock(password) {
