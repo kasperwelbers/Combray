@@ -45,3 +45,4 @@ export {
   IMPORTER_FORMAT,
 } from './projectFiles';
 export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';
+export { normalizeTree, MIN_REPEATS } from './normalize';

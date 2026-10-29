@@ -13,8 +13,10 @@ import {
   projectTreeFromShape,
   setDecision,
   setTable,
+  normalizeTree,
   type ProjectNode,
 } from '../src';
+import { parseMarkup } from '../src/parse/html';
 import { watchHistory } from './fixtures';
 
 const base = () => projectTreeFromShape(extractShape(watchHistory));
@@ -176,5 +178,34 @@ describe('null values', () => {
     expect(getNode(later.tree, ['[*]'])!.children!.map((c) => c.kind)).toEqual(['list']);
     expect(later.added).toEqual([['[*]', 'tags']]);
     expect(mergeShape(tree, extractShape(jsonToTree('d.json', [{ tags: null }]))).added).toEqual([]);
+  });
+});
+
+describe('single and repeated elements', () => {
+  const list = (n: number) =>
+    `<div class="row">${Array.from({ length: n }, (_, i) => `<a href="https://example.com/${i}">x</a>`).join('')}</div>`;
+  const shapeOf = (html: string) => extractShape(normalizeTree(parseMarkup('a.html', html)));
+
+  it('are one node, whichever was seen first', () => {
+    const one = shapeOf(list(1));
+    const many = shapeOf(list(3));
+    for (const [first, second] of [
+      [one, many],
+      [many, one],
+    ] as const) {
+      const { tree, added } = mergeShape(projectTreeFromShape(first!), second!);
+      expect(added).toEqual([]);
+      const row = getNode(tree, ['div.row'])!;
+      expect(row.children!.map((c) => [c.kind, c.name])).toEqual([['list', 'a']]);
+      expect(compareShape(tree, one).unknown).toEqual([]);
+      expect(compareShape(tree, many).unknown).toEqual([]);
+    }
+  });
+
+  it('keep decisions when a single element turns out to repeat', () => {
+    let tree = projectTreeFromShape(shapeOf(list(1)));
+    tree = setDecision(tree, ['div.row', 'a', '@href'], 'donate');
+    const merged = mergeShape(tree, shapeOf(list(3))).tree;
+    expect(getNode(merged, ['div.row', 'a', '[*]', '@href'])!.decision).toBe('donate');
   });
 });

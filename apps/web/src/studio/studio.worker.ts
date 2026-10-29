@@ -9,6 +9,7 @@ import {
   deriveRows,
   deriveTables,
   extractShape,
+  normalizeTree,
   uploadRoot,
   type DerivedRow,
   type TreeNode,
@@ -49,7 +50,8 @@ const api: StudioApi = {
   async addExport(uploads, onProgress) {
     const parsed = await parseUpload(uploads, onProgress);
     onProgress({ step: 'shape' });
-    const tree = uploadRoot(parsed.tree, parsed.source === 'archive');
+    // HTML is normalised so rows and positions compare (docs/tree-decisions.md#html).
+    const tree = normalizeTree(uploadRoot(parsed.tree, parsed.source === 'archive'));
     const info: StudioExport = { id: nextId++, name: parsed.tree.name, nodeCount: countNodes(tree) };
     exports.set(info.id, { info, tree });
     onProgress({ step: 'done' });

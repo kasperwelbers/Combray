@@ -25,5 +25,9 @@
   { "raw": "https://example.com/a b", "type": "string" },
   { "raw": "someone@example.com", "type": "email-like" },
   { "raw": "not an @ email", "type": "string" },
-  { "raw": "  42  ", "type": "int" }
+  { "raw": "  42  ", "type": "int" },
+  { "raw": "5 mrt 2024, 11:00:00 CET", "type": "date-like" },
+  { "raw": "4. März 2024, 10:20:30 MEZ", "type": "date-like" },
+  { "raw": "4 févr. 2024, 10:20", "type": "date-like" },
+  { "raw": "4 apples 2024", "type": "string" }
 ]

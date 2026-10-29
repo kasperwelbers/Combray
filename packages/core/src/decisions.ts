@@ -7,7 +7,7 @@
  */
 import type { Localized } from './importer/spec';
 import { globMatch } from './path';
-import { mergeAll, type CountBucket, type Shape } from './shape';
+import { ITEM_NAME, mergeAll, type CountBucket, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
 export type LeafDecision = 'undecided' | 'ignore' | 'show' | 'donate';
@@ -111,6 +111,39 @@ function withoutNullTwins<T extends { kind: NodeKind; name: string; types?: Valu
   );
 }
 
+/**
+ * An element that is repeated in some places and single in others (one link in a row, or
+ * several) is one node: the single element counts as the list's only item. Normalised HTML
+ * names a list like its elements, so the two have the same name.
+ */
+function unifyElementTwins(shape: Shape): Shape {
+  if (!shape.children) return shape;
+  let children = shape.children.map(unifyElementTwins);
+  for (const list of children.filter((c) => c.kind === 'list' && hasElementItems(c))) {
+    const twin = children.find((c) => c.kind === 'element' && c.name === list.name);
+    if (!twin) continue;
+    const merged: Shape = { ...list, children: mergeAll([...(list.children ?? []), { ...twin, name: ITEM_NAME }]) };
+    children = children.filter((c) => c !== twin).map((c) => (c === list ? merged : c));
+  }
+  return { ...shape, children };
+}
+
+const hasElementItems = (list: { children?: { kind: NodeKind; name: string }[] }) =>
+  (list.children ?? []).some((i) => i.kind === 'element' && i.name === ITEM_NAME);
+
+/** The list a single element belongs to as its only item, if the parent has one. */
+function listTwin(parent: ProjectNode, kind: NodeKind, name: string): ProjectNode | undefined {
+  if (kind !== 'element') return undefined;
+  const list = parent.children?.find((c) => c.kind === 'list' && nameMatches(c, name));
+  return list && matchChild(list, 'element', ITEM_NAME);
+}
+
+/** The single element a repeated element in a shape belongs to, if the parent has one. */
+function elementTwin(parent: ProjectNode, shape: Shape): ProjectNode | undefined {
+  if (shape.kind !== 'list' || !hasElementItems(shape)) return undefined;
+  return parent.children?.find((c) => c.kind === 'element' && nameMatches(c, shape.name));
+}
+
 function fromShape(shape: Shape): ProjectNode {
   const node: ProjectNode = { kind: shape.kind, name: shape.name };
   if (shape.types) node.types = [...shape.types];
@@ -123,7 +156,7 @@ function fromShape(shape: Shape): ProjectNode {
 
 /** A new project tree from a shape, with every node undecided. The root has no name. */
 export function projectTreeFromShape(shape: Shape): ProjectNode {
-  return { ...fromShape(shape), name: '' };
+  return { ...fromShape(unifyElementTwins(shape)), name: '' };
 }
 
 function toShape(node: ProjectNode): Shape {
@@ -165,6 +198,26 @@ export function mergeShape(
         visit(match, child, [...path, match.name]);
         continue;
       }
+      const item = listTwin(node, child.kind, child.name);
+      if (item) {
+        const list = node.children!.find((c) => c.children?.includes(item))!;
+        visit(item, { ...child, name: ITEM_NAME }, [...path, list.name, ITEM_NAME]);
+        continue;
+      }
+      const single = elementTwin(node, child);
+      if (single) {
+        // Seen once before, repeated now: the element becomes the list's item, with its decisions.
+        const { aliases, ...rest } = single;
+        const list: ProjectNode = {
+          kind: 'list',
+          name: single.name,
+          ...(aliases ? { aliases } : {}),
+          children: [{ ...rest, name: ITEM_NAME }],
+        };
+        node.children = node.children!.map((c) => (c === single ? list : c));
+        visit(list, child, [...path, list.name]);
+        continue;
+      }
       const twins = (node.children ?? []).filter((c) => nameMatches(c, child.name));
       if (isNullOnly(child) && twins.length > 0) continue;
       const nullTwin = twins.find(isNullOnly);
@@ -173,7 +226,7 @@ export function mergeShape(
       added.push([...path, child.name]);
     }
   };
-  visit(tree, shape, []);
+  visit(tree, unifyElementTwins(shape), []);
   return { tree, added };
 }
 
@@ -335,11 +388,15 @@ export function compareShape(root: ProjectNode, shape: Shape): ShapeComparison {
     if (node.decision === 'ignore') return;
     for (const child of s.children ?? []) {
       const match = matchChild(node, child.kind, child.name);
+      const item = match ? undefined : listTwin(node, child.kind, child.name);
+      const single = match || item ? undefined : elementTwin(node, child);
       if (match) visit(match, child, [...path, child.name]);
+      else if (item) visit(item, { ...child, name: ITEM_NAME }, [...path, child.name, ITEM_NAME]);
+      else if (single) for (const i of child.children ?? []) visit(single, i, [...path, child.name]);
       else unknown.push({ path: [...path, child.name], shape: child });
     }
   };
-  visit(root, shape, []);
+  visit(root, unifyElementTwins(shape), []);
   const states = effectiveStates(root);
   const missing: NodePath[] = [];
   const findMissing = (node: ProjectNode, path: NodePath) => {

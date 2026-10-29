@@ -94,6 +94,22 @@ function rowsOf(table: TableDef): NodePath {
   return table.rows ?? table.node;
 }
 
+/**
+ * The node an implicit table is named after: the nearest one that is not a repeated item and
+ * not HTML structure (`div.mdl-grid`), so a table in an HTML file is named after the file.
+ */
+function nameSource(chain: ProjectNode[]): ProjectNode | undefined {
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const n = chain[i]!;
+    const parent = chain[i - 1];
+    const markup = n.kind === 'element' || (n.kind === 'list' && n.children?.some((c) => c.kind === 'element'));
+    if (n.label !== undefined) return n;
+    if (isRepeated(n.name) || (markup && parent !== undefined && parent.kind !== 'dir')) continue;
+    return n;
+  }
+  return undefined;
+}
+
 function labelOr(node: ProjectNode, fallback: string): Localized {
   return node.label ?? fallback;
 }
@@ -124,7 +140,7 @@ export function deriveTables(root: ProjectNode): TableDef[] {
         parent = tables[parent]!.parent ?? 0;
       }
       const rows = explicit ? rowsBelow(node, path) : path;
-      const named = [...ancestors, node].reverse().find((n) => !isRepeated(n.name));
+      const named = nameSource([...ancestors, node]);
       tables.push({
         name: explicit ? labelOr(node, node.name) : labelOr(named ?? node, named?.name ?? ''),
         node: path,
@@ -221,9 +237,15 @@ function resolve(node: TreeNode, projectNode: ProjectNode, path: NodePath): Tree
   const [head, ...rest] = path;
   const target = projectNode.children?.find((c) => c.name === head);
   if (!target) return [];
-  return childrenOf(node).flatMap((child) =>
-    projectChild(projectNode, node, child) === target ? resolve(child, target, rest) : [],
-  );
+  return childrenOf(node).flatMap((child) => {
+    if (projectChild(projectNode, node, child) === target) return resolve(child, target, rest);
+    // A single element where other files have a list of them: the list's only item.
+    if (target.kind === 'list' && child.kind === 'element' && rest[0] === ITEM_NAME) {
+      const item = target.children?.find((c) => c.name === ITEM_NAME && c.kind === 'element');
+      if (item && elementName(child.name, child.attrs) === target.name) return resolve(child, item, rest.slice(1));
+    }
+    return [];
+  });
 }
 
 function leafValue(node: TreeNode): unknown {
