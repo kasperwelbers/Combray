@@ -9,3 +9,27 @@ export type { ParseOptions, FileEntry } from './parse';
 export { flatten, unflatten, locationOf } from './flat';
 export type { FlatNode } from './flat';
 export * from './importer';
+export {
+  projectTreeFromShape,
+  mergeShape,
+  effectiveStates,
+  setDecision,
+  setTable,
+  ignoreOverrides,
+  mergeNodes,
+  compareShape,
+  getNode,
+  matchChild,
+  nameMatches,
+  isLeaf,
+  DecisionError,
+} from './decisions';
+export type {
+  ProjectNode,
+  NodePath,
+  Alias,
+  LeafDecision,
+  EffectiveState,
+  MergeConflict,
+  ShapeComparison,
+} from './decisions';
