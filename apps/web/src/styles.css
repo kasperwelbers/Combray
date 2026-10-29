@@ -900,8 +900,9 @@ main.wide {
   vertical-align: top;
   padding: 0.4rem 0.6rem;
   border-bottom: 1px solid var(--line);
+  min-width: 7rem;
   max-width: 28rem;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .preview-table th {

@@ -137,3 +137,23 @@ describe('tables with metadata above their rows', () => {
     expect(rows.map((r) => r.map((row) => row.values))).toEqual([[{ 'history/version': '3' }], [{ url: 'y' }, { url: 'z' }]]);
   });
 });
+
+describe('column names for HTML', () => {
+  it('shorten element names to tag and first class when that keeps them unique', () => {
+    const tree: ProjectNode = {
+      kind: 'list',
+      name: '',
+      children: [
+        {
+          kind: 'element',
+          name: '[*]',
+          children: [
+            { kind: 'element', name: 'div.body.content-cell', children: [{ kind: 'value', name: '#text[0]' }] },
+            { kind: 'element', name: 'p.title.x', children: [{ kind: 'value', name: '#text[0]' }] },
+          ],
+        },
+      ],
+    };
+    expect(deriveTables(tree)[0]!.columns.map((c) => c.name)).toEqual(['div.body/#text[0]', 'p.title/#text[0]']);
+  });
+});

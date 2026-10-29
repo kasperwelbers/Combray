@@ -85,7 +85,32 @@ function suffixNames(paths: NodePath[]): string[] {
         changed = true;
       }
     }
-    if (!changed) return names;
+    if (!changed) return shortened(names);
+  }
+}
+
+/**
+ * Element names in column names shortened to their tag and as few classes as keep the names
+ * unique: `div.content-cell.mdl-cell.mdl-cell--6-col` becomes `div.content-cell`.
+ */
+function shortened(names: string[]): string[] {
+  const element = /^[a-z][a-z0-9]*(#[^./]+)?(\.[^./]+){2,}$/;
+  const shorten = (name: string, classes: number) =>
+    name
+      .split('/')
+      .map((segment) => (element.test(segment) ? segment.split('.').slice(0, classes + 1).join('.') : segment))
+      .join('/');
+  const classes = names.map(() => 1);
+  for (;;) {
+    const short = names.map((n, i) => shorten(n, classes[i]!));
+    let changed = false;
+    short.forEach((name, i) => {
+      if (short.some((other, j) => j !== i && other === name) && short[i] !== names[i]) {
+        classes[i]!++;
+        changed = true;
+      }
+    });
+    if (!changed) return short;
   }
 }
 
