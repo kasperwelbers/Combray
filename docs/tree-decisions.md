@@ -49,6 +49,7 @@ Besides the decision, a node in the project tree can have:
 | `aliases` | any | Other names for the same node: literal, glob or regular expression (see [Aliases](#aliases-and-merging)) |
 | `as`, `format`, `transform`, `script` | leaves | Conversion, as in the current field spec, now attached to the node |
 | `role` | leaves | View hint: `date`, `title`, `url`, `group` (replaces `display`) |
+| `raw` | donated leaves | Donate the value as it is in the file instead of transformed ([What is donated](#what-is-donated)) |
 | `unnest` | inner, repeated | Default for nested lists inside a table: `count` (default), `longer` or `wider` |
 | `lifter` | inner | A sandboxed script that turns each row subtree into a map ([HTML](#html), layer 3) |
 | `where`, derived fields, enrichers | table | Row filter, fields computed from other columns (`from` + transform or script), and which columns may be enriched |
@@ -78,7 +79,8 @@ We handle HTML in three layers. Each produces a tree, so decisions, tables and a
 
 **Layer 1: normalisation (automatic).** A normalised view on top of the parsed tree. The raw tree is unchanged.
 
-- **Implicit lists.** When an element has three or more children with the same signature (tag plus classes, without layout-only classes such as `mdl-cell--6-col`), they become a virtual list `div.outer-cell[*]` with a count bucket.
+- **Element names.** An element is named by its tag plus the classes it has in *every* repeated row at that position. Classes that vary between equivalent elements (`mdl-cell--6-col` on one `content-cell`, `mdl-cell--12-col` on another) are dropped, so the same thing stays one node. Classes that are stable tell siblings apart (`header-cell`, `content-cell`, `caption`) more reliably than position. Ids only count when they are the same in every row.
+- **Implicit lists.** When an element has three or more children with the same name, they become a virtual list `div.outer-cell[*]` with a count bucket.
 - **Positional text.** Text nodes are split at `<br>` and numbered among their siblings: `#text[0]`, `#text[1]`. Inferred types are kept per position, so the shape says "text 1 is date-like".
 - **Semantic HTML.** A `<table>` with header cells becomes a list of maps keyed by header. A `<dl>` becomes a map from `dt` to `dd`. Header text is only used as a key when it matches a label or alias in the project tree, because the participant's shape never contains text (see the privacy note below).
 - **Wrapper folding.** Chains of single-child elements without meaningful classes fold into one step.
@@ -89,9 +91,11 @@ After normalisation, Google My Activity is a list of `outer-cell` rows with leav
 
 **Layer 3: lifters.** For formats that resist (large old Google, Facebook or Instagram HTML exports), a `lifter` on the row node is a QuickJS function from a row subtree to a map, run in the existing sandbox with the same limits as importer scripts. Only the researcher who writes the lifter needs to understand the HTML.
 
+A node with a lifter hides its children from the decision tree. The lifter node itself gets one decision (ignore, show or donate), and every key it outputs is a leaf with that same decision. Its output shape is not stored in the project tree. A researcher who wants only some fields writes the lifter to output only those.
+
 **Privacy note.** Text that is the same in every row ("Producten:", "Gezocht naar") is structure in practice, but it can also be personal, such as a header with an account name. So participant shapes never include text, not even constant text. The client can match constant text locally against labels and aliases in the project tree, which come from the researcher's own exports.
 
-Layer 1 needs changes to `extractShape` (counts for repeated siblings, positional text) and a normalisation pass in `@combray/core`. Signatures and the "layout-only class" rule need tuning on real exports.
+Layer 1 needs changes to `extractShape` (counts for repeated siblings, positional text, stable classes) and a normalisation pass in `@combray/core`. The thresholds need tuning on real exports.
 
 ## Upload points and the nameless root
 
@@ -139,9 +143,24 @@ When a leaf the project asks for (`donate`) is missing from a participant's data
 
 The sentence in italics is the missing leaf's `description`. Only unknown leaves in the same table as the missing one are offered, never all undecided data. The participant sees their values in the donation preview, as for every donation.
 
+## What is donated
+
+The donation contains the **transformed values, exactly as the participant sees them in the preview**. Consent is given for what the participant saw. Transformations can make data less sensitive (a domain instead of a full URL), and sending the raw value as well would undo that. Most conversions (dates, numbers) lose nothing. The donation records the importer version, so researchers can reproduce the transformation.
+
+When a study needs a raw value, the researcher sets `raw` on that donated leaf. The preview then shows it raw, so the participant still sees exactly what is sent.
+
+## Storage
+
+A project tree is kept as two JSON documents, combined into one tree in the browser:
+
+- **`structure.json`**, owned by the server: the union of every shape the project has seen. It grows as participants send structure metadata.
+- **`importer.json`**, owned by the researcher: decisions, table markers, labels, descriptions, aliases, conversions, lifters and scripts (as strings), keyed by canonical path. This is the part that is signed with the project config and shared between projects.
+
+Keeping them apart means the server adding new paths never collides with the researcher's edits. Merging nodes rewrites the paths in `importer.json`.
+
 ## What happens to importer specs
 
-A project tree is saved as YAML (structure, decisions and node properties), versioned with synthetic fixtures like the current importers. The researcher UI edits it, and hand-editing stays possible. Current specs convert mechanically:
+Platform packs become shared `importer.json` files plus a reference `structure.json`, versioned with synthetic fixtures like the current importers. The researcher UI edits them, and hand-editing stays possible. Current specs convert mechanically:
 
 | Current spec | Project tree |
 | --- | --- |
@@ -173,10 +192,17 @@ The current runner stays until the derivation covers all platform packs. Dataset
 7. **Consent flows.** Sending unknown paths, then missing-field requests in the donation step.
 8. **Conversion.** Convert the platform packs to project trees and retire the row/field runner once the outputs match.
 
+## Decided questions
+
+Answered by Kasper on 2026-10-29:
+
+- **Leaves in other tables.** Not needed: pulling a parent's value into a nested table is unnesting. Each nested row links to its parent row, and `longer` repeats parent values.
+- **Classes and ids.** Kept only when stable across repeated rows (see [HTML](#html)).
+- **Raw or transformed.** Transformed, as shown in the preview, with a `raw` flag per donated leaf (see [What is donated](#what-is-donated)).
+- **Lifter output.** One decision on the lifter node covers every key it outputs; the output shape is not stored.
+- **Leaf in one version, inner node in another.** Nodes with different kinds are different nodes, as `mergeAll` and `matchChild` already do.
+- **Format.** JSON, split into `structure.json` and `importer.json`, with scripts as strings (see [Storage](#storage)).
+
 ## Open questions
 
-- Should a leaf be able to sit in a table other than its nearest table ancestor, for example to pull a parent's value into a nested table? The unnest already repeats parent values in `longer` mode, so possibly not needed.
-- How are layout-only classes recognised: a built-in list per known export, or a heuristic (classes that differ between rows with the same structure)?
-- Does a lifter's output need its own shape in the project tree, or is it enough to record the shape after lifting?
-- What does the researcher see when two participants' trees disagree on whether a node is a leaf or an inner node (a string in one version, an object in another)? Probably two nodes with the same name and different kinds, as `mergeAll` already does.
-- Export format for sharing project trees between projects, and whether sharing goes through a registry.
+- Whether shared project trees go through a public registry, and how they are reviewed.
