@@ -9,6 +9,7 @@ Suggested reading order:
 3. [privacy-and-encryption.md](privacy-and-encryption.md): threat model and crypto
    - [security.md](security.md): every security choice that is implemented, and why
 4. [universal-importer.md](universal-importer.md): files as trees, importer specs
+   - [tree-decisions.md](tree-decisions.md): importers as decisions on the tree, derived tables, HTML, aliases (design)
 5. [enrichment.md](enrichment.md): URL metadata with consent
 6. [visualization.md](visualization.md): presenting data and prompting reflection
 7. [plugins.md](plugins.md): local WASM modules and QuickJS

@@ -33,7 +33,7 @@ Goal: a researcher with no programming experience creates a project, registers i
 - `combray-crypto`: HPKE with X-Wing, envelope format, signatures, key files; test vectors shared with the client.
 - CLI equivalents of the key tool functions for power users.
 - Donation flow: preview, exclusions, consent receipts, probes and answers.
-- Researcher path decisions (ignore, show, donate) on the tree, and the consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent)).
+- Researcher path decisions (ignore, show, donate) on the tree, derived tables, aliases and upload points ([tree-decisions.md](tree-decisions.md#implementation-plan)), and the consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent)).
 - Docker image and compose file; deployment guide.
 - External review of the crypto design.
 
