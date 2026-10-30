@@ -31,6 +31,9 @@ Goal: a researcher with no programming experience creates a project, registers i
 - Researcher UI in the browser: create a project, configure from platform packs, register on a server, create participant codes, download encrypted donations.
 - Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, donation storage on its own disk.
 - `combray-crypto`: HPKE with X-Wing, envelope format, signatures, key files; test vectors shared with the client.
+- Revocable donation keys ([ADR 0006](decisions/0006-revocable-donation-keys.md)): sealed keys in a separate key database, researcher access tokens, fetch on use, withdrawal with tombstones.
+- Combray package: export the encrypted store as one file and restore it on any device with the password ([key-design.md](key-design.md#8-planned-the-combray-package-export-and-restore)).
+- R package for analysis (fetch keys, decrypt in memory, never store), on `combray-crypto` through extendr; Python later.
 - CLI equivalents of the key tool functions for power users.
 - Donation flow: preview, exclusions, consent receipts, probes and answers.
 - [x] Researcher workspace with path decisions (ignore, show, donate) on the tree, derived tables, aliases and HTML normalisation ([tree-decisions.md](tree-decisions.md#implementation-plan)). [ ] Upload points, the participant view of derived tables, and the consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent)).

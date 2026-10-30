@@ -72,7 +72,7 @@ Every outbound flow goes through one client module, so it can be reviewed and te
 - Each flow has a **preview**: the exact items that will be sent, in human terms ("these 25 TikTok profiles"), with the option to remove items.
 - Consent is **specific and recorded**: a consent receipt (what, when, which study text version, a hash of the payload) is stored locally and included in the donation.
 - Flows: `enrich`, `donate`, `shapes` (structure metadata), `vault`. Each can be disabled per study. The AI helper is not a data flow: its context builder only accepts structure metadata and declared-safe aggregates.
-- Withdrawal: a donation receipt id lets a participant request deletion later. The server can delete the envelope without being able to read it.
+- Withdrawal: the donation receipt carries a withdrawal token. Withdrawing deletes the donation's sealed key on the server, which makes every copy of the envelope unreadable, including copies researchers downloaded ([ADR 0006](decisions/0006-revocable-donation-keys.md), [key-design.md](key-design.md#6-withdrawing)).
 
 ## Donation encryption
 
@@ -84,7 +84,7 @@ Donations use **HPKE** (RFC 9180, base mode) with:
 - **KDF:** HKDF-SHA-256
 - **AEAD:** AES-256-GCM (ChaCha20-Poly1305 as an alternative where hardware AES is unavailable)
 
-The HPKE context encrypts a random per-donation content key. The payload itself is encrypted in chunks with that content key using a STREAM-style construction (counter-based nonces and a final-chunk flag), so large donations can be encrypted and uploaded in a worker without holding everything in memory, and truncation is detected.
+HPKE seals a fresh random per-donation content key, separately for each researcher public key. The sealed keys are stored on the server apart from the envelope, so withdrawing a donation only has to delete them ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The HPKE `info` binds the project id and donation id. The payload itself is encrypted in chunks with that content key using a STREAM-style construction (counter-based nonces and a final-chunk flag), so large donations can be encrypted and uploaded in a worker without holding everything in memory, and truncation is detected.
 
 Candidate libraries (to confirm in a spike, with shared test vectors between client and Rust):
 
@@ -96,13 +96,14 @@ Candidate libraries (to confirm in a spike, with shared test vectors between cli
 ```
 CombrayDonation v1
 ├─ header (authenticated, not encrypted)
-│   ├─ version, project_id, key_ids (fingerprints of project public keys)
-│   ├─ hpke_enc per recipient key (X-Wing encapsulation, 1120 bytes each)
+│   ├─ version, project_id, donation_id, key_ids (fingerprints of project public keys)
 │   ├─ chunk_size, chunk_count
 │   └─ created_at (rounded to the day)
 ├─ chunk 0..n  AEAD(content_key, nonce_i, data_i, aad = H(header) || i || is_last)
 └─ (padding to a size bucket, to hide exact donation size)
 ```
+
+The sealed keys travel next to the envelope, not in it: one record per recipient key, `{donation_id, key_id, hpke_enc, sealed_content_key}`, kept in the server's key database.
 
 Decrypted, the payload is a manifest plus data: selected datasets and items, answers to questions, annotations, consent receipts, importer ids and versions, client version, and (if consented) structure shapes.
 
@@ -116,10 +117,10 @@ The project key pair is created and held in **Combray Studio**, the researcher t
   - a printable **recovery sheet** (the key as words or a QR code) to keep in a locked drawer or with the data steward;
   - suggestions per situation: university-managed encrypted storage, a second copy with a co-investigator, never in email or shared drives in plain form;
   - Studio refuses to register the project until the researcher has confirmed at least one backup, and can test a backup by decrypting a test envelope.
-- **Decryption happens only in Studio**, on the researcher's machine. Studio downloads ciphertext from the server and decrypts locally.
+- **Decryption happens only on the researcher's machine**, in the key tool or an analysis package (R, later Python). They may keep ciphertext locally, but fetch the sealed keys from the server every time and never store keys or plaintext ([key-design.md](key-design.md#5-analysing-fetch-on-use)).
 - **Signed project configs.** Each config, including the public key, is signed in Studio. The web client verifies the signature before encrypting anything. Because one university server hosts many projects, the client needs a trust anchor the server cannot change: the participant link carries the signing key fingerprint in the URL fragment (`https://combray.uni.nl/p/willow#k=7F3A91C2…`), which browsers never send to the server. Printed participant cards carry the same link as a QR code. The donation screen also shows a short fingerprint ("encrypted for project Willow, key 7F3A-91C2") that lab staff can check against Studio.
 - **Key rotation.** A project can list several public keys; new donations use the newest. Studio keeps old private keys to decrypt older donations.
-- **Collaborators.** A project can have several researcher keys; donations are encrypted to all of them (one HPKE encapsulation per recipient), so a team does not need to share one private key.
+- **Collaborators.** A project can have several researcher keys; donations are encrypted to all of them (one HPKE encapsulation per recipient), so a team does not need to share one private key. Each researcher has their own revocable access token for fetching sealed keys.
 
 ### Optional: passkey-protected key backup
 

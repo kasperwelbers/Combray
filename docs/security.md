@@ -1,6 +1,6 @@
 # Security
 
-This document records every security choice in Combray that exists in code today, why we made it, and what it does not protect against. [privacy-and-encryption.md](privacy-and-encryption.md) describes the wider design, including donation encryption, which is not built yet. Where the two overlap, this document describes what is implemented.
+This document records every security choice in Combray that exists in code today, why we made it, and what it does not protect against. [privacy-and-encryption.md](privacy-and-encryption.md) describes the wider design, including donation encryption, which is not built yet. Where the two overlap, this document describes what is implemented. [key-design.md](key-design.md) walks through every key, built and planned, in one place.
 
 Changing anything in the local store, the store key service, the Content Security Policy or the server's handling of requests means updating this document in the same change. Decisions that are hard to reverse also get an ADR. The store key design is [ADR 0004](decisions/0004-server-held-store-keys.md).
 
@@ -148,7 +148,7 @@ An earlier design also wrapped the DEK with a non-extractable "device key" store
 
 - **The server sees the password** (over TLS) while it checks it. A password-authenticated key exchange (for example OPAQUE) would avoid that. It is a candidate for later, but it does not help against the out-of-scope case of a malicious server, which could serve altered code anyway.
 - **Server and device together** (store master key, database and a copy of the disk) can decrypt without the password once the Argon2 hash is cracked. Mixing a password-derived secret into the KEK would only raise the cost to that of cracking the hash, so we do not.
-- **A forgotten password means lost data for anonymous participants.** Participants with an id can get a [reset link](#password-reset). Anyone can import their export again.
+- **A forgotten password means lost data for anonymous participants.** Participants with an id can get a [reset link](#password-reset). Anyone can import their export again. A planned Combray package will let participants keep their encrypted store as a file that opens on any device with their password ([key-design.md](key-design.md#8-planned-the-combray-package-export-and-restore)).
 - **The store master key cannot be rotated yet.** Rotating it would mean re-wrapping on each device at its next unlock.
 - **Orphaned records** (a device whose browser data was cleared) stay on the server until a retention policy removes them. They are useless without the device data.
 
