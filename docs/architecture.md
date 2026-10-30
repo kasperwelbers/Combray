@@ -90,7 +90,7 @@ The server is intentionally small, and **multi-tenant**: one installation serves
 2. **Serve the web client** (embedded in the binary) and each project's signed config.
 3. **Store-key service** (built). Hold a key encryption key per participant store, released only for the store's password, with lockout and rate limits (see [security.md](security.md#store-keys)). These keys protect data that stays in the browser; they cannot decrypt donations.
 4. **Enrichment.** Accept batches of sanitised URLs, fetch public metadata quickly and politely, cache it without linking it to participants, stream results back (see [enrichment.md](enrichment.md)).
-5. **Donation storage.** Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers in Studio, and delete them on request.
+5. **Donation storage.** Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers, and delete them on request. The sealed donation keys go into a separate key database with its own short backup retention, so deleting them withdraws every copy of a donation ([key-design.md](key-design.md)).
 6. **Optional AI proxy.** Forward helper requests (metadata only, see [ai-helper.md](ai-helper.md)) to a configured model, so API keys never reach the browser.
 7. **Optional private-key escrow** (later): store a copy of a project's private key encrypted under a researcher passkey (see [privacy-and-encryption.md](privacy-and-encryption.md#optional-passkey-protected-key-backup)).
 
@@ -107,8 +107,10 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 | `POST /api/v1/projects` | Studio | Register a project: signed config, public key, signing key |
 | `PUT /api/v1/projects/{id}/config` | Studio | Publish a new signed config version |
 | `POST /api/v1/projects/{id}/participants` | Studio | Create participant codes |
-| `GET /api/v1/projects/{id}/donations` | Studio | List and download encrypted envelopes |
-| `DELETE /api/v1/projects/{id}/donations/{d}` | Studio | Delete a donation (withdrawal) |
+| `GET /api/v1/projects/{id}/donations` | Researcher tools | List donations and withdrawal tombstones |
+| `GET /api/v1/projects/{id}/donations/{d}` | Researcher tools | Download one encrypted envelope |
+| `POST /api/v1/projects/{id}/donation-keys` | Researcher tools | Fetch the sealed keys for a list of donations, on every use ([ADR 0006](decisions/0006-revocable-donation-keys.md)) |
+| `DELETE /api/v1/projects/{id}/donations/{d}` | Researcher tools | Withdraw a donation on a participant's behalf: delete its sealed keys and envelope |
 | `GET /api/v1/p/{id}/config` | Web client | Signed project config |
 | `POST /api/v1/sessions` | Web client | Exchange a participant code for a session token |
 | `POST /api/v1/stores` | Web client | Create a store key for a project (and participant id), protected by a password; returns store id, KEK and delete token (built) |
@@ -118,7 +120,8 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 | `POST /api/v1/enrich` | Web client | Submit a batch of URLs; returns a job id |
 | `GET /api/v1/enrich/{job}/events` | Web client | Server-sent events with metadata as it arrives |
 | `PUT /api/v1/vault/{blob}` | Web client | Encrypted remote copy of the local store (optional) |
-| `POST /api/v1/donations` | Web client | Upload an encrypted donation envelope |
+| `POST /api/v1/p/{id}/donations` | Web client | Upload an encrypted donation envelope and its sealed keys; returns a withdrawal token |
+| `POST /api/v1/donations/{d}/withdraw` | Web client | Withdraw a donation with its withdrawal token |
 | `POST /api/v1/assistant` | Web client | Optional AI helper proxy |
 
 **Projects in the web client.** Participants open `/{project}/`, with an optional participant id in the fragment (`#id=…`). Each project has its own encrypted store on the device, and `/` lists the projects with data on this computer ([ADR 0005](decisions/0005-projects-scope-stores.md)).
