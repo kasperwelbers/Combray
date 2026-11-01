@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 /**
- * The data worker: parses imports into trees, runs importers, encrypts everything into the local
- * store, and answers the views' queries. The store key lives only here, never on the main
+ * The data worker: parses imports into trees, derives tables through the project's upload
+ * points (or runs the YAML importers), encrypts everything into the local store, and answers
+ * the views' queries. The store key lives only here, never on the main
  * thread. Importer scripts run in a QuickJS sandbox inside this worker.
  */
 import {
@@ -30,7 +31,9 @@ import type {
   TableManifest,
   TableSummary,
   Upload,
+  UploadPoint,
 } from './api';
+import { deriveImport } from './derived';
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
@@ -87,6 +90,7 @@ function tableSummary(id: string, m: TableManifest): TableSummary {
     display: m.display,
   };
   if (m.description) summary.description = m.description;
+  if (m.derived) summary.derived = m.derived;
   return summary;
 }
 
@@ -139,6 +143,43 @@ async function runImporters(
     sandbox.dispose();
   }
   return tables;
+}
+
+/**
+ * Derive tables through the project's upload points and store them. Returns undefined when the
+ * upload fits none of them.
+ */
+async function storeDerived(
+  s: LocalStore<DatasetManifest>,
+  sourceId: string,
+  tree: TreeNode,
+  archive: boolean,
+  points: UploadPoint[],
+  importedAt: string,
+): Promise<TableSummary[] | undefined> {
+  const derived = deriveImport(tree, archive, points);
+  if (!derived) return undefined;
+  const summaries: TableSummary[] = [];
+  for (const { table, rows } of derived.tables) {
+    const { name, display, ...rest } = table;
+    const manifest: TableManifest = {
+      type: 'table',
+      sourceId,
+      importer: { id: `${derived.point.id}:${derived.point.pack}`, version: 1 },
+      name,
+      importedAt,
+      rowCount: rows.length,
+      fields: table.columns.map((c) => c.id),
+      display,
+      filtered: 0,
+      errorCount: 0,
+      derived: rest,
+    };
+    const id = await s.putDataset(manifest, rows);
+    tableCache.set(id, { manifest, rows });
+    summaries.push(tableSummary(id, manifest));
+  }
+  return summaries;
 }
 
 const api: DataApi = {
@@ -230,7 +271,7 @@ const api: DataApi = {
     store = undefined;
   },
 
-  async importFiles(uploads, onProgress) {
+  async importFiles(uploads, onProgress, points) {
     const s = await unlockedStore();
     const { tree, source } = await parseUpload(uploads, onProgress);
     onProgress({ step: 'shape' });
@@ -255,7 +296,8 @@ const api: DataApi = {
       await s.putFile(fileManifest, file);
     }
     onProgress({ step: 'importers' });
-    const tables = await runImporters(s, id, tree, importedAt);
+    const derived = points?.length ? await storeDerived(s, id, tree, source === 'archive', points, importedAt) : undefined;
+    const tables = derived ?? (await runImporters(s, id, tree, importedAt));
     onProgress({ step: 'done' });
     return sourceSummary(id, manifest, tables);
   },

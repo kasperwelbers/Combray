@@ -1,4 +1,4 @@
-import type { DisplayHints, Localized, NodeKind, Row, Shape, ValueType } from '@combray/core';
+import type { ColumnDef, DisplayHints, Localized, NodeKind, NodePath, Role, Row, Shape, ValueType } from '@combray/core';
 
 /** An imported archive, folder or file, stored as its tree. Encrypted; never sent anywhere. */
 export interface SourceManifest {
@@ -12,11 +12,59 @@ export interface SourceManifest {
   shape: Shape;
 }
 
+/**
+ * Where participants add data for one platform, from the project config: matched against the
+ * tree of a platform pack (docs/tree-decisions.md#upload-points-and-the-nameless-root).
+ */
+export interface UploadPoint {
+  id: string;
+  /** A bundled platform pack (`google-takeout`, `tiktok`). */
+  pack: string;
+  name?: Localized;
+}
+
+/** A column of a table derived through a project tree. */
+export interface ColumnInfo {
+  id: string;
+  /** The researcher's label; empty for the key and value of a key/value table. */
+  name: Localized;
+  type: ColumnDef['type'];
+  state: ColumnDef['state'];
+  role?: Role;
+  /** Read as a date and time, or as a link: shown as such. */
+  as?: 'datetime' | 'url';
+  /** The researcher has not decided on it: shown, never requested. */
+  undecided?: true;
+  /** Not in the project's structure yet: new to the researchers too. */
+  new?: true;
+  /** For nested tables: their columns. Their rows are inside each row, under the column id. */
+  columns?: ColumnInfo[];
+}
+
+/** What a table derived through a project tree adds to its manifest. */
+export interface DerivedTable {
+  name: Localized;
+  /** Where its rows are in the project tree, for breadcrumbs. */
+  path: NodePath;
+  /** A single record of fields outside any list. */
+  record: boolean;
+  /** Has fields the researchers chose to show or ask for; else it is "other data". */
+  collection: boolean;
+  /** Has fields the researchers ask participants to donate. */
+  requested: boolean;
+  new?: true;
+  columns: ColumnInfo[];
+  display: DisplayHints;
+}
+
 /** The rows an importer found in a source. Encrypted; never sent anywhere. */
 export interface TableManifest {
   type: 'table';
   sourceId: string;
+  /** The YAML importer, or the upload point and pack a derived table came from. */
   importer: { id: string; version: number };
+  /** For tables derived through a project tree. */
+  derived?: Omit<DerivedTable, 'name' | 'display'>;
   name: Localized;
   description?: Localized;
   importedAt: string;
@@ -51,6 +99,7 @@ export interface TableSummary {
   rowCount: number;
   fields: string[];
   display: DisplayHints;
+  derived?: Omit<DerivedTable, 'name' | 'display'>;
 }
 
 export interface DatasetSummary {
@@ -147,6 +196,8 @@ export interface ProjectInfo {
   id: string;
   name?: Localized;
   participants: { mode: 'anonymous' | 'optional' | 'required' };
+  /** Without upload points, uploads go through the YAML importers. */
+  uploads?: UploadPoint[];
 }
 
 /** A project that has a store on this device. */
@@ -200,6 +251,7 @@ export interface DataApi {
   importFiles(
     uploads: Upload[],
     onProgress: (progress: ImportProgress) => void,
+    points?: UploadPoint[],
   ): Promise<DatasetSummary>;
   listDatasets(): Promise<DatasetSummary[]>;
   deleteDataset(id: string): Promise<void>;

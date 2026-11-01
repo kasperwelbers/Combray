@@ -9,5 +9,10 @@
   "confirmDelete": "Remove “{{name}}” from this computer?",
   "browse": "Browse everything",
   "found": "What we found",
-  "nothingFound": "We did not recognise anything in this yet, but you can still browse everything."
+  "nothingFound": "We did not recognise anything in this yet, but you can still browse everything.",
+  "other_one": "Other data in it ({{count}} part)",
+  "other_other": "Other data in it ({{count}} parts)",
+  "otherIntro": "Parts of your data the researchers did not choose to look at. You can see them here; they are never asked for.",
+  "record": "a few details",
+  "unnamed": "Your data"
 }

@@ -1364,3 +1364,20 @@ main.wide {
 .suggestions li p {
   margin: 0 0 0.5rem;
 }
+
+.other-data {
+  margin-top: 1rem;
+}
+
+.other-data summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.found-item .path {
+  font-size: 0.8rem;
+}
+
+.nested-title {
+  font-size: 1.1rem;
+}

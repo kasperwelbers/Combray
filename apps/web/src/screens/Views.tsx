@@ -5,11 +5,12 @@ import { useTranslation } from 'react-i18next';
 import { safeHref } from '../security';
 import type { RowFilter, TableSummary, Timeline as TimelineData, TimeUnit, TopItems as TopItemsData } from '../worker/api';
 import { data } from '../worker/client';
-import { localTime } from '../worker/tables';
+import { localTime, valueAt } from '../worker/tables';
+import { fieldLabel, TableView } from './TableView';
 
 const PAGE = 100;
 
-type ViewId = 'memories' | 'timeline' | 'top';
+type ViewId = 'memories' | 'timeline' | 'top' | 'table';
 
 function text(value: FieldValue | undefined): string {
   if (value === null || value === undefined) return '';
@@ -102,7 +103,7 @@ function MemoryLane({ table, filter }: { table: TableSummary; filter: RowFilter 
               const time = dateField ? localTime(row[dateField])?.slice(11, 16) : undefined;
               const label = text(title ? row[title] : undefined) || text(url ? row[url] : undefined) || t('views.untitled');
               const link = url ? safeHref(text(row[url])) : undefined;
-              const extra = groups.map((g) => text(row[g])).filter(Boolean).join(' · ');
+              const extra = groups.map((g) => text(valueAt(row, g))).filter(Boolean).join(' · ');
               return (
                 <li key={j} className="lane-item">
                   {time && time !== '00:00' && <span className="lane-time">{time}</span>}
@@ -208,7 +209,7 @@ function Timeline({ table, filter, onPick }: { table: TableSummary; filter: RowF
 }
 
 function TopItems({ table, filter, onPick }: { table: TableSummary; filter: RowFilter; onPick: (field: string, value: string) => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const fields = table.display.group_by ?? [];
   const [field, setField] = useState(fields[0]);
   const [top, setTop] = useState<TopItemsData>();
@@ -229,7 +230,7 @@ function TopItems({ table, filter, onPick }: { table: TableSummary; filter: RowF
             <select value={field} onChange={(e) => setField(e.target.value)}>
               {fields.map((f) => (
                 <option key={f} value={f}>
-                  {t(`fields.${f}`, { defaultValue: f })}
+                  {fieldLabel(table, f, i18n.language, t)}
                 </option>
               ))}
             </select>
@@ -255,8 +256,16 @@ function TopItems({ table, filter, onPick }: { table: TableSummary; filter: RowF
 export function Views({ table, onBack }: { table: TableSummary; onBack: () => void }) {
   const { t } = useTranslation();
   const locale = useLocale();
-  const views: ViewId[] = ['memories', ...(table.display.date ? (['timeline'] as const) : []), ...(table.display.group_by?.length ? (['top'] as const) : [])];
-  const [view, setView] = useState<ViewId>('memories');
+  // Memory lane needs a date or a title to say something; tables derived through a project
+  // tree can always be seen as a table.
+  const lane = !table.derived || table.display.date !== undefined || table.display.title !== undefined;
+  const views: ViewId[] = [
+    ...(lane ? (['memories'] as const) : []),
+    ...(table.display.date ? (['timeline'] as const) : []),
+    ...(table.display.group_by?.length ? (['top'] as const) : []),
+    ...(table.derived ? (['table'] as const) : []),
+  ];
+  const [view, setView] = useState<ViewId>(views[0]!);
   const [filter, setFilter] = useState<RowFilter>({});
 
   return (
@@ -288,6 +297,7 @@ export function Views({ table, onBack }: { table: TableSummary; onBack: () => vo
       <FilterChip filter={filter} onClear={() => setFilter({})} locale={locale} />
       <div role="tabpanel" id={`panel-${view}`} aria-labelledby={`tab-${view}`}>
         {view === 'memories' && <MemoryLane table={table} filter={filter} />}
+        {view === 'table' && <TableView table={table} filter={filter} />}
         {view === 'timeline' && (
           <Timeline
             table={table}

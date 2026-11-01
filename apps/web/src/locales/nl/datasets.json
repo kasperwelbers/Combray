@@ -9,5 +9,10 @@
   "confirmDelete": "“{{name}}” van deze computer verwijderen?",
   "browse": "Alles doorbladeren",
   "found": "Wat we vonden",
-  "nothingFound": "We herkennen hier nog niets in, maar je kunt wel alles doorbladeren."
+  "nothingFound": "We herkennen hier nog niets in, maar je kunt wel alles doorbladeren.",
+  "other_one": "Andere gegevens erin ({{count}} deel)",
+  "other_other": "Andere gegevens erin ({{count}} delen)",
+  "otherIntro": "Delen van je gegevens waar de onderzoekers niet naar kijken. Je kunt ze hier zien; er wordt nooit om gevraagd.",
+  "record": "een paar gegevens",
+  "unnamed": "Je gegevens"
 }

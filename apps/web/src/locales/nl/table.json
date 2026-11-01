@@ -1,0 +1,10 @@
+{
+  "key": "naam",
+  "value": "waarde",
+  "rows_one": "{{count}} rij",
+  "rows_other": "{{count}} rijen",
+  "requested": "gevraagd",
+  "new": "nieuw",
+  "newHelp": "Dit deel van de gegevens kennen de onderzoekers nog niet. Je kunt het zien, maar er wordt nooit om gevraagd.",
+  "back": "Terug naar {{name}}"
+}

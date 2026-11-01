@@ -1,0 +1,10 @@
+{
+  "key": "name",
+  "value": "value",
+  "rows_one": "{{count}} row",
+  "rows_other": "{{count}} rows",
+  "requested": "asked for",
+  "new": "new",
+  "newHelp": "The researchers have not seen this part of the data yet. You can see it, but it is never asked for.",
+  "back": "Back to {{name}}"
+}

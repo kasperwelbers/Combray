@@ -1,6 +1,29 @@
 {
   "id": "example",
-  "name": { "en": "Example study", "nl": "Voorbeeldstudie" },
-  "participants": { "mode": "optional" },
-  "note": "Placeholder. In Phase 2 project configs are signed and registered from the researcher tool. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match) is optional and never sent to clients."
+  "name": {
+    "en": "Example study",
+    "nl": "Voorbeeldstudie"
+  },
+  "participants": {
+    "mode": "optional"
+  },
+  "note": "Placeholder. In Phase 2 project configs are signed and registered from the researcher tool. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match) is optional and never sent to clients. uploads lists the upload points: each names a bundled platform pack whose project tree the client matches uploads against; without uploads, the YAML importers run.",
+  "uploads": [
+    {
+      "id": "takeout",
+      "pack": "google-takeout",
+      "name": {
+        "en": "Google Takeout",
+        "nl": "Google Takeout"
+      }
+    },
+    {
+      "id": "tiktok",
+      "pack": "tiktok",
+      "name": {
+        "en": "TikTok",
+        "nl": "TikTok"
+      }
+    }
+  ]
 }

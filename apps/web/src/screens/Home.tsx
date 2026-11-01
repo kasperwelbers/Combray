@@ -4,17 +4,45 @@ import { useTranslation } from 'react-i18next';
 import { localize } from '@combray/core';
 
 import { Dropzone } from '../components/Dropzone';
-import type { DatasetSummary, ImportProgress, TableSummary, Upload } from '../worker/api';
+import { foldedPath } from '../format';
+import type { DatasetSummary, ImportProgress, TableSummary, Upload, UploadPoint } from '../worker/api';
 import { data, importFiles } from '../worker/client';
 
 interface Props {
   datasets: DatasetSummary[];
+  /** The project's upload points; without them, the YAML importers run. */
+  points?: UploadPoint[];
   onChanged: () => Promise<void>;
   onOpen: (dataset: DatasetSummary) => void;
   onOpenTable: (table: TableSummary) => void;
 }
 
-export function Home({ datasets, onChanged, onOpen, onOpenTable }: Props) {
+/** Tables the project shows or asks for come first, the ones it asks for before the others. */
+function collections(tables: TableSummary[]): TableSummary[] {
+  return tables
+    .filter((t) => !t.derived || t.derived.collection)
+    .sort((a, b) => Number(b.derived?.requested ?? false) - Number(a.derived?.requested ?? false));
+}
+
+function TableButton({ table, onOpen, path }: { table: TableSummary; onOpen: (t: TableSummary) => void; path?: boolean }) {
+  const { t, i18n } = useTranslation();
+  const name = localize(table.name, i18n.language) || t('datasets.unnamed');
+  return (
+    <button type="button" className="found-item" onClick={() => onOpen(table)}>
+      <strong>
+        {name}
+        {table.derived?.requested && <span className="tag">{t('table.requested')}</span>}
+        {table.derived?.new && <span className="tag">{t('table.new')}</span>}
+      </strong>
+      <span className="meta">
+        {table.derived?.record ? t('datasets.record') : t('datasets.items', { count: table.rowCount })}
+      </span>
+      {path && table.derived && <span className="meta path">{foldedPath(table.derived.path)}</span>}
+    </button>
+  );
+}
+
+export function Home({ datasets, points, onChanged, onOpen, onOpenTable }: Props) {
   const { t, i18n } = useTranslation();
   const [progress, setProgress] = useState<ImportProgress>();
   const [error, setError] = useState(false);
@@ -24,7 +52,7 @@ export function Home({ datasets, onChanged, onOpen, onOpenTable }: Props) {
     setError(false);
     setProgress({ step: 'reading', files: 0 });
     try {
-      await importFiles(files, setProgress);
+      await importFiles(files, setProgress, points);
       await onChanged();
     } catch {
       setError(true);
@@ -87,22 +115,36 @@ export function Home({ datasets, onChanged, onOpen, onOpenTable }: Props) {
                     </button>
                   </div>
                 </div>
-                {d.tables.length > 0 ? (
+                {collections(d.tables).length > 0 ? (
                   <>
                     <h4 className="found-title">{t('datasets.found')}</h4>
                     <ul className="found">
-                      {d.tables.map((table) => (
+                      {collections(d.tables).map((table) => (
                         <li key={table.id}>
-                          <button type="button" className="found-item" onClick={() => onOpenTable(table)}>
-                            <strong>{localize(table.name, i18n.language)}</strong>
-                            <span className="meta">{t('datasets.items', { count: table.rowCount })}</span>
-                          </button>
+                          <TableButton table={table} onOpen={onOpenTable} />
                         </li>
                       ))}
                     </ul>
                   </>
                 ) : (
                   <p className="meta found-title">{t('datasets.nothingFound')}</p>
+                )}
+                {d.tables.some((table) => table.derived && !table.derived.collection) && (
+                  <details className="other-data">
+                    <summary>
+                      {t('datasets.other', { count: d.tables.filter((x) => x.derived && !x.derived.collection).length })}
+                    </summary>
+                    <p className="meta">{t('datasets.otherIntro')}</p>
+                    <ul className="found">
+                      {d.tables
+                        .filter((table) => table.derived && !table.derived.collection)
+                        .map((table) => (
+                          <li key={table.id}>
+                            <TableButton table={table} onOpen={onOpenTable} path />
+                          </li>
+                        ))}
+                    </ul>
+                  </details>
                 )}
               </li>
             ))}

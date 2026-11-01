@@ -21,5 +21,6 @@
   "undatedCount_other": "{{count}} items have no date.",
   "groupBy": "Count by",
   "distinct_one": "{{count}} different value in total.",
-  "distinct_other": "{{count}} different values in total."
+  "distinct_other": "{{count}} different values in total.",
+  "table": "Table"
 }

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Madeleine, Skyline } from './components/Madeleine';
 import { useIdleLock } from './components/useIdleLock';
 import { LANGUAGES } from './i18n';
+import { uploadPoints } from './projectConfig';
 import { projectPath, readRoute } from './route';
 import { Explore } from './screens/Explore';
 import { Faq } from './screens/Faq';
@@ -39,12 +40,14 @@ export function App() {
         const response = await fetch(`/api/v1/p/${route.projectId}/config`, { cache: 'no-store' });
         if (response.status === 404) return setProject('not-found');
         if (!response.ok) return setProject('unreachable');
-        const config = (await response.json()) as Partial<ProjectInfo>;
+        const config = (await response.json()) as Partial<Omit<ProjectInfo, 'uploads'>> & { uploads?: unknown };
         await data.openProject(route.projectId);
+        const uploads = uploadPoints(config.uploads);
         setProject({
           id: route.projectId,
           ...(config.name ? { name: config.name } : {}),
           participants: { mode: config.participants?.mode ?? 'optional' },
+          ...(uploads.length > 0 ? { uploads } : {}),
         });
       } catch {
         setProject('unreachable');
@@ -265,7 +268,13 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
       ) : (
         <>
           <h1>{t('app.tagline')}</h1>
-          <Home datasets={datasets} onChanged={refresh} onOpen={setOpen} onOpenTable={setTable} />
+          <Home
+            datasets={datasets}
+            {...(project.uploads ? { points: project.uploads } : {})}
+            onChanged={refresh}
+            onOpen={setOpen}
+            onOpenTable={setTable}
+          />
           <p style={{ marginTop: '3rem' }}>
             <button className="link-button" type="button" onClick={deleteAllConfirmed}>
               {t('lock.deleteAll')}
