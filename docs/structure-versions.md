@@ -1,161 +1,51 @@
-# Structure versions: knowing which nodes occur together
+# Structure reports: knowing which nodes occur together
 
-Status: **designed, not built**. Agreed with Kasper on 2026-11-01. It extends the consent flow for new structure in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent) and [security.md](security.md#structure-metadata-and-consent).
+Status: **designed, not built**. Agreed with Kasper on 2026-11-01. It replaces the "only new paths" consent flow in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent) and [security.md](security.md#structure-metadata-and-consent).
 
 ## Why
 
-Exports of one platform come in several real structures: the platform changes its format, and file and key names depend on the language of the account. On top of that, every person's export is a partial copy of one of those structures, because people only have the data they produced (someone who never uploaded a video has no uploads folder). So there are different structures (a, b, c) and different manifestations of one structure (a1, a2, b1).
-
-Researchers combine the variants with [aliases](tree-decisions.md#aliases-and-merging): `kijkgeschiedenis.json` is `watch-history.json` in Dutch. Languages are the easy case, because whole sets of names switch together. A renamed key is harder: is `time` the new name of `watched_at`, or a second field? One rule settles most of it:
+Exports of one platform come in several real structures (format changes, account languages), and every person's export is a partial copy of one of them, because people only have the data they produced. Researchers combine variants with [aliases](tree-decisions.md#aliases-and-merging). One rule keeps that safe:
 
 > **Two nodes that occur together in one export are never the same node.** They must not be merged.
 
-Today `structure.json` is a plain union of every shape the project has seen, and [merge suggestions](tree-decisions.md#aliases-and-merging) (`suggest.ts`) only compare names and shapes. Nothing records which nodes were seen together, so nothing stops a wrong merge.
-
-## What we rejected, and why
-
-| Option | Why not |
-| --- | --- |
-| **Named versions per node**: the first branch seen at a split gets 1, the next gets 2 | It records when a branch was first seen, not which branches occur together. Splits in different places multiply, and per-node numbers cannot rebuild the combinations. |
-| **Edges between every pair of nodes** | Quadratic in the size of a tree, and not needed: any pair can be checked on demand from stored trees. |
-| **Telling versions apart by what is missing** | Absence is never evidence. A missing branch can be a platform change, a language, or a person without that data. Only presence counts. |
-| **Reference trees sent to clients, reported as `{reference, diff}`** | The client would receive other people's structures, and a rare tree is a fingerprint. Picking the reference trees is also arbitrary. The diff plus the reference is the full tree anyway. |
-| **Only the new paths plus their known siblings** | Too narrow: exports sometimes change radically, far from the new node. |
+To apply it, researchers need to know which nodes occur together. A plain union of shapes (today's `structure.json`) does not say that. Absence proves nothing (a missing branch can be a platform change, a language, or a person without that data), so only full structures, side by side, give the answer. They also give counts: how common each part is.
 
 ## The design
 
-1. **Clients receive only identified structure.** A node is *identified* once the researcher has decided on it: `ignore`, `show` or `donate`. The project tree that clients receive, the **published tree**, holds only identified nodes (with their ancestors, labels and aliases). `structure.json` may hold paths that participants or the researcher's own exports added and that nobody has reviewed, and such a path could by accident carry data instead of structure. So it is researcher-only and never served to participants.
-2. **Every identified path has a stable id**: a hash of the raw path (see [Path ids](#path-ids)). The client computes ids itself; they are not stored or assigned.
-3. **When a participant's data has new paths**, the client asks once whether it may send a **structure report**: the new paths, plus the ids of the identified paths their data has. The participant reviews the new paths; the ids are parts the researcher already knows, and the consent text says they are sent (see [Consent](#consent)).
-4. **The server stores each report as one tree**, without any link to the participant (see [Storage](#storage)).
-5. **The researcher workspace checks merges against the stored trees**: two nodes that share a tree cannot be merged, and suggestions never propose them (see [In the researcher workspace](#in-the-researcher-workspace)).
+1. **Clients only get the published tree.** That is the nodes the researcher has decided on (`ignore`, `show` or `donate`), with their labels and aliases. `structure.json` holds unreviewed paths from other participants, which could by accident carry data, so it stays with the researchers.
+2. **Right after an upload, the participant is asked to share its structure**: the names of the parts of their data, never the content. Asking right away lets researchers spot platform changes early. In a lab, the researcher can decide on new paths while the participant explores, and later the server can help with automated suggestions.
+3. **New names are reviewed.** If the structure contains paths that are not in the published tree, the prompt lists them for review, because only those can carry something unexpected. Every other name is one the researcher already approved. The text says that the shared structure also shows which known parts they have (such as whether they have uploads).
+4. **The server stores each structure** without any participant id, session or exact time, and keeps one copy of identical structures with a count. New paths are added to `structure.json` as undecided.
+5. **The studio refuses to merge nodes that occur together** in a stored structure, and merge suggestions skip them. The researcher's own exports count too.
+6. **Before donating, the client refreshes the published tree** (a conditional request with an ETag, so it is cheap when nothing changed), so decisions the researcher made during the session apply.
 
-Versions are not stored at all. They are a view the researcher workspace computes from the trees when it is useful.
+A participant who has paths the researcher has not decided on yet will be asked to review them again, until the researcher decides. That is accepted: it is one consent step, and it adds evidence.
 
-### What counts as new
+### Consent text
 
-Compared with the published tree, a path in the participant's shape is:
+Roughly, translated through i18n:
 
-- **identified** when every step matches an identified node, by canonical name or alias;
-- **ignored** when it lies below an ignored node: it is neither shown nor reported, because the researcher said they do not need it;
-- **waiting** when it is not identified, but its id is in the published tree's list of [paths waiting for review](#paths-waiting-for-review): enough other participants already reported it;
-- **new** otherwise.
-
-This changes what "unknown" means in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent): unknown now means *not identified*, instead of *not in `structure.json`*. A path that a few participants already reported, but the researcher has not decided on yet, is reported again by the next participant who has it, until it is common enough to be [waiting](#paths-waiting-for-review). Researchers should still decide on new paths regularly. The workspace makes that quick: `show` is a safe default for a leaf, and a subtree can be ignored in one step.
-
-### Paths waiting for review
-
-Without this, every participant whose export has a path the researcher has not decided on yet is asked again, until the researcher catches up. To avoid that, the published tree also carries the **ids of reported paths that wait for review**, without their names. The client computes the ids of its own paths anyway, so it can tell that a path is waiting, and does not ask about it. Waiting paths are shown like other unknown data and never requested.
-
-The ids are unsalted hashes of raw paths, so anyone with the published tree can test guesses against them. A salt would not help: the client must be able to compute the ids, so the salt would be public too. Short hashes would not help either, because a targeted guess ("is there a key `jan.devries`?") still matches. What makes it safe is **which** paths get published:
-
-- **Only paths reported by at least *k* participants** (default 5, a server setting) are published as waiting. Data that ends up in a path by accident, such as a username used as a key that the shape extractor missed, belongs to one person and does not occur in five exports. A name that five people's exports share is structure. Below *k*, the next participant is asked again, which is also how the count grows.
-- **They passed the same screens as all structure**: the shape extractor's checks, and the review and consent of every participant who sent them.
-- **The count is of reports, not people,** because reports carry no participant id. The client remembers locally which paths it has reported, so re-importing the same export does not count twice. Someone who deliberately sends fake reports can at worst make one of their own paths waiting, which hides it from later participants' prompts but reveals nothing about anyone else.
-
-Stopping at *k* costs some evidence: participants with only waiting paths send no tree. *k* reports are enough to judge a path, and the researcher's own exports and donated shapes add more.
-
-### Path ids
-
-```
-id = base64url(first 12 bytes of SHA-256(JSON.stringify([[kind, name], ...])))
-```
-
-over the steps from the upload root to the node, where `name` is the **raw name the client matched**: the canonical name or the literal alias that was actually in the data. A regular expression alias contributes its pattern (`{"regex": "..."}` as JSON), and a node whose keys are data contributes `{*}`, so text from the participant's data never ends up inside an id.
-
-Hash ids, rather than numbers the researcher workspace hands out, because:
-
-- **They survive merges.** Merging `kijkgeschiedenis.json` into `watch-history.json` turns the name into an alias. A Dutch export still produces the id of `.../kijkgeschiedenis.json/...`, so trees recorded before the merge stay valid and still show that the two names never occurred together. Merges only change `importer.json`; the evidence is not touched.
-- **No one has to assign them**, so two researchers editing a tree, or two projects sharing a pack, never conflict.
-- **They are short.** 12 bytes make collisions practically impossible within one project (the workspace checks anyway when it publishes), and a report of 500 identified leaves is about 10 KB.
-
-Combinations of aliases at different levels give ids that may never have been seen (`kijkgeschiedenis.json` inside the English folder name). That is fine: every name in them was approved by the researcher.
-
-### Consent
-
-The report needs consent, like any structure sent outside a donation. The prompt appears after an import when the data has new paths, or when it has an [alias conflict](#alias-conflicts). The participant-facing text (to be translated through i18n) is roughly:
-
-> **Your data is set up a little differently from what the researchers have seen so far.**
-> Would you send them a description of how it is set up? It helps them keep the study working for everyone.
+> **May we see how your data is organised?** Only the names of the parts, such as "watch history", never what you watched, wrote or searched for. It helps the researchers keep the study working. It does show which kinds of data you have.
 >
-> These parts are new to them: `uploads/[*]/visibility`, `history/[*]/time`
->
-> We would also send which of the parts they already know are in your data, such as whether you have a watch history. *Show these parts*
->
-> Only the names of the parts are sent. Nothing you watched, wrote or searched for.
+> These names are new to the researchers. Please check them: `uploads/[*]/visibility`, `history/[*]/time`
 
-The answers are the ones from [security.md](security.md#structure-metadata-and-consent): *Yes, send this*, *No, these names contain private information* (the refusal is recorded without the paths) and *No, for another reason*.
+Answers: *Yes, share*, *No, these names contain private information* (the refusal is recorded without the names) and *No, for another reason*. Without new names the prompt is the first paragraph only. The client caps the list at around 500 new paths and summarises long lists by file.
 
-"Show these parts" opens the identified parts the report contains, grouped by file and with the researcher's labels where there are any, so a participant who wants to can check everything. The client caps the new paths at around 500, as now, and summarises long lists by file.
+## Later, if real data shows we need it
 
-Presence is information. "Has an uploads folder" says something about a person, which is why the text names it. It is information about parts the researcher already designed the study around, it carries no values, and it is stored without a participant id.
+These were discussed and parked:
 
-### Alias conflicts
-
-If a participant's data has two raw names that resolve to the same identified node, such as `date` and its alias `timestamp` side by side, an earlier merge was wrong, or the platform now has both. The client then treats the export as needing a report even without new paths. The prompt's first line becomes *"Your data has two parts that the researchers thought were the same"*. The report shows the conflict to the researcher through its ids alone; no extra field is needed.
-
-### What is sent
-
-One report per upload, per upload point:
-
-```json
-{
-  "format": "combray-structure-report@1",
-  "upload": "youtube",
-  "present": ["k3Jd8sP0aQ1zT7wB", "..."],
-  "added": [
-    { "under": "Vb2nL5xW0cRq8sYe", "shape": { "kind": "map", "name": "[*]", "children": [] } }
-  ]
-}
-```
-
-- **`present`** lists the ids of the identified leaves in the data, plus identified inner nodes with no identified leaf below them (an ignored folder, an empty list). Inner nodes on the way to a leaf follow from it. Sorted, without duplicates.
-- **`added`** lists each new subtree once, as a shape (structure only, as in [universal-importer.md](universal-importer.md#structure-metadata)), under the id of its deepest identified ancestor.
-- Nothing else: no participant id, no project-tree version beyond what the URL says, no file sizes, no times. The server adds the month of arrival.
-
-### Storage
-
-The server keeps per project and upload point:
-
-- **`structure.json`**, as now, extended with the added shapes. Undecided until the researcher reviews them.
-- **`trees`**: each distinct report, as its sorted `present` ids plus the `added` paths turned into ids, with a count and the months it arrived in. Identical reports are stored once. Since trees share their paths through the ids, they stay small: a few hundred ids each.
-
-The researcher workspace downloads both for review. Neither is ever sent to participants. A rare tree is a fingerprint, so trees have no participant id, no session and no exact time, and the server does not log reports beyond counts.
-
-### In the researcher workspace
-
-- **Seen together.** Two nodes were seen together when some tree contains an id of each, matched by raw name. Merging them is refused, with a short reason ("these occurred together in 3 exports"). Merge suggestions skip such pairs.
-- **How strong the evidence is.** "Never seen together" rests on the trees the project has. Exports without new paths are never reported, so the workspace says how many trees a claim rests on ("never together, in 12 trees with either"), and treats a pair with very few trees as a guess.
-- **The researcher's own exports count.** Each export loaded in the workspace is a tree, computed locally. A researcher who loads a Dutch and an English export already has the evidence for the language aliases.
-- **Versions as a view.** Nodes that always switch together (all Dutch names appear in the same trees, never with the English ones) form a variant. The workspace can group them to suggest a whole language at once, and can show which variants a node occurs in. That is the a, b, c from [Why](#why), computed when needed and never stored.
-- **Publishing.** Saving `importer.json` produces the published tree: identified nodes only. The workspace warns about donated or shown leaves whose ancestors are undecided, because they could not be published.
-
-### Donated shapes
-
-The opt-in shape item in a donation ([universal-importer.md](universal-importer.md#structure-metadata)) is a full structure too, but it is encrypted to the researcher's key and never readable by the server. The key tool can turn decrypted shapes into trees for the workspace, which adds evidence from exports without new paths. This is a later step.
-
-## Privacy summary
-
-| What | Who sees it | Why it is acceptable |
-| --- | --- | --- |
-| Published tree | Every participant's client | Only names the researcher identified; nothing from other participants that the researcher did not approve |
-| Ids of waiting paths | Every participant's client | Hashes only, and only of paths at least *k* participants reported, so a guess can only confirm shared structure |
-| New paths | The server and the researcher, after consent | Reviewed by the participant, structure only, screened by the shape extractor |
-| Ids of identified parts present | The server and the researcher, after consent | Named in the consent text, viewable on request, no values, no participant id |
-| Stored trees | The researcher | Deduplicated, unlinked, month only |
-
-## Implementation plan
-
-1. **Core** (`packages/core`): `pathId`, the published tree (`publishTree`, with waiting ids), comparing a shape with a published tree (identified, ignored, waiting, new, alias conflicts), building a report, turning a report into a tree, and the seen-together index over trees. Tests on the Takeout and TikTok fixtures, including a Dutch and an English variant.
-2. **Researcher workspace**: trees from the researcher's own exports, merges refused for nodes seen together, suggestions filtered, evidence counts, publishing with warnings.
-3. **Participant client**: the consent prompt (NL and EN), "show these parts", sending the report, and remembering which paths it reported.
-4. **Server**: an endpoint that accepts a report for a project and upload point, merges `added` into `structure.json`, stores the tree, counts reports per path, adds paths with at least *k* reports to the published tree's waiting ids, and serves `structure.json` and the trees to the project's researchers only. Rate limited, counts-only logging.
-5. **Later**: trees from donated shapes in the key tool; grouping variants in the workspace.
+- Hash ids for paths, ids of paths waiting for review (to stop asking again), and a threshold of *k* reports before publishing them.
+- Flagging alias conflicts (two names in one export that resolve to the same node).
+- Grouping nodes that always switch together into variants (a whole language at once), and showing how much evidence a "never together" claim rests on.
+- Using the shape item of donations as extra structures, after decryption in the key tool.
 
 ## Open questions
 
-- Whether *k* = 5 is right, and whether small studies (a few dozen participants) need a lower default.
+Richer structure for finding synonyms (Kasper, 2026-11-01). Shapes already carry types and date formats. What more could help researchers, and algorithms, recognise that two names are the same thing?
 
-- Whether a participant whose export exactly matches identified structure should be asked to send a report anyway, to count how common each tree is. For now: no, counts come from donated shapes.
-- The threshold below which "never seen together" is shown as a guess.
-- Whether trees should expire, for example when a platform's old format has not been seen for a year.
+- **More specific types**, for example a categorical leaf with five answer options, an id, a URL or free text. Without values, this needs statistics computed locally.
+- **Leaves with several types** (sometimes a number, sometimes text): keep one leaf with several types, as now, or split them into separate leaves.
+- **Local value statistics in the shape**, such as bucketed counts of unique values. This must stay structure only ([CLAUDE.md](../CLAUDE.md) rule 4).
+- **Structure from donated data**: after decryption, the key tool or the local part of the studio could compare donations side by side and infer categories.
+- **Example values**: set by the researcher, or drawn from the researcher's own exports, never from participants.

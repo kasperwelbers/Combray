@@ -143,7 +143,7 @@ This also limits the size of the project tree. Ten participants with ten differe
 
 - A node has one canonical name and a set of aliases. A participant's path matches the canonical name first, then the aliases. The current `{watch-history.json,kijkgeschiedenis.json}` becomes a node `watch-history.json` with the alias `kijkgeschiedenis.json`.
 - **Merging.** A new undecided node `date` next to a known `timestamp` can be merged into it in the researcher UI. This adds `date` as an alias and merges the children recursively. Children that exist on both sides with different decisions are listed for the researcher to resolve.
-- **Nodes seen together are never merged.** Two nodes that occur in one export are different nodes. The server keeps every structure report participants send as a tree of path ids, and the researcher workspace refuses merges, and skips suggestions, for nodes that share a tree. See [structure-versions.md](structure-versions.md).
+- **Nodes seen together are never merged.** Two nodes that occur in one export are different nodes. The server keeps every structure participants share, and the researcher workspace refuses merges, and skips suggestions, for nodes that occur in one of them. See [structure-versions.md](structure-versions.md).
 - **The tree view shows merged nodes once**, with their aliases as small tags.
 - **Suggestions.** When a new export adds nodes next to known ones of the same kind, the researcher UI suggests merging ("is `date` the same as `timestamp`?"). Candidates are scored on their structure (the last three steps of every path below them) and, for inner nodes, also on name similarity; suggestions below 0.35 are not shown. After a merge, the children of the merged pair are compared the same way. This catches renames and translations (`kijkgeschiedenis.json`, `Your Activity` and `Je activiteit`). The code is in `suggest.ts`.
 - Regular expression aliases also let researchers collapse dictionary-like keys that the extractor missed.
@@ -164,9 +164,9 @@ The researcher UI has a "view as participant" toggle that renders the researcher
 
 This is the flow from [security.md](security.md#structure-metadata-and-consent), with the decisions above:
 
-- A path is **unknown** when it is not in the published tree: the nodes the researcher has decided on, by canonical name or alias. Undecided nodes are never sent to clients by name, because unreviewed structure could by accident carry data. Paths at least five participants reported are sent as hash ids only, so clients do not ask about them again ([waiting paths](structure-versions.md#paths-waiting-for-review)). Unknown leaves are treated as undecided: shown, never requested. Paths below an ignored node are neither shown nor reported.
+- A path is **unknown** when it is not in the published tree: the nodes the researcher has decided on, by canonical name or alias. Undecided nodes are never sent to clients, because unreviewed structure could by accident carry data. Unknown leaves are treated as undecided: shown, never requested.
 - **Donate never applies to unknown paths**, because show and donate are set on leaves the researcher has seen. New structure can never be donated by accident.
-- After an import with unknown paths, the client asks whether it may send a **structure report**: the unknown paths, which the participant reviews, plus the ids of the known parts their data has, which the consent text names. The server stores each report as a tree, so researchers know which nodes occur together. Once sent, the researcher sees the unknown paths as new undecided nodes. The report, its ids and the consent text are in [structure-versions.md](structure-versions.md).
+- Right after an upload, the client asks whether it may share the structure of the data (names only). Unknown paths are listed for the participant to review. The server stores each structure, so researchers know which nodes occur together and how common they are, and the researcher sees the unknown paths as new undecided nodes. See [structure-versions.md](structure-versions.md).
 
 ### Missing requested fields
 
@@ -186,12 +186,12 @@ When a study needs a raw value, the researcher sets `raw` on that donated leaf. 
 
 A project tree is kept as two JSON documents, combined into one tree in the browser:
 
-- **`structure.json`**, owned by the server: the union of every shape the project has seen. It grows as participants send structure reports. It is for researchers only.
+- **`structure.json`**, owned by the server: the union of every shape the project has seen. It grows as participants share their structure. It is for researchers only.
 - **`importer.json`**, owned by the researcher: decisions, labels, descriptions, aliases, conversions, lifters and scripts (as strings), keyed by canonical path. This is the part that is signed with the project config and shared between projects.
 
 Keeping them apart means the server adding new paths never collides with the researcher's edits. Merging nodes rewrites the paths in `importer.json`.
 
-Next to these, the server keeps the project's **trees**: one per distinct structure report, as path ids, without any participant id. Participants' clients receive neither `structure.json` nor the trees, only the **published tree** made from `importer.json` (decided nodes only). See [structure-versions.md](structure-versions.md#storage).
+Next to these, the server keeps every structure participants shared, without any participant id, one copy per distinct structure with a count. Participants' clients receive neither, only the **published tree** made from `importer.json` (decided nodes only). See [structure-versions.md](structure-versions.md).
 
 ## What happens to importer specs
 
@@ -224,7 +224,7 @@ The current runner stays until the derivation covers all platform packs. Dataset
 4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins, `<table>` and `<dl>`, running text, bare siblings, wrapping links. Still to do: tuning on team members' own exports.
 5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, labels, descriptions, aliases, merging, "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in the side panel, value formats and a first chart builder are described in [exploration.md](exploration.md). Merge suggestions, "Read as" conversions, roles and row filters are built. Still to do: lifter editing, registering the files with a server project.
 6. **Participant UI** (built: `worker/derived.ts`, `screens/TableView.tsx`). Collections, other data, breadcrumbs with folding, nested table navigation, new paths marked locally.
-7. **Consent flows.** Structure reports (unknown paths plus the ids of known parts, [structure-versions.md](structure-versions.md#implementation-plan)), the published tree, and merge checks against reported trees; then missing-field requests in the donation step.
+7. **Consent flows.** Sharing structure after upload, the published tree, and merge checks against shared structures ([structure-versions.md](structure-versions.md)); then missing-field requests in the donation step.
 8. **Conversion** (packs converted; runner kept). Google Takeout and TikTok are project trees whose outputs match the YAML importers. The row/field runner stays as the fallback for projects without upload points, until the consent flows are built and new packs are written as project trees.
 
 ## Decided questions
@@ -241,9 +241,8 @@ Answered by Kasper on 2026-10-29:
 
 Answered by Kasper on 2026-11-01 ([structure-versions.md](structure-versions.md)):
 
-- **Structure versions.** Not stored as named versions. Each structure report is stored as a tree of path ids, and two nodes that share a tree are never merged. Versions are a view the researcher workspace computes from the trees.
-- **What clients receive.** Only nodes the researcher has decided on (`ignore`, `show` or `donate`). Unreviewed structure is never sent to participants by name; paths enough participants reported are sent as hash ids so they are not asked for again.
-- **What a report contains.** The unknown paths, reviewed by the participant, and the ids of the known parts their data has. Ids are hashes of raw paths, so they survive merges.
+- **Structure versions.** Not stored as named versions. Participants are asked right after upload to share their full structure (names only), reviewing only the names that are new. Each structure is stored, and two nodes that occur in one are never merged.
+- **What clients receive.** Only nodes the researcher has decided on (`ignore`, `show` or `donate`). Unreviewed structure is never sent to participants.
 
 ## Open questions
 

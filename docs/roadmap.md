@@ -36,7 +36,7 @@ Goal: a researcher with no programming experience creates a project, registers i
 - R package for analysis (fetch keys, decrypt in memory, never store), on `combray-crypto` through extendr; Python later.
 - CLI equivalents of the key tool functions for power users.
 - Donation flow: preview, exclusions, consent receipts, probes and answers.
-- [x] Researcher workspace with path decisions (ignore, show, donate) on the tree, derived tables, aliases and HTML normalisation ([tree-decisions.md](tree-decisions.md#implementation-plan)). Upload points, the participant view of derived tables (collections, other data, nested tables), "Read as" conversions, row filters, merge suggestions, and Google Takeout and TikTok as project trees. [ ] The consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent), with structure reports and merge checks from [structure-versions.md](structure-versions.md)) and missing-field requests; lifters.
+- [x] Researcher workspace with path decisions (ignore, show, donate) on the tree, derived tables, aliases and HTML normalisation ([tree-decisions.md](tree-decisions.md#implementation-plan)). Upload points, the participant view of derived tables (collections, other data, nested tables), "Read as" conversions, row filters, merge suggestions, and Google Takeout and TikTok as project trees. [ ] The consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent), with shared structures and merge checks from [structure-versions.md](structure-versions.md)) and missing-field requests; lifters.
 - Docker image and compose file; deployment guide.
 - External review of the crypto design.
 
