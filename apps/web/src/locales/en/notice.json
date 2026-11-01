@@ -1,0 +1,18 @@
+{
+  "not-found": {
+    "title": "We could not find this study",
+    "text": "Please check the link you received from the researchers."
+  },
+  "unreachable": {
+    "title": "We could not reach Combray",
+    "text": "Is this computer connected to the internet? Please try again in a moment."
+  },
+  "needs-id": {
+    "title": "This study uses personal links",
+    "text": "Please open the personal link you received from the researchers, so your data is kept for you."
+  },
+  "reset-no-store": {
+    "title": "Open this link on your own computer",
+    "text": "This link lets you choose a new password for data you added before, on another computer. Please open it on the computer where you added your data."
+  }
+}

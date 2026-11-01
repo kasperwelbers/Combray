@@ -1,0 +1,17 @@
+{
+  "back": "Back to your memories",
+  "browse": "Browse",
+  "structure": "Structure",
+  "search": "Search in this data",
+  "results_one": "{{count}} result",
+  "results_other": "{{count}} results",
+  "showingFirst": "showing the first {{shown}}",
+  "more": "Show more",
+  "inside_one": "{{count}} inside",
+  "inside_other": "{{count}} inside",
+  "path": "Path",
+  "empty": "This is empty.",
+  "breadcrumbs": "Where you are",
+  "shapeIntro": "This is the structure of your data without any of its content: the names of files and fields, what kind of value each one holds, and roughly how many there are. Names that look like personal details are replaced, for example by <email> or <date>. Only this kind of information could ever be shared to help researchers, and only if you agree.",
+  "collapsed": "names hidden"
+}

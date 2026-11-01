@@ -48,7 +48,7 @@ function aliasText(alias: Alias): string {
 
 /** Settings of the selected node: label, description, aliases, merging, keys as data. */
 export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch, onMerge, onKeysAreData }: Props) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const [undecidedOnly, setUndecidedOnly] = useState(true);
   const node = getNode(tree, path);
   const parent = getNode(tree, path.slice(0, -1));

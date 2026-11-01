@@ -5,8 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { Madeleine, Skyline } from './components/Madeleine';
 import { useIdleLock } from './components/useIdleLock';
 import { LANGUAGES } from './i18n';
-import { readRoute } from './route';
+import { projectPath, readRoute } from './route';
 import { Explore } from './screens/Explore';
+import { Faq } from './screens/Faq';
 import { Home } from './screens/Home';
 import { Lock } from './screens/Lock';
 import { Notice } from './screens/Notice';
@@ -80,6 +81,7 @@ export function App() {
       project={project}
       {...(route.participantId ? { participantId: route.participantId } : {})}
       {...(route.resetToken ? { resetToken: route.resetToken } : {})}
+      {...(route.page ? { page: route.page } : {})}
     />
   );
 }
@@ -128,9 +130,10 @@ interface ProjectAppProps {
   project: ProjectInfo;
   participantId?: string;
   resetToken?: string;
+  page?: 'faq';
 }
 
-function ProjectApp({ project, participantId, resetToken }: ProjectAppProps) {
+function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProps) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<StoreStatus>();
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
@@ -138,6 +141,27 @@ function ProjectApp({ project, participantId, resetToken }: ProjectAppProps) {
   const [table, setTable] = useState<TableSummary>();
   const [notice, setNotice] = useState<string>();
   const [reset, setReset] = useState(resetToken);
+  const [faq, setFaq] = useState(page === 'faq');
+
+  // The questions page is a pushed history entry, so the browser's back button closes it without
+  // reloading, which would lock the store.
+  useEffect(() => {
+    const onPop = () => setFaq(/\/faq\/?$/.test(location.pathname));
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  function openFaq() {
+    history.pushState({ faq: true }, '', projectPath(project.id, 'faq'));
+    setFaq(true);
+    window.scrollTo(0, 0);
+  }
+
+  function closeFaq() {
+    if ((history.state as { faq?: boolean } | null)?.faq) history.back();
+    else history.replaceState(null, '', projectPath(project.id));
+    setFaq(false);
+  }
 
   const refresh = useCallback(async () => {
     const s = await data.status();
@@ -177,15 +201,26 @@ function ProjectApp({ project, participantId, resetToken }: ProjectAppProps) {
   }
 
   const needsId = project.participants.mode === 'required' && !participantId;
-  const actions = status?.unlocked && (
-    <button className="button quiet" type="button" onClick={() => void lock()}>
-      🔒 {t('lock.lock')}
-    </button>
+  const actions = (
+    <>
+      {!faq && (
+        <button className="button quiet" type="button" onClick={openFaq}>
+          {t('faq.link')}
+        </button>
+      )}
+      {status?.unlocked && (
+        <button className="button quiet" type="button" onClick={() => void lock()}>
+          🔒 {t('lock.lock')}
+        </button>
+      )}
+    </>
   );
 
   return (
     <Shell project={project} actions={actions}>
-      {!status ? null : !status.unlocked ? (
+      {faq ? (
+        <Faq onBack={closeFaq} />
+      ) : !status ? null : !status.unlocked ? (
         !status.exists && reset ? (
           <Notice kind="reset-no-store" />
         ) : !status.exists && needsId ? (

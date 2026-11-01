@@ -1,0 +1,104 @@
+{
+  "link": "Questions",
+  "title": "Questions and answers",
+  "intro": "How Combray keeps your data safe, what happens when you stop, and what you can do if something goes wrong.",
+  "back": "Back",
+  "art": {
+    "computer": "Your computer",
+    "otherComputer": "Another computer",
+    "server": "Server",
+    "researcher": "Researcher",
+    "yourData": "your data",
+    "locked": "locked",
+    "dataKey": "data key",
+    "keyToBox": "key to the box",
+    "password": "your password",
+    "stays": "this stays",
+    "minutes": "15 min",
+    "staysServer": "stays at the server",
+    "youChoose": "you choose",
+    "donation": "donation",
+    "donationKey": "donation key",
+    "keptApart": "kept apart",
+    "everyCopy": "every copy: unreadable for good",
+    "package": "package",
+    "withPassword": "with your password"
+  },
+  "items": {
+    "where": {
+      "q": "Where is my data?",
+      "art": "Your data is locked with the data key. The data key goes into a small box, and the server keeps the key to that box.",
+      "a": [
+        "On this computer, and only here, unless you choose to share some of it. When you add your data, your browser makes a key that exists only on this computer: the <b>data key</b>. It locks your data with it, so what is stored on the disk cannot be read.",
+        "The data key itself goes into a small box, which also stays on this computer. The key to that box is kept by the study's Combray server."
+      ]
+    },
+    "server": {
+      "q": "What does the Combray server do?",
+      "a": [
+        "The server is run by the university. It keeps the key to your box and hands it back only when you type your password. It never receives your data, so it cannot read it.",
+        "Because the server checks the password, someone who tries to guess it gets a few tries and then has to wait longer and longer."
+      ]
+    },
+    "open": {
+      "q": "How do I open my data again?",
+      "art": "Your password gets the box key from the server. The box opens, and the data key unlocks your data.",
+      "a": [
+        "Type your password. The server checks it and hands over the key to the box. Your browser opens the box, takes out the data key and unlocks your data."
+      ]
+    },
+    "stop": {
+      "q": "What happens when I stop, or walk away?",
+      "art": "When you stop, the browser throws away the keys and the readable data. Locked data and a closed box stay behind.",
+      "a": [
+        "When you close the page, press <b>Lock</b>, or leave Combray alone for 15 minutes, your browser throws away the keys and everything it had opened.",
+        "What stays behind is locked data and a closed box. Without the server and your password, nobody can open them, not even someone who takes the computer home."
+      ]
+    },
+    "forgot": {
+      "q": "I forgot my password. What now?",
+      "a": [
+        "If you took part through a personal link, the researchers can help. They check that it is really you and send you a link to choose a new password. Open that link on the computer where you added your data.",
+        "Without a personal link, nobody can open the data again, not even the researchers. You can start over and add your data again."
+      ]
+    },
+    "who": {
+      "q": "Who can see my data?",
+      "a": [
+        "Only you, on this computer, after typing your password. The server cannot read it, and the researchers only ever see what you choose to share.",
+        "One honest footnote: someone who runs the server and also has this computer in their hands could, with both together, open the data on it. That is why the server is run by the university, under its rules, and why you can always delete everything when you are done."
+      ]
+    },
+    "share": {
+      "q": "What happens if I share my data?",
+      "art": "You choose what to share. It is locked with a new donation key, which goes into the researcher's box. The server keeps both apart.",
+      "a": [
+        "You pick exactly what to share. Your browser makes a new key just for this donation, the <b>donation key</b>, and locks your selection with it. The rest of your data stays on this computer, and the researchers never get the key to it.",
+        "The donation key goes into the researcher's box. It works like a letterbox: anyone can put something in, but only the researcher has the key that opens it. The server keeps your donation and the box in separate places, and cannot open either."
+      ]
+    },
+    "withdraw": {
+      "q": "Can I change my mind after sharing?",
+      "art": "If you withdraw, the server throws the box away, and every copy of the donation becomes unreadable for good.",
+      "a": [
+        "Yes. When you withdraw your donation, the server throws away the box with the donation key. From that moment, every copy of your donation is unreadable, wherever it is, also on the researcher's computer. The server's last backups are gone within {{days}} days.",
+        "Once the researchers have read your donation, they could in theory note something down or save a copy. They promise not to, and their programs make not saving the easy way."
+      ]
+    },
+    "package": {
+      "q": "Can I keep my data, or move it to another computer?",
+      "art": "Download your locked data as one file, and open it on another computer with your password.",
+      "a": [
+        "You can download your data as one locked file, a <b>Combray package</b>. It opens on any computer, but only after you type your password. So you can keep it safe, move it, or delete the original download from your computer.",
+        "If you delete everything in Combray, the package can no longer be opened either."
+      ]
+    },
+    "delete": {
+      "q": "How do I delete everything?",
+      "a": [
+        "Open your data and choose <b>Delete everything for this study from this computer</b>, at the bottom of the page. If you forgot your password, choose <b>start over</b> on the password screen.",
+        "The server then forgets the key to your box, so even a copy of this computer's disk can no longer be opened. After that, your browser deletes the data itself."
+      ]
+    }
+  }
+}

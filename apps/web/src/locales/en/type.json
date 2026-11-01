@@ -1,0 +1,10 @@
+{
+  "null": "empty",
+  "bool": "yes/no",
+  "int": "whole number",
+  "float": "number",
+  "string": "text",
+  "date-like": "date",
+  "url-like": "link",
+  "email-like": "email address"
+}

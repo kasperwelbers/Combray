@@ -44,7 +44,7 @@ const SHORTCUTS = new Set<string>(['1', '2', '3', '4']);
  * as their columns, which is all most researchers need to pick data.
  */
 export function DecisionTree(props: Props) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(undefined, { lng: 'en' });
   if (props.view === 'fields') return <FieldsView {...props} />;
   const children = props.tree.children ?? [];
   return (
@@ -69,7 +69,7 @@ function stateClass(node: ProjectNode, states: Map<ProjectNode, EffectiveState>)
 }
 
 function StatePill({ node, states }: { node: ProjectNode; states: Map<ProjectNode, EffectiveState> }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const state = states.get(node) ?? 'show';
   if (!isDecidable(node)) {
     return node.decision === 'ignore' ? <span className="pill pill-ignore">{t('studio.pill.ignore')}</span> : null;
@@ -79,7 +79,7 @@ function StatePill({ node, states }: { node: ProjectNode; states: Map<ProjectNod
 }
 
 function Icon({ node, list }: { node: ProjectNode; list?: boolean }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const icon = list ? { kind: 'list' as const, glyph: '⋮' } : nodeIcon(node);
   return (
     <>
@@ -100,7 +100,7 @@ function rowKeys(path: NodePath, actions: TreeActions) {
 }
 
 function Row(props: Props & { node: ProjectNode; path: NodePath }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
   const { states, undecided, onlyUndecided, hideIgnored, open, selected, actions } = props;
   const chain = foldChain(props.node, props.path);
   const top = chain[0]!;
@@ -165,7 +165,7 @@ function fullPath(path: NodePath, t: (key: string) => string): string {
 }
 
 function FieldsView(props: Props) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const groups = useMemo(() => outline(props.tree), [props.tree]);
   return (
     <ul className="decision-tree fields-view" aria-label={t('studio.tree')}>
@@ -207,7 +207,7 @@ function GroupBody(props: Props & { group: OutlineGroup }) {
 }
 
 function FieldRow(props: Props & { group: OutlineGroup; field: OutlineGroup['fields'][number] }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
   const { group, field, states, selected, actions } = props;
   const node = visibleField(props, field.path);
   if (!node) return null;
@@ -238,7 +238,7 @@ function FieldRow(props: Props & { group: OutlineGroup; field: OutlineGroup['fie
 }
 
 function GroupRow(props: Props & { group: OutlineGroup }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
   const { group, states, open, selected, actions } = props;
   const node = getNode(props.tree, group.path)!;
   // The list a table's rows belong to holds its count and is what researchers think of.

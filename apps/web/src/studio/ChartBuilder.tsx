@@ -38,7 +38,7 @@ const isNumber = (c: FrameColumn) =>
  * only the counts come back. See docs/exploration.md#charts.
  */
 export function ChartBuilder({ tree, hasExports }: Props) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
   const tables = useMemo(() => deriveTables(tree), [tree]);
   const [table, setTable] = useState<number>();
   const [x, setX] = useState('');

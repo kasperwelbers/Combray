@@ -1,0 +1,10 @@
+{
+  "null": "leeg",
+  "bool": "ja/nee",
+  "int": "geheel getal",
+  "float": "getal",
+  "string": "tekst",
+  "date-like": "datum",
+  "url-like": "link",
+  "email-like": "e-mailadres"
+}

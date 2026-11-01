@@ -18,7 +18,8 @@ interface Open {
 /**
  * "View as participant": the tables inferred from the structure, filled with the loaded
  * exports. A map of all tables (nested ones under their parent) sits next to the open table;
- * nested tables also open from their cells, filtered to that row.
+ * nested tables also open from their cells, filtered to that row. Unlike the rest of the
+ * workspace, which is English only, it follows the chosen language, as participants see it.
  */
 export function Preview({ tables, hasExports }: Props) {
   const { t, i18n } = useTranslation();

@@ -1,6 +1,6 @@
 /**
- * Where the participant is: the project overview at `/`, or a project at `/{project}/`. The
- * researcher workspace is at `/studio/`.
+ * Where the participant is: the project overview at `/`, or a project at `/{project}/`, with its
+ * questions and answers at `/{project}/faq`. The researcher workspace is at `/studio/`.
  *
  * A study link can carry a participant id (`#id=P1234`) or a password reset token
  * (`#reset=…`) in the fragment, which browsers never send to the server, so they stay out of
@@ -11,7 +11,7 @@
 export type Route =
   | { kind: 'home' }
   | { kind: 'studio' }
-  | { kind: 'project'; projectId: string; participantId?: string; resetToken?: string };
+  | { kind: 'project'; projectId: string; participantId?: string; resetToken?: string; page?: 'faq' };
 
 const PROJECT_ID = /^[a-z0-9-]{1,64}$/;
 const PARTICIPANT_ID = /^[A-Za-z0-9._-]{1,64}$/;
@@ -35,10 +35,12 @@ function remember(projectId: string, participantId: string): void {
 /** Parse a location. Pure, for tests; `readRoute` also cleans up the address bar. */
 export function parseRoute(pathname: string, hash: string): Route {
   const [first, ...rest] = pathname.split('/').filter(Boolean);
-  if (!first || rest.length > 0 || !PROJECT_ID.test(first)) return { kind: 'home' };
+  const faq = rest.length === 1 && rest[0] === 'faq';
+  if (!first || (rest.length > 0 && !faq) || !PROJECT_ID.test(first)) return { kind: 'home' };
   if (first === 'studio') return { kind: 'studio' };
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const route: Route = { kind: 'project', projectId: first };
+  if (faq) route.page = 'faq';
   const id = params.get('id');
   if (id && PARTICIPANT_ID.test(id)) route.participantId = id;
   const reset = params.get('reset');
@@ -46,10 +48,15 @@ export function parseRoute(pathname: string, hash: string): Route {
   return route;
 }
 
+/** The address of a project page. */
+export function projectPath(projectId: string, page?: 'faq'): string {
+  return page ? `/${projectId}/${page}` : `/${projectId}/`;
+}
+
 export function readRoute(): Route {
   const route = parseRoute(location.pathname, location.hash);
   if (route.kind === 'project') {
-    if (location.hash) history.replaceState(null, '', `/${route.projectId}/`);
+    if (location.hash) history.replaceState(null, '', projectPath(route.projectId, route.page));
     if (route.participantId) remember(route.projectId, route.participantId);
     else {
       const id = remembered(route.projectId);

@@ -1,0 +1,17 @@
+{
+  "title": "Je gegevens toevoegen",
+  "intro": "Kies het zipbestand dat je van een platform hebt gedownload (zoals Google Takeout of TikTok), een map, of losse bestanden. Alles wordt alleen op deze computer gelezen en bewaard.",
+  "chooseFiles": "Bestanden kiezen",
+  "chooseFolder": "Een map kiezen",
+  "drop": "of sleep ze hierheen",
+  "failed": "Er ging iets mis bij het lezen. Er is niets bewaard.",
+  "step": {
+    "reading_one": "{{count}} bestand lezen…",
+    "reading_other": "{{count}} bestanden lezen…",
+    "parsing": "Uitpakken en lezen…",
+    "shape": "Naar de structuur kijken…",
+    "encrypting": "Veilig en versleuteld bewaren…",
+    "done": "Klaar",
+    "importers": "Kijken of we iets herkennen…"
+  }
+}

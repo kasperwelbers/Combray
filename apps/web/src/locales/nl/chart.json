@@ -1,0 +1,40 @@
+{
+  "empty": "Nog niets te tekenen: geen enkele rij heeft hier een waarde.",
+  "timeline": "Tijdlijn van {{measure}}",
+  "bars": "Staven van {{measure}}",
+  "explore": "Waarden in de grafiek; gebruik de pijltjestoetsen om langs de tijdlijn te gaan",
+  "along": "Langs",
+  "count": "Rijen van",
+  "per": "Per",
+  "format": "Geschreven als",
+  "show": "Toon",
+  "of": "Van",
+  "split": "Opsplitsen naar",
+  "noSplit": "Niets",
+  "none": "(leeg)",
+  "failed": "Deze grafiek kon niet worden gemaakt van deze exports.",
+  "weekOf": "week van {{date}}",
+  "rowsOf": "Aantal rijen in {{table}}",
+  "showTable": "Toon als tabel",
+  "showChart": "Toon als grafiek",
+  "moreCategories_one": "nog {{count}} waarde niet getoond",
+  "moreCategories_other": "nog {{count}} waarden niet getoond",
+  "moreSeries_one": "nog {{count}} reeks niet getoond",
+  "moreSeries_other": "nog {{count}} reeksen niet getoond",
+  "part": {
+    "year": "jaar",
+    "month": "maand",
+    "week": "week",
+    "day": "dag",
+    "weekday": "dag van de week",
+    "hour": "uur van de dag"
+  },
+  "measure": {
+    "count": "Aantal rijen",
+    "sum": "Som van {{column}}",
+    "mean": "Gemiddelde van {{column}}",
+    "min": "Laagste {{column}}",
+    "max": "Hoogste {{column}}",
+    "distinct": "Verschillende waarden van {{column}}"
+  }
+}
