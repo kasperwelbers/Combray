@@ -10,7 +10,7 @@ The current spec still thinks in tables: it selects a row path and named field p
 
 ## The project tree
 
-Each project has one **project tree** per upload point (see [Upload points](#upload-points-and-the-nameless-root)). It is the union of the shapes the project has seen: the researcher's own test exports and the structure metadata participants agreed to send. It holds structure only, never values ([CLAUDE.md](../CLAUDE.md) rule 4).
+Each project has one **project tree** per upload point (see [Upload points](#upload-points-and-the-nameless-root)). It is the union of the shapes the project has seen: the researcher's own test exports and the structure metadata participants agreed to send. It holds structure only, never values ([CLAUDE.md](../CLAUDE.md) rule 4). Participants' clients never get this union, only the **published tree**: the nodes the researcher has decided on (see [structure-versions.md](structure-versions.md)).
 
 Each project owns its own tree. A researcher can export theirs and another project can import it as a starting point, so platform packs become shared project trees rather than a separate format.
 
@@ -143,6 +143,7 @@ This also limits the size of the project tree. Ten participants with ten differe
 
 - A node has one canonical name and a set of aliases. A participant's path matches the canonical name first, then the aliases. The current `{watch-history.json,kijkgeschiedenis.json}` becomes a node `watch-history.json` with the alias `kijkgeschiedenis.json`.
 - **Merging.** A new undecided node `date` next to a known `timestamp` can be merged into it in the researcher UI. This adds `date` as an alias and merges the children recursively. Children that exist on both sides with different decisions are listed for the researcher to resolve.
+- **Nodes seen together are never merged.** Two nodes that occur in one export are different nodes. The server keeps every structure participants share, and the researcher workspace refuses merges, and skips suggestions, for nodes that occur in one of them. See [structure-versions.md](structure-versions.md).
 - **The tree view shows merged nodes once**, with their aliases as small tags.
 - **Suggestions.** When a new export adds nodes next to known ones of the same kind, the researcher UI suggests merging ("is `date` the same as `timestamp`?"). Candidates are scored on their structure (the last three steps of every path below them) and, for inner nodes, also on name similarity; suggestions below 0.35 are not shown. After a merge, the children of the merged pair are compared the same way. This catches renames and translations (`kijkgeschiedenis.json`, `Your Activity` and `Je activiteit`). The code is in `suggest.ts`.
 - Regular expression aliases also let researchers collapse dictionary-like keys that the extractor missed.
@@ -163,9 +164,9 @@ The researcher UI has a "view as participant" toggle that renders the researcher
 
 This is the flow from [security.md](security.md#structure-metadata-and-consent), with the decisions above:
 
-- A path is **unknown** when it is not in the project tree (canonical names and aliases). Unknown leaves are treated as undecided: shown, never requested.
+- A path is **unknown** when it is not in the published tree: the nodes the researcher has decided on, by canonical name or alias. Undecided nodes are never sent to clients, because unreviewed structure could by accident carry data. Unknown leaves are treated as undecided: shown, never requested.
 - **Donate never applies to unknown paths**, because show and donate are set on leaves the researcher has seen. New structure can never be donated by accident.
-- After an import, the client asks, as now, whether it may send the unknown paths (structure only). Once sent, the researcher sees them as new undecided nodes.
+- Right after an upload, the client asks whether it may share the structure of the data (names only). Unknown paths are listed for the participant to review. The server stores each structure, so researchers know which nodes occur together and how common they are, and the researcher sees the unknown paths as new undecided nodes. See [structure-versions.md](structure-versions.md).
 
 ### Missing requested fields
 
@@ -185,10 +186,12 @@ When a study needs a raw value, the researcher sets `raw` on that donated leaf. 
 
 A project tree is kept as two JSON documents, combined into one tree in the browser:
 
-- **`structure.json`**, owned by the server: the union of every shape the project has seen. It grows as participants send structure metadata.
+- **`structure.json`**, owned by the server: the union of every shape the project has seen. It grows as participants share their structure. It is for researchers only.
 - **`importer.json`**, owned by the researcher: decisions, labels, descriptions, aliases, conversions, lifters and scripts (as strings), keyed by canonical path. This is the part that is signed with the project config and shared between projects.
 
 Keeping them apart means the server adding new paths never collides with the researcher's edits. Merging nodes rewrites the paths in `importer.json`.
+
+Next to these, the server keeps every structure participants shared, without any participant id, one copy per distinct structure with a count. Participants' clients receive neither, only the **published tree** made from `importer.json` (decided nodes only). See [structure-versions.md](structure-versions.md).
 
 ## What happens to importer specs
 
@@ -221,7 +224,7 @@ The current runner stays until the derivation covers all platform packs. Dataset
 4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins, `<table>` and `<dl>`, running text, bare siblings, wrapping links. Still to do: tuning on team members' own exports.
 5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, labels, descriptions, aliases, merging, "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in the side panel, value formats and a first chart builder are described in [exploration.md](exploration.md). Merge suggestions, "Read as" conversions, roles and row filters are built. Still to do: lifter editing, registering the files with a server project.
 6. **Participant UI** (built: `worker/derived.ts`, `screens/TableView.tsx`). Collections, other data, breadcrumbs with folding, nested table navigation, new paths marked locally.
-7. **Consent flows.** Sending unknown paths, then missing-field requests in the donation step.
+7. **Consent flows.** Sharing structure after upload, the published tree, and merge checks against shared structures ([structure-versions.md](structure-versions.md)); then missing-field requests in the donation step.
 8. **Conversion** (packs converted; runner kept). Google Takeout and TikTok are project trees whose outputs match the YAML importers. The row/field runner stays as the fallback for projects without upload points, until the consent flows are built and new packs are written as project trees.
 
 ## Decided questions
@@ -235,6 +238,11 @@ Answered by Kasper on 2026-10-29:
 - **Lifter output.** One decision on the lifter node covers every key it outputs; the output shape is not stored.
 - **Leaf in one version, inner node in another.** Nodes with different kinds are different nodes, as `mergeAll` and `matchChild` already do.
 - **Format.** JSON, split into `structure.json` and `importer.json`, with scripts as strings (see [Storage](#storage)).
+
+Answered by Kasper on 2026-11-01 ([structure-versions.md](structure-versions.md)):
+
+- **Structure versions.** Not stored as named versions. Participants are asked right after upload to share their full structure (names only), reviewing only the names that are new. Each structure is stored, and two nodes that occur in one are never merged.
+- **What clients receive.** Only nodes the researcher has decided on (`ignore`, `show` or `donate`). Unreviewed structure is never sent to participants.
 
 ## Open questions
 
