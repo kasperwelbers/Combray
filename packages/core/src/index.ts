@@ -69,3 +69,5 @@ export type {
 } from './query';
 export { chartQuery, chartData } from './chart';
 export type { ChartSpec, ChartData, ChartPoint } from './chart';
+export { suggestMerges, suggestAfterMerge } from './suggest';
+export type { MergeSuggestion } from './suggest';

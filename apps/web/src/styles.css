@@ -1349,3 +1349,18 @@ main.wide {
   font: 12px var(--font-body);
   fill: var(--ink-soft);
 }
+
+.suggestions ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.suggestions li {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.suggestions li p {
+  margin: 0 0 0.5rem;
+}

@@ -197,5 +197,13 @@
     "matches": "{{name}} matches {{text}}",
     "other": "a condition on {{name}}",
     "not": "not: {{what}}"
-  }
+  },
+  "suggestTitle": "Possibly the same",
+  "suggestIntro": "These parts are new, and sit where a part you already have is missing. They may be the same thing, renamed or in another language. Merging keeps your decisions and adds the new name as an alias.",
+  "suggestQuestion": "Is “{{from}}” the same as “{{into}}”?",
+  "suggestWhere": "in {{where}}",
+  "suggestScore": "{{score}}% alike",
+  "suggestMerge": "Yes, merge",
+  "suggestDismiss": "No",
+  "suggestShow": "Show {{name}}"
 }
