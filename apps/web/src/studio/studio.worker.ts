@@ -69,8 +69,9 @@ const api: StudioApi = {
   async addExport(uploads, onProgress) {
     const parsed = await parseUpload(uploads, onProgress);
     onProgress({ step: 'shape' });
-    // HTML is normalised so rows and positions compare (docs/tree-decisions.md#html).
-    const tree = normalizeTree(uploadRoot(parsed.tree, parsed.source === 'archive'));
+    // HTML is normalised so rows and positions compare (docs/tree-decisions.md#html). Header
+    // text may name columns here: this is the researcher's own export, and they see it.
+    const tree = normalizeTree(uploadRoot(parsed.tree, parsed.source === 'archive'), { keys: () => true });
     const info: StudioExport = { id: nextId++, name: parsed.tree.name, nodeCount: countNodes(tree) };
     exports.set(info.id, { info, tree });
     onProgress({ step: 'done' });

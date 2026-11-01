@@ -951,6 +951,19 @@ main.wide {
   margin: 0;
 }
 
+.filter-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.filter-form .check {
+  margin: 0;
+}
+
+.filter-form button {
+  justify-self: start;
+}
+
 .preview-scroll {
   overflow-x: auto;
   border: 1px solid var(--line);

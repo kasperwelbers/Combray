@@ -135,5 +135,67 @@
     "tree": "Everything in the files, including the folders, objects and HTML in between."
   },
   "chartTitle": "Explore with a chart",
-  "chartIntro": "Count rows over time or per value, from the exports you loaded. This runs in your browser; it is a first step towards views participants can make themselves."
+  "chartIntro": "Count rows over time or per value, from the exports you loaded. This runs in your browser; it is a first step towards views participants can make themselves.",
+  "readAs": "Read as",
+  "readAsHelp": "How the value is read. Participants see, and donate, the value as read here.",
+  "type": "Type",
+  "as": {
+    "text": "Text, as it is",
+    "datetime": "Date and time",
+    "int": "Whole number",
+    "float": "Number",
+    "bool": "Yes or no",
+    "url": "Link",
+    "domain": "Website of a link",
+    "duration": "Duration"
+  },
+  "writtenAs": "Written as",
+  "formatAuto": "Recognise automatically",
+  "role": "Use in views as",
+  "roles": {
+    "none": "Nothing in particular",
+    "date": "The date of the row",
+    "title": "The title of the row",
+    "url": "The link of the row",
+    "group": "Something to count by"
+  },
+  "cleanHelp": "Cleaning steps, applied in order before the value is read.",
+  "cleanStep": "Cleaning step",
+  "cleanKind": {
+    "trim": "Remove spaces around it",
+    "lowercase": "Make lowercase",
+    "remove": "Remove text matching…",
+    "keep": "Keep only the part matching…"
+  },
+  "pattern": "Regular expression",
+  "transform": {
+    "trim": "Remove spaces around it",
+    "lowercase": "Make lowercase",
+    "uppercase": "Make uppercase",
+    "tokenize": "Split into words",
+    "domain": "Keep the website",
+    "removeText": "Remove {{pattern}}",
+    "keepText": "Keep only {{pattern}}",
+    "split": "Split at {{by}}"
+  },
+  "filterTitle": "Which rows to import",
+  "filterHelp": "Rows must meet every condition here. Use it to leave out rows that are not the participant's own activity, such as ads.",
+  "filterColumn": "Column",
+  "filterTest": "Condition",
+  "filterKind": {
+    "empty": "is empty",
+    "filled": "is not empty",
+    "contains": "contains",
+    "matches": "matches"
+  },
+  "filterTextLabel": "Text",
+  "filterExclude": "Leave out the rows that meet this instead",
+  "filterText": {
+    "empty": "{{name}} is empty",
+    "filled": "{{name}} is not empty",
+    "contains": "{{name}} contains “{{text}}”",
+    "matches": "{{name}} matches {{text}}",
+    "other": "a condition on {{name}}",
+    "not": "not: {{what}}"
+  }
 }

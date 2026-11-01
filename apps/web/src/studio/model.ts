@@ -124,7 +124,9 @@ export function decideBelow(
 }
 
 /** Settings a researcher edits in the side panel. */
-export type NodePatch = Partial<Pick<ProjectNode, 'label' | 'description' | 'aliases' | 'raw'>>;
+export type NodePatch = Partial<
+  Pick<ProjectNode, 'label' | 'description' | 'aliases' | 'raw' | 'transform' | 'as' | 'format' | 'role' | 'filter'>
+>;
 
 /** A copy of the tree with `patch` applied to one node; `undefined` values remove a setting. */
 export function patchNode(tree: ProjectNode, path: NodePath, patch: NodePatch): ProjectNode {
