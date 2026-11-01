@@ -19,6 +19,8 @@ export type FilterTest =
   | { equals: Scalar }
   | { in: Scalar[] }
   | { contains: string }
+  /** A regular expression; `flags` may be `i` to ignore case. */
+  | { matches: string; flags?: 'i' }
   /** Inclusive; numbers compare as numbers, anything else as text (ISO dates sort). */
   | { min?: Scalar; max?: Scalar };
 
@@ -147,12 +149,14 @@ function compare(a: Cell, b: Cell): number {
   return s < t ? -1 : s > t ? 1 : 0;
 }
 
-function test(value: Cell, t: FilterTest): boolean {
+/** Whether a cell passes a filter test. A list cell passes when any item does. */
+export function test(value: Cell, t: FilterTest): boolean {
   if ('empty' in t) return isEmpty(value) === t.empty;
   if (Array.isArray(value)) return value.some((v) => test(v, t));
   if ('equals' in t) return value === t.equals || (value !== null && String(value) === String(t.equals));
   if ('in' in t) return t.in.some((x) => test(value, { equals: x }));
   if ('contains' in t) return value !== null && String(value).toLowerCase().includes(t.contains.toLowerCase());
+  if ('matches' in t) return value !== null && new RegExp(t.matches, t.flags === 'i' ? 'i' : '').test(String(value));
   if (isEmpty(value)) return false;
   if (t.min !== undefined && t.min !== null && compare(value, t.min) < 0) return false;
   if (t.max !== undefined && t.max !== null && compare(value, t.max) > 0) return false;

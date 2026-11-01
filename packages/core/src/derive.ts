@@ -8,7 +8,9 @@
  * values stay as list cells. Nothing is unnested here: views unnest while they aggregate.
  * Leaves outside any table form a single record.
  */
-import type { Localized } from './importer/spec';
+import { applyTransform, convert, type FieldValue } from './importer/convert';
+import type { FieldType, Localized, Transform } from './importer/spec';
+import { test, type Cell } from './query';
 import {
   effectiveStates,
   getNode,
@@ -17,6 +19,8 @@ import {
   type EffectiveState,
   type ProjectNode,
   type NodePath,
+  type Role,
+  type RowFilter,
 } from './decisions';
 import { COLLAPSED_NAME, elementName, ITEM_NAME, screenName } from './shape';
 import { childrenOf, type TreeNode, type ValueType } from './tree';
@@ -43,6 +47,11 @@ export interface ColumnDef {
   /** Inferred types and formats of the values (of the keys, for `key` columns). */
   types?: ValueType[];
   formats?: string[];
+  /** Conversion, from the leaf: transforms, then `as` with `format`. */
+  transform?: Transform[];
+  as?: FieldType;
+  format?: string;
+  role?: Role;
 }
 
 export interface TableDef {
@@ -57,6 +66,8 @@ export interface TableDef {
   parent?: number;
   state: Exclude<EffectiveState, 'ignore'>;
   columns: ColumnDef[];
+  /** Conditions rows must meet to be imported, from the repeated node. */
+  filter?: RowFilter[];
 }
 
 export const KEY_COLUMN = '{key}';
@@ -152,6 +163,16 @@ function valueInfo(types?: ValueType[], formats?: string[]): Pick<ColumnDef, 'ty
   return { ...(types ? { types } : {}), ...(formats ? { formats } : {}) };
 }
 
+/** The conversion settings of a leaf, for its column. */
+function conversion(node: ProjectNode): Pick<ColumnDef, 'transform' | 'as' | 'format' | 'role'> {
+  const out: Pick<ColumnDef, 'transform' | 'as' | 'format' | 'role'> = {};
+  if (node.transform?.length) out.transform = node.transform;
+  if (node.as) out.as = node.as;
+  if (node.format) out.format = node.format;
+  if (node.role) out.role = node.role;
+  return out;
+}
+
 function labelOr(node: ProjectNode, fallback: string): Localized {
   return node.label ?? fallback;
 }
@@ -180,6 +201,7 @@ export function deriveTables(root: ProjectNode): TableDef[] {
         ...(current !== 0 ? { parent: current } : {}),
         state,
         columns: [],
+        ...(node.filter?.length ? { filter: node.filter } : {}),
       });
       table = tables.length - 1;
     }
@@ -215,7 +237,7 @@ export function deriveTables(root: ProjectNode): TableDef[] {
       const rel = relative[i]!;
       const node = nodeAt(leaf);
       const state = states.get(node) as ColumnDef['state'];
-      const info = valueInfo(node.types, node.formats);
+      const info = { ...valueInfo(node.types, node.formats), ...conversion(node) };
       // The value of a `{*}` row whose entries are plain values.
       if (rel.length === 0) {
         return { id: VALUE_COLUMN, name: node.label ?? '', path: rel, type: 'value', state, ...info };
@@ -233,7 +255,7 @@ export function deriveTables(root: ProjectNode): TableDef[] {
     if (table.keyed) {
       const entry = nodeAt(base);
       const state: ColumnDef['state'] = entry.decision === 'donate' ? 'donate' : 'show';
-      const keys = valueInfo(nodeAt(base.slice(0, -1)).keyTypes, nodeAt(base.slice(0, -1)).keyFormats);
+      const keys = { ...valueInfo(nodeAt(base.slice(0, -1)).keyTypes, nodeAt(base.slice(0, -1)).keyFormats), ...conversion(entry) };
       table.columns.unshift({ id: KEY_COLUMN, name: '', path: [], type: 'key', state, ...keys });
     }
     if (table.parent !== undefined) {
@@ -297,12 +319,40 @@ function leafValue(node: TreeNode): unknown {
   }
 }
 
+/** A value converted as its column says: transforms, then `as`. Unconverted columns pass through. */
+export function convertValue(value: unknown, column: Pick<ColumnDef, 'transform' | 'as' | 'format'>): unknown {
+  if (!column.transform && !column.as) return value;
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value;
+  let out = value as FieldValue;
+  for (const t of column.transform ?? []) out = applyTransform(out, t);
+  return column.as ? convert(out, column.as, column.format) : out;
+}
+
+/** Whether a row meets every filter of its table. A filter on a column the table lacks fails. */
+function keeps(table: TableDef, values: Record<string, unknown>): boolean {
+  return (table.filter ?? []).every((f) => {
+    if (!table.columns.some((c) => c.id === f.column)) return false;
+    return test((values[f.column] ?? null) as Cell, f.test) !== (f.not === true);
+  });
+}
+
+export interface DeriveOptions {
+  /** Keep values as in the file: no conversions, no row filters. */
+  raw?: boolean;
+}
+
 /**
  * The rows of every derived table for one participant's tree, matched through the project
  * tree (canonical names, aliases, `[*]` and `{*}`). The tree's root name is ignored. Values
- * are as in the file; conversions are applied later.
+ * are converted as their columns say, and rows that do not meet their table's filters are
+ * left out, with the rows nested in them.
  */
-export function deriveRows(tree: TreeNode, root: ProjectNode, tables: TableDef[]): DerivedRow[][] {
+export function deriveRows(
+  tree: TreeNode,
+  root: ProjectNode,
+  tables: TableDef[],
+  options: DeriveOptions = {},
+): DerivedRow[][] {
   const out: DerivedRow[][] = tables.map(() => []);
   // Tree nodes of each table's rows, so nested tables can find their parent row.
   const rowNodes: TreeNode[][] = tables.map(() => []);
@@ -324,14 +374,15 @@ export function deriveRows(tree: TreeNode, root: ProjectNode, tables: TableDef[]
       const values: Record<string, unknown> = {};
       for (const column of table.columns) {
         if (column.type === 'table') continue;
-        if (column.type === 'key') {
-          values[column.id] = node.name;
-          continue;
+        let value: unknown;
+        if (column.type === 'key') value = node.name;
+        else {
+          const matches = resolve(node, rowProject, column.path);
+          value = column.type === 'list' ? matches.map(leafValue) : matches.length > 0 ? leafValue(matches[0]!) : null;
         }
-        const matches = resolve(node, rowProject, column.path);
-        values[column.id] =
-          column.type === 'list' ? matches.map(leafValue) : matches.length > 0 ? leafValue(matches[0]!) : null;
+        values[column.id] = options.raw ? value : convertValue(value, column);
       }
+      if (!options.raw && !keeps(table, values)) continue;
       rowNodes[index]!.push(node);
       out[index]!.push(parent === undefined ? { values } : { values, parent });
     }

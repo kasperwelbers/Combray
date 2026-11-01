@@ -21,6 +21,8 @@ function decided() {
   return tree;
 }
 
+const importer = (...entries: object[]) => ({ format: 'combray-importer@1', entries });
+
 describe('project files', () => {
   it('split into structure and settings, and join back to the same tree', () => {
     const tree = decided();
@@ -48,7 +50,6 @@ describe('project files', () => {
     expect(() => parseStructureFile({ format: 'combray-structure@1', root: { kind: 'x', name: '' } })).toThrow(
       'unknown kind',
     );
-    const importer = (entry: object) => ({ format: 'combray-importer@1', entries: [entry] });
     expect(() => parseImporterFile(importer({ path: ['a'], kind: 'value', decision: 'maybe' }))).toThrow(
       'unknown decision',
     );
@@ -67,5 +68,28 @@ describe('project files', () => {
     expect(() => parseStructureFile(structure(['Marcel YYYY']))).toThrow('formats');
     expect(() => parseStructureFile(structure(['2024-03-01']))).toThrow('formats');
     expect(() => parseStructureFile(structure(Array(9).fill('YYYY')))).toThrow('formats');
+  });
+
+  it('keeps conversions, roles and row filters, and checks them', () => {
+    const entry = {
+      path: ['a', '[*]', 'time'],
+      kind: 'value',
+      transform: ['trim', { replace: { pattern: '^At ', with: '' } }],
+      as: 'datetime',
+      format: 'YYYY-MM-DD HH:mm:ss',
+      role: 'date',
+    };
+    const rows = { path: ['a', '[*]'], kind: 'map', filter: [{ column: 'ad', test: { empty: true } }] };
+    expect(parseImporterFile(importer(entry, rows)).entries).toHaveLength(2);
+    expect(() => parseImporterFile(importer({ ...entry, as: 'money' }))).toThrow('unknown type');
+    expect(() => parseImporterFile(importer({ ...entry, role: 'author' }))).toThrow('unknown role');
+    expect(() => parseImporterFile(importer({ ...entry, format: 'Marcel' }))).toThrow('format');
+    expect(() => parseImporterFile(importer({ ...entry, transform: ['shout'] }))).toThrow('unknown transform');
+    expect(() => parseImporterFile(importer({ ...rows, filter: [{ column: 'ad', test: { like: 1 } }] }))).toThrow(
+      'unknown filter test',
+    );
+    expect(() => parseImporterFile(importer({ ...rows, filter: [{ column: 'ad', test: { matches: '(' } }] }))).toThrow(
+      'invalid regular expression',
+    );
   });
 });

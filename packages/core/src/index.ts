@@ -26,6 +26,7 @@ export {
   isLeaf,
   DecisionError,
   STRUCTURE_FIELDS,
+  ROLES,
 } from './decisions';
 export type {
   ProjectNode,
@@ -35,9 +36,11 @@ export type {
   EffectiveState,
   MergeConflict,
   ShapeComparison,
+  Role,
+  RowFilter,
 } from './decisions';
-export { deriveTables, deriveRows, outline, KEY_COLUMN, VALUE_COLUMN } from './derive';
-export type { TableDef, ColumnDef, DerivedRow, OutlineGroup } from './derive';
+export { deriveTables, deriveRows, convertValue, outline, KEY_COLUMN, VALUE_COLUMN } from './derive';
+export type { TableDef, ColumnDef, DerivedRow, DeriveOptions, OutlineGroup } from './derive';
 export {
   splitProjectTree,
   joinProjectTree,
@@ -49,7 +52,8 @@ export {
 } from './projectFiles';
 export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';
 export { normalizeTree, MIN_REPEATS } from './normalize';
-export { runQuery, queryColumns, unnestPath, rootTable, datePart, QueryError } from './query';
+export type { NormalizeOptions } from './normalize';
+export { runQuery, queryColumns, unnestPath, rootTable, datePart, test as testCell, QueryError } from './query';
 export type {
   Query,
   Step,
