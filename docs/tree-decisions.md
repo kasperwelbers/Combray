@@ -164,7 +164,7 @@ The researcher UI has a "view as participant" toggle that renders the researcher
 
 This is the flow from [security.md](security.md#structure-metadata-and-consent), with the decisions above:
 
-- A path is **unknown** when it is not in the published tree: the nodes the researcher has decided on, by canonical name or alias. Undecided nodes are never sent to clients, because unreviewed structure could by accident carry data. Unknown leaves are treated as undecided: shown, never requested. Paths below an ignored node are neither shown nor reported.
+- A path is **unknown** when it is not in the published tree: the nodes the researcher has decided on, by canonical name or alias. Undecided nodes are never sent to clients by name, because unreviewed structure could by accident carry data. Paths at least five participants reported are sent as hash ids only, so clients do not ask about them again ([waiting paths](structure-versions.md#paths-waiting-for-review)). Unknown leaves are treated as undecided: shown, never requested. Paths below an ignored node are neither shown nor reported.
 - **Donate never applies to unknown paths**, because show and donate are set on leaves the researcher has seen. New structure can never be donated by accident.
 - After an import with unknown paths, the client asks whether it may send a **structure report**: the unknown paths, which the participant reviews, plus the ids of the known parts their data has, which the consent text names. The server stores each report as a tree, so researchers know which nodes occur together. Once sent, the researcher sees the unknown paths as new undecided nodes. The report, its ids and the consent text are in [structure-versions.md](structure-versions.md).
 
@@ -242,7 +242,7 @@ Answered by Kasper on 2026-10-29:
 Answered by Kasper on 2026-11-01 ([structure-versions.md](structure-versions.md)):
 
 - **Structure versions.** Not stored as named versions. Each structure report is stored as a tree of path ids, and two nodes that share a tree are never merged. Versions are a view the researcher workspace computes from the trees.
-- **What clients receive.** Only nodes the researcher has decided on (`ignore`, `show` or `donate`). Unreviewed structure is never sent to participants.
+- **What clients receive.** Only nodes the researcher has decided on (`ignore`, `show` or `donate`). Unreviewed structure is never sent to participants by name; paths enough participants reported are sent as hash ids so they are not asked for again.
 - **What a report contains.** The unknown paths, reviewed by the participant, and the ids of the known parts their data has. Ids are hashes of raw paths, so they survive merges.
 
 ## Open questions

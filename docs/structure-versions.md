@@ -38,9 +38,22 @@ Compared with the published tree, a path in the participant's shape is:
 
 - **identified** when every step matches an identified node, by canonical name or alias;
 - **ignored** when it lies below an ignored node: it is neither shown nor reported, because the researcher said they do not need it;
-- **new** otherwise. Undecided nodes in `structure.json` are new to the client too, because the client never sees them.
+- **waiting** when it is not identified, but its id is in the published tree's list of [paths waiting for review](#paths-waiting-for-review): enough other participants already reported it;
+- **new** otherwise.
 
-This changes what "unknown" means in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent): unknown now means *not identified*, instead of *not in `structure.json`*. A path some participant already reported, but the researcher has not decided on yet, is reported again by the next participant who has it. That is wanted: it gives the researcher more trees, and a count of how common the path is. It also means researchers should decide on new paths regularly. The workspace makes that quick: `show` is a safe default for a leaf, and a subtree can be ignored in one step.
+This changes what "unknown" means in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent): unknown now means *not identified*, instead of *not in `structure.json`*. A path that a few participants already reported, but the researcher has not decided on yet, is reported again by the next participant who has it, until it is common enough to be [waiting](#paths-waiting-for-review). Researchers should still decide on new paths regularly. The workspace makes that quick: `show` is a safe default for a leaf, and a subtree can be ignored in one step.
+
+### Paths waiting for review
+
+Without this, every participant whose export has a path the researcher has not decided on yet is asked again, until the researcher catches up. To avoid that, the published tree also carries the **ids of reported paths that wait for review**, without their names. The client computes the ids of its own paths anyway, so it can tell that a path is waiting, and does not ask about it. Waiting paths are shown like other unknown data and never requested.
+
+The ids are unsalted hashes of raw paths, so anyone with the published tree can test guesses against them. A salt would not help: the client must be able to compute the ids, so the salt would be public too. Short hashes would not help either, because a targeted guess ("is there a key `jan.devries`?") still matches. What makes it safe is **which** paths get published:
+
+- **Only paths reported by at least *k* participants** (default 5, a server setting) are published as waiting. Data that ends up in a path by accident, such as a username used as a key that the shape extractor missed, belongs to one person and does not occur in five exports. A name that five people's exports share is structure. Below *k*, the next participant is asked again, which is also how the count grows.
+- **They passed the same screens as all structure**: the shape extractor's checks, and the review and consent of every participant who sent them.
+- **The count is of reports, not people,** because reports carry no participant id. The client remembers locally which paths it has reported, so re-importing the same export does not count twice. Someone who deliberately sends fake reports can at worst make one of their own paths waiting, which hides it from later participants' prompts but reveals nothing about anyone else.
+
+Stopping at *k* costs some evidence: participants with only waiting paths send no tree. *k* reports are enough to judge a path, and the researcher's own exports and donated shapes add more.
 
 ### Path ids
 
@@ -126,19 +139,22 @@ The opt-in shape item in a donation ([universal-importer.md](universal-importer.
 | What | Who sees it | Why it is acceptable |
 | --- | --- | --- |
 | Published tree | Every participant's client | Only names the researcher identified; nothing from other participants that the researcher did not approve |
+| Ids of waiting paths | Every participant's client | Hashes only, and only of paths at least *k* participants reported, so a guess can only confirm shared structure |
 | New paths | The server and the researcher, after consent | Reviewed by the participant, structure only, screened by the shape extractor |
 | Ids of identified parts present | The server and the researcher, after consent | Named in the consent text, viewable on request, no values, no participant id |
 | Stored trees | The researcher | Deduplicated, unlinked, month only |
 
 ## Implementation plan
 
-1. **Core** (`packages/core`): `pathId`, the published tree (`publishTree`), comparing a shape with a published tree (identified, ignored, new, alias conflicts), building a report, turning a report into a tree, and the seen-together index over trees. Tests on the Takeout and TikTok fixtures, including a Dutch and an English variant.
+1. **Core** (`packages/core`): `pathId`, the published tree (`publishTree`, with waiting ids), comparing a shape with a published tree (identified, ignored, waiting, new, alias conflicts), building a report, turning a report into a tree, and the seen-together index over trees. Tests on the Takeout and TikTok fixtures, including a Dutch and an English variant.
 2. **Researcher workspace**: trees from the researcher's own exports, merges refused for nodes seen together, suggestions filtered, evidence counts, publishing with warnings.
-3. **Participant client**: the consent prompt (NL and EN), "show these parts", sending the report.
-4. **Server**: an endpoint that accepts a report for a project and upload point, merges `added` into `structure.json`, stores the tree, and serves both to the project's researchers only. Rate limited, counts-only logging.
+3. **Participant client**: the consent prompt (NL and EN), "show these parts", sending the report, and remembering which paths it reported.
+4. **Server**: an endpoint that accepts a report for a project and upload point, merges `added` into `structure.json`, stores the tree, counts reports per path, adds paths with at least *k* reports to the published tree's waiting ids, and serves `structure.json` and the trees to the project's researchers only. Rate limited, counts-only logging.
 5. **Later**: trees from donated shapes in the key tool; grouping variants in the workspace.
 
 ## Open questions
+
+- Whether *k* = 5 is right, and whether small studies (a few dozen participants) need a lower default.
 
 - Whether a participant whose export exactly matches identified structure should be asked to send a report anyway, to count how common each tree is. For now: no, counts come from donated shapes.
 - The threshold below which "never seen together" is shown as a guess.
