@@ -951,6 +951,19 @@ main.wide {
   margin: 0;
 }
 
+.filter-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.filter-form .check {
+  margin: 0;
+}
+
+.filter-form button {
+  justify-self: start;
+}
+
 .preview-scroll {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -1335,4 +1348,36 @@ main.wide {
 .faq-art .cap {
   font: 12px var(--font-body);
   fill: var(--ink-soft);
+}
+
+.suggestions ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.suggestions li {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.suggestions li p {
+  margin: 0 0 0.5rem;
+}
+
+.other-data {
+  margin-top: 1rem;
+}
+
+.other-data summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.found-item .path {
+  font-size: 0.8rem;
+}
+
+.nested-title {
+  font-size: 1.1rem;
 }

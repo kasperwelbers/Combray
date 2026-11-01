@@ -10,3 +10,5 @@ deploy/secrets/
 # Never commit real data download packages (CLAUDE.md, rule 5)
 *.takeout.zip
 combray-store-master.key
+# Screenshots from local visual checks
+shots/

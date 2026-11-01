@@ -5,6 +5,7 @@ import {
   deriveTables,
   outline,
   extractShape,
+  getNode,
   jsonToTree,
   KEY_COLUMN,
   projectTreeFromShape,
@@ -137,6 +138,56 @@ describe('deriveRows', () => {
     expect(comments!.map((r) => [r.parent, r.values['by']])).toEqual([
       [0, 'Marcel'],
       [0, 'Swann'],
+    ]);
+  });
+
+  it('converts values as their leaves say, and keeps raw values when asked', () => {
+    const tree = projectTreeFromShape(extractShape(tweets));
+    const item = getNode(tree, ['tweets', '[*]'])!;
+    Object.assign(getNode(item, ['stats', 'likes'])!, { as: 'int' });
+    Object.assign(getNode(item, ['text'])!, { transform: ['lowercase'], role: 'title' });
+    Object.assign(getNode(tree, ['user', 'joined'])!, { as: 'datetime', format: 'YYYY-MM-DD', role: 'date' });
+    const tables = deriveTables(tree);
+    expect(tables[1]!.columns.find((c) => c.id === 'text')).toMatchObject({ transform: ['lowercase'], role: 'title' });
+    const [record, rows] = deriveRows(tweets, tree, tables);
+    expect(record![0]!.values['user/joined']).toBe('2020-01-01T00:00:00');
+    expect(rows!.map((r) => [r.values.text, r.values['stats/likes']])).toEqual([
+      ['madeleines today', 3],
+      ['rain again', 0],
+    ]);
+    const [, raw] = deriveRows(tweets, tree, tables, { raw: true });
+    expect(raw![0]!.values['stats/likes']).toBe('3');
+  });
+
+  it('leaves out rows that do not meet the filters, with their nested rows', () => {
+    const tree = projectTreeFromShape(extractShape(tweets));
+    getNode(tree, ['tweets', '[*]'])!.filter = [{ column: 'text', test: { matches: '^rain', flags: 'i' }, not: true }];
+    const tables = deriveTables(tree);
+    const [, rows, comments] = deriveRows(tweets, tree, tables);
+    expect(rows!.map((r) => r.values.text)).toEqual(['Madeleines today']);
+    expect(comments).toHaveLength(2);
+    getNode(tree, ['tweets', '[*]'])!.filter = [{ column: 'text', test: { contains: 'rain' } }];
+    const [, rainy, none] = deriveRows(tweets, tree, deriveTables(tree));
+    expect(rainy!.map((r) => r.values['comments/[*]'])).toEqual([0]);
+    expect(none).toEqual([]);
+    // A filter on a column the table does not have keeps nothing, rather than everything.
+    getNode(tree, ['tweets', '[*]'])!.filter = [{ column: 'nope', test: { empty: true } }];
+    expect(deriveRows(tweets, tree, deriveTables(tree))[1]).toEqual([]);
+  });
+
+  it('filters on ignored fields and on nested tables without showing them', () => {
+    const tree = projectTreeFromShape(extractShape(tweets));
+    const item = getNode(tree, ['tweets', '[*]'])!;
+    getNode(item, ['stats'])!.decision = 'ignore';
+    item.filter = [
+      { column: 'stats/likes', test: { min: 1 } },
+      { column: 'comments/[*]', test: { min: 1 } },
+    ];
+    const tables = deriveTables(tree);
+    expect(tables[1]!.hidden?.map((c) => [c.id, c.type])).toEqual([['stats/likes', 'value']]);
+    const [, rows] = deriveRows(tweets, tree, tables);
+    expect(rows!.map((r) => r.values)).toEqual([
+      { 'tags/[*]': ['baking', 'tea'], text: 'Madeleines today', 'comments/[*]': 2 },
     ]);
   });
 

@@ -77,7 +77,7 @@ export interface ImporterSpec {
   display?: DisplayHints;
 }
 
-const FIELD_TYPES = new Set<FieldType>([
+export const FIELD_TYPES = new Set<FieldType>([
   'string',
   'int',
   'float',
@@ -104,7 +104,7 @@ function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
 
-function checkTransform(id: string, field: string, t: unknown): void {
+export function checkTransform(id: string, field: string, t: unknown): void {
   if (typeof t === 'string') {
     if (!SIMPLE_TRANSFORMS.has(t)) throw new SpecError(id, `field ${field}: unknown transform '${t}'`);
     return;

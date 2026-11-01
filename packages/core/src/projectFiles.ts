@@ -6,9 +6,9 @@
  * Settings are keyed by canonical path plus the node's kind, so the server adding new paths
  * never touches them.
  */
-import { STRUCTURE_FIELDS, type Alias, type NodePath, type ProjectNode } from './decisions';
+import { ROLES, STRUCTURE_FIELDS, type Alias, type NodePath, type ProjectNode, type Role, type RowFilter } from './decisions';
 import { isFormat, MAX_FORMATS } from './formats';
-import type { Localized } from './importer/spec';
+import { checkTransform, FIELD_TYPES, SpecError, type FieldType, type Localized, type Transform } from './importer/spec';
 import type { Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
@@ -30,6 +30,11 @@ export interface ImporterEntry {
   aliases?: Alias[];
   lifter?: string;
   raw?: true;
+  transform?: Transform[];
+  as?: FieldType;
+  format?: string;
+  role?: Role;
+  filter?: RowFilter[];
 }
 
 export interface ImporterFile {
@@ -45,7 +50,7 @@ export class ProjectFileError extends Error {
   }
 }
 
-const SETTINGS = ['decision', 'label', 'description', 'aliases', 'lifter', 'raw'] as const;
+const SETTINGS = ['decision', 'label', 'description', 'aliases', 'lifter', 'raw', 'transform', 'as', 'format', 'role', 'filter'] as const;
 
 function shapeOf(node: ProjectNode): Shape {
   const shape: Shape = { kind: node.kind, name: node.name };
@@ -183,6 +188,30 @@ export function parseStructureFile(json: unknown): StructureFile {
   return json as unknown as StructureFile;
 }
 
+const FILTER_TESTS = ['empty', 'equals', 'in', 'contains', 'matches', 'min', 'max'];
+const isScalar = (v: unknown) => v === null || ['string', 'number', 'boolean'].includes(typeof v);
+
+function checkFilter(f: unknown, at: string): void {
+  check(isObject(f) && typeof f.column === 'string' && isObject(f.test), `${at}: a filter has a column and a test`);
+  if (f.not !== undefined) check(f.not === true, `${at}: not must be true`);
+  const test = f.test as Record<string, unknown>;
+  const keys = Object.keys(test);
+  check(keys.length > 0 && keys.every((k) => FILTER_TESTS.includes(k) || k === 'flags'), `${at}: unknown filter test`);
+  if ('empty' in test) check(typeof test.empty === 'boolean', `${at}: empty must be true or false`);
+  if ('equals' in test) check(isScalar(test.equals), `${at}: equals must be a plain value`);
+  if ('in' in test) check(Array.isArray(test.in) && test.in.every(isScalar), `${at}: in must be a list of plain values`);
+  if ('contains' in test) check(typeof test.contains === 'string', `${at}: contains must be text`);
+  if ('matches' in test) {
+    check(typeof test.matches === 'string', `${at}: matches must be a regular expression`);
+    check(test.flags === undefined || test.flags === 'i', `${at}: flags may only be i`);
+    try {
+      new RegExp(test.matches as string);
+    } catch {
+      throw new ProjectFileError(`${at}: invalid regular expression`);
+    }
+  }
+}
+
 export function parseImporterFile(json: unknown): ImporterFile {
   check(isObject(json) && json.format === IMPORTER_FORMAT, `not a ${IMPORTER_FORMAT} file`);
   if (json.name !== undefined) checkLocalized(json.name, 'name');
@@ -196,6 +225,23 @@ export function parseImporterFile(json: unknown): ImporterFile {
     if (e.raw !== undefined) check(e.raw === true, `${at}: raw must be true`);
     if (e.lifter !== undefined) check(typeof e.lifter === 'string', `${at}: lifter must be a string`);
     if (e.label !== undefined) checkLocalized(e.label, `${at}: label`);
+    if (e.as !== undefined) check(FIELD_TYPES.has(e.as as FieldType), `${at}: unknown type in as`);
+    if (e.format !== undefined) check(typeof e.format === 'string' && isFormat(e.format), `${at}: format must be like YYYY-MM-DD`);
+    if (e.role !== undefined) check(ROLES.includes(e.role as Role), `${at}: unknown role`);
+    if (e.transform !== undefined) {
+      check(Array.isArray(e.transform), `${at}: transform must be a list`);
+      for (const t of e.transform) {
+        try {
+          checkTransform('importer', at, t);
+        } catch (error) {
+          throw new ProjectFileError(error instanceof SpecError ? error.message.replace(/^importer importer: /, '') : `${at}: invalid transform`);
+        }
+      }
+    }
+    if (e.filter !== undefined) {
+      check(Array.isArray(e.filter), `${at}: filter must be a list`);
+      for (const f of e.filter) checkFilter(f, at);
+    }
     if (e.description !== undefined) checkLocalized(e.description, `${at}: description`);
     if (e.aliases !== undefined) {
       check(Array.isArray(e.aliases), `${at}: aliases must be a list`);

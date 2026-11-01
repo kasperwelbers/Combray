@@ -12,3 +12,6 @@ export const importers: ImporterSpec[] = Object.keys(sources)
   .map((path) => parseSpec(sources[path]!));
 
 export const PLATFORMS = ['google-takeout', 'tiktok'] as const;
+
+export { packs, packTree, PACK_IDS } from './packs';
+export type { PlatformPack } from './packs';

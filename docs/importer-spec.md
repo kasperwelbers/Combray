@@ -1,6 +1,6 @@
 # Importer spec reference
 
-An importer turns part of an imported tree into a dataset of rows. It is a YAML (or JSON) file in [`importers/`](../importers/), validated when it is loaded. The ideas behind it are in [universal-importer.md](universal-importer.md); this page is the reference for what is implemented now. The planned successor, where the importer is a set of decisions on the tree, is described in [tree-decisions.md](tree-decisions.md).
+An importer turns part of an imported tree into a dataset of rows. It is a YAML (or JSON) file in [`importers/`](../importers/), validated when it is loaded. The ideas behind it are in [universal-importer.md](universal-importer.md); this page is the reference for what is implemented now. Its successor, where the importer is a set of decisions on the tree, is described in [tree-decisions.md](tree-decisions.md). Projects with upload points already use it; this runner is the fallback for projects without them.
 
 ```yaml
 id: google-takeout/youtube-watch-history   # unique, stable

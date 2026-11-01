@@ -35,6 +35,25 @@ function nextPeriod(key: string, unit: TimeUnit): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * The value of a field, also of a field in a nested table (`subtitles/[*]/name`): nested rows
+ * are kept inside their parent row, so this collects the field from each of them, which is how
+ * views unnest while they count.
+ */
+export function valueAt(row: Row, field: string): FieldValue | undefined {
+  if (field in row) return row[field];
+  for (const [key, nested] of Object.entries(row)) {
+    if (!field.startsWith(`${key}/`) || !Array.isArray(nested)) continue;
+    const rest = field.slice(key.length + 1);
+    return nested.flatMap((child) => {
+      if (child === null || typeof child !== 'object' || Array.isArray(child)) return [];
+      const v = valueAt(child, rest);
+      return v === undefined ? [] : Array.isArray(v) ? v : [v];
+    });
+  }
+  return undefined;
+}
+
 function values(value: FieldValue | undefined): string[] {
   if (value === null || value === undefined || value === '') return [];
   if (Array.isArray(value)) return value.flatMap(values);
@@ -44,7 +63,7 @@ function values(value: FieldValue | undefined): string[] {
 
 export function matches(row: Row, filter: RowFilter, dateField: string | undefined): boolean {
   if (filter.field !== undefined && filter.value !== undefined) {
-    if (!values(row[filter.field]).includes(filter.value)) return false;
+    if (!values(valueAt(row, filter.field)).includes(filter.value)) return false;
   }
   if ((filter.from || filter.to) && dateField) {
     const day = localTime(row[dateField])?.slice(0, 10);
@@ -114,7 +133,7 @@ export function topItems(
   const counts = new Map<string, number>();
   for (const row of all) {
     if (!matches(row, filter, dateField)) continue;
-    for (const v of new Set(values(row[field]))) {
+    for (const v of new Set(values(valueAt(row, field)))) {
       if (!exclude.has(v.toLowerCase())) counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }

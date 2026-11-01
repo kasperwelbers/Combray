@@ -1,4 +1,5 @@
 import {
+  deriveTables,
   getNode,
   isDecidable,
   isLeaf,
@@ -13,7 +14,9 @@ import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { LANGUAGES } from '../i18n';
-import { displayName, formsTable, type NodePatch } from './model';
+import { Conversion } from './Conversion';
+import { displayName, formsTable, pathKey, type NodePatch } from './model';
+import { RowFilters } from './RowFilters';
 
 const LEAF_DECISIONS: LeafDecision[] = ['undecided', 'ignore', 'show', 'donate'];
 
@@ -204,6 +207,16 @@ export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch
           />
           {t('studio.raw')}
         </label>
+      )}
+
+      {isDecidable(node) && node.kind !== 'blob' && <Conversion node={node} onPatch={(p) => onPatch(path, p)} />}
+
+      {(node.name === '[*]' || node.name === '{*}') && !leaf && (
+        <RowFilters
+          node={node}
+          columns={deriveTables(tree).find((table) => pathKey(table.node) === pathKey(path))?.columns ?? []}
+          onPatch={(p) => onPatch(path, p)}
+        />
       )}
 
       {(node.kind === 'map' || node.kind === 'dir') && (

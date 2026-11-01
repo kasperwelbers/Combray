@@ -24,8 +24,10 @@ export {
   matchChild,
   nameMatches,
   isLeaf,
+  knownKeys,
   DecisionError,
   STRUCTURE_FIELDS,
+  ROLES,
 } from './decisions';
 export type {
   ProjectNode,
@@ -35,9 +37,11 @@ export type {
   EffectiveState,
   MergeConflict,
   ShapeComparison,
+  Role,
+  RowFilter,
 } from './decisions';
-export { deriveTables, deriveRows, outline, KEY_COLUMN, VALUE_COLUMN } from './derive';
-export type { TableDef, ColumnDef, DerivedRow, OutlineGroup } from './derive';
+export { deriveTables, deriveRows, convertValue, outline, KEY_COLUMN, VALUE_COLUMN } from './derive';
+export type { TableDef, ColumnDef, DerivedRow, DeriveOptions, OutlineGroup } from './derive';
 export {
   splitProjectTree,
   joinProjectTree,
@@ -48,8 +52,9 @@ export {
   IMPORTER_FORMAT,
 } from './projectFiles';
 export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';
-export { normalizeTree, MIN_REPEATS } from './normalize';
-export { runQuery, queryColumns, unnestPath, rootTable, datePart, QueryError } from './query';
+export { normalizeTree, prepareUpload, MIN_REPEATS } from './normalize';
+export type { NormalizeOptions } from './normalize';
+export { runQuery, queryColumns, unnestPath, rootTable, datePart, test as testCell, QueryError } from './query';
 export type {
   Query,
   Step,
@@ -65,3 +70,5 @@ export type {
 } from './query';
 export { chartQuery, chartData } from './chart';
 export type { ChartSpec, ChartData, ChartPoint } from './chart';
+export { suggestMerges, suggestAfterMerge } from './suggest';
+export type { MergeSuggestion } from './suggest';

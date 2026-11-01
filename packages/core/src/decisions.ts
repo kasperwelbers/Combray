@@ -6,12 +6,26 @@
  * ignored (which covers everything below them). An inner node's effective state is derived
  * from its leaves. Tables are not marked: they are inferred from the structure (derive.ts).
  */
-import type { Localized } from './importer/spec';
+import type { FieldType, Localized, Transform } from './importer/spec';
 import { globMatch } from './path';
+import type { FilterTest } from './query';
 import { COLLAPSED_NAME, countBucket, ITEM_NAME, mergeAll, type CountBucket, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
 export type LeafDecision = 'undecided' | 'ignore' | 'show' | 'donate';
+
+/** What a leaf is for in participant views: the date of a row, its title, its link, or a group. */
+export type Role = 'date' | 'title' | 'url' | 'group';
+export const ROLES: readonly Role[] = ['date', 'title', 'url', 'group'];
+
+/** A condition rows of a table must meet to be imported: a test on one of its columns. */
+export interface RowFilter {
+  /** The column's id: its path from the row, joined with `/`. */
+  column: string;
+  test: FilterTest;
+  /** Keep the rows that do not pass the test instead. */
+  not?: true;
+}
 export type EffectiveState = 'ignore' | 'show' | 'donate';
 
 /** Another name for a node: a glob (`*` wildcard, `\*` literal star) or a regular expression. */
@@ -35,6 +49,16 @@ export interface ProjectNode {
   lifter?: string;
   /** Donated leaves only: donate the value as in the file instead of transformed. */
   raw?: true;
+  /** Leaves: built-in transforms, applied in order before `as`. */
+  transform?: Transform[];
+  /** Leaves: the type to read the value as (a date, a number, a link's domain). */
+  as?: FieldType;
+  /** Leaves read `as: datetime`: how the date is written (`YYYY-MM-DD HH:mm:ss`, `epoch-ms`). */
+  format?: string;
+  /** Leaves: what the value is for in participant views. */
+  role?: Role;
+  /** Repeated nodes (`[*]`, `{*}`): conditions a row must meet, all of them, to be imported. */
+  filter?: RowFilter[];
   label?: Localized;
   /** One participant-facing sentence, for donated leaves. */
   description?: Localized;
@@ -92,6 +116,23 @@ export function nameMatches(node: ProjectNode, name: string): boolean {
       ? globMatch(alias, name)
       : new RegExp(alias.regex, alias.flags).test(name),
   );
+}
+
+/**
+ * Whether a text is a name the project tree knows: a canonical name or an alias, anywhere. For
+ * `NormalizeOptions.keys`: header text in a participant's HTML only becomes a key when the
+ * researcher's tree has it, so text from the file never becomes a new name in a shape.
+ */
+export function knownKeys(root: ProjectNode): (text: string) => boolean {
+  const names = new Set<string>();
+  const aliased: ProjectNode[] = [];
+  const visit = (node: ProjectNode) => {
+    names.add(node.name);
+    if (node.aliases?.length) aliased.push(node);
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(root);
+  return (text) => names.has(text) || aliased.some((node) => nameMatches(node, text));
 }
 
 /** The child of `parent` that a shape or tree node with this kind and name maps to. */

@@ -8,9 +8,12 @@ import {
   projectTreeFromShape,
   setDecision,
   setKeysAreData,
+  suggestAfterMerge,
+  suggestMerges,
   getNode,
   isDecidable,
   type ImporterEntry,
+  type MergeSuggestion,
   type ImporterFile,
   type LeafDecision,
   type NodePath,
@@ -37,58 +40,18 @@ import {
   type NodePatch,
   type Shortcut,
 } from './model';
+import { download, loadDraft, loadView, saveDraft, VIEW_KEY } from './draft';
 import { NodePanel } from './NodePanel';
-import { ChartBuilder } from './ChartBuilder';
-import { Preview } from './Preview';
+import { Suggestions } from './Suggestions';
 
-const DRAFT_KEY = 'combray:studio:draft';
-const VIEW_KEY = 'combray:studio:view';
-
-function loadView(): { view: TreeView; hideIgnored: boolean } {
-  try {
-    const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}') as { view?: unknown; hideIgnored?: unknown };
-    return { view: saved.view === 'tree' ? 'tree' : 'fields', hideIgnored: saved.hideIgnored === true };
-  } catch {
-    return { view: 'fields', hideIgnored: false };
-  }
-}
 const PREVIEW_ROWS = 25;
 const PREVIEW_DELAY_MS = 300;
 
-interface Draft {
-  structure: StructureFile;
-  importer: ImporterFile;
-}
+import { ChartBuilder } from './ChartBuilder';
+import { Preview } from './Preview';
 
-/** The draft holds structure and settings only, never values from the exports. */
-function loadDraft(): { tree?: ProjectNode; pending: ImporterEntry[] } {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return { pending: [] };
-    const draft = JSON.parse(raw) as Draft;
-    return fromFiles(parseStructureFile(draft.structure), parseImporterFile(draft.importer));
-  } catch {
-    return { pending: [] };
-  }
-}
-
-function saveDraft(tree: ProjectNode | undefined, pending: ImporterEntry[]): void {
-  try {
-    if (!tree) localStorage.removeItem(DRAFT_KEY);
-    else localStorage.setItem(DRAFT_KEY, JSON.stringify(toFiles(tree, pending)));
-  } catch {
-    // Without local storage the draft lives as long as the tab.
-  }
-}
-
-function download(name: string, content: unknown): void {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+const samePair = (a: Pick<MergeSuggestion, 'from' | 'into'>, b: Pick<MergeSuggestion, 'from' | 'into'>) =>
+  pathKey(a.from) === pathKey(b.from) && pathKey(a.into) === pathKey(b.into);
 
 /** Ancestors of a path, to open them in the tree. */
 const ancestorsOf = (path: NodePath) => path.slice(0, -1).map((_, i) => pathKey(path.slice(0, i + 1)));
@@ -111,6 +74,7 @@ export function Studio() {
   const [progress, setProgress] = useState<ImportProgress>();
   const [message, setMessage] = useState<{ text: string; error?: boolean }>();
   const [preview, setPreview] = useState<PreviewTable[]>([]);
+  const [suggestions, setSuggestions] = useState<MergeSuggestion[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => saveDraft(tree, pending), [tree, pending]);
@@ -156,6 +120,7 @@ export function Studio() {
       const { export: info, shape } = await addExport(uploads, setProgress);
       setExports((e) => [...e, info]);
       if (tree) {
+        setSuggestions((s) => [...s, ...suggestMerges(tree, shape)]);
         const merged = mergeShape(tree, shape);
         settle(merged.tree, pending);
         setMessage({ text: t('studio.added', { count: merged.added.length }) });
@@ -189,7 +154,10 @@ export function Studio() {
       }
       // An opened structure adds to the tree; an opened importer replaces the settings.
       let next = tree ?? projectTreeFromShape(structure?.root ?? { kind: 'dir', name: '' });
-      if (structure && tree) next = mergeShape(next, structure.root).tree;
+      if (structure && tree) {
+        setSuggestions((s) => [...s, ...suggestMerges(tree, structure.root)]);
+        next = mergeShape(next, structure.root).tree;
+      }
       const settings = importer ?? toFiles(next, pending).importer;
       const joined = fromFiles(toFiles(next, []).structure, settings);
       setTree(joined.tree);
@@ -214,6 +182,7 @@ export function Studio() {
     setSelected(undefined);
     setOpen(new Set());
     setMessage(undefined);
+    setSuggestions([]);
   }
 
   function decide(path: NodePath, decision: LeafDecision) {
@@ -269,6 +238,13 @@ export function Studio() {
     if (!tree) return;
     try {
       const result = mergeNodes(tree, from, into);
+      // What was inside both now sits side by side: suggest pairs there next.
+      const next = suggestAfterMerge(tree, from, into);
+      setSuggestions((s) =>
+        [...next, ...s.filter((x) => !samePair(x, { from, into }))].filter(
+          (x) => getNode(result.tree, x.from) && getNode(result.tree, x.into),
+        ),
+      );
       setTree(result.tree);
       setSelected(into);
       setOpen((o) => new Set([...o, ...ancestorsOf(into)]));
@@ -346,6 +322,17 @@ export function Studio() {
 
       {tree && counts && (
         <>
+          <Suggestions
+            suggestions={suggestions}
+            onMerge={(s) => merge(s.from, s.into)}
+            onDismiss={(s) => setSuggestions((all) => all.filter((x) => !samePair(x, s)))}
+            onShow={(path) => {
+              setViewSettings({ view: 'tree', hideIgnored });
+              setOpen((o) => new Set([...o, ...ancestorsOf(path)]));
+              setSelected(path);
+            }}
+          />
+
           <section aria-labelledby="studio-decisions" className="studio-section">
             <h2 id="studio-decisions">{t('studio.decisionsTitle')}</h2>
             <p className="meta">

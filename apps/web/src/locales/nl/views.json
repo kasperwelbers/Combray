@@ -21,5 +21,6 @@
   "undatedCount_other": "{{count}} onderdelen hebben geen datum.",
   "groupBy": "Tellen per",
   "distinct_one": "{{count}} verschillende waarde in totaal.",
-  "distinct_other": "{{count}} verschillende waarden in totaal."
+  "distinct_other": "{{count}} verschillende waarden in totaal.",
+  "table": "Tabel"
 }
