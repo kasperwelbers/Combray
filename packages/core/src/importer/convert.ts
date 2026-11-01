@@ -62,6 +62,7 @@ const MONTHS: Record<string, string> = {
   januar: 'Jan', februar: 'Feb', 'märz': 'Mar', mai: 'May', dezember: 'Dec', dez: 'Dec',
   janvier: 'Jan', 'février': 'Feb', mars: 'Mar', avril: 'Apr', juin: 'Jun', juillet: 'Jul',
   'août': 'Aug', septembre: 'Sep', octobre: 'Oct', novembre: 'Nov', 'décembre': 'Dec',
+  'mär': 'Mar', janv: 'Jan', 'févr': 'Feb', avr: 'Apr', juil: 'Jul', 'déc': 'Dec',
 };
 
 function pad(n: number, width = 2): string {
@@ -74,8 +75,19 @@ function floating(y: number, mo: number, d: number, h = 0, mi = 0, s = 0): strin
   return `${pad(y, 4)}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}:${pad(s)}`;
 }
 
+const ENGLISH_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/** The month (1 to 12) of a month name or abbreviation, in English, Dutch, German or French. */
+function monthNumber(word: string): number | undefined {
+  const w = word.replace('.', '').toLowerCase();
+  const english = (MONTHS[w] ?? w).toLowerCase();
+  const n = ENGLISH_MONTHS.findIndex((m) => english.startsWith(m));
+  return n >= 0 ? n + 1 : undefined;
+}
+
 const TOKENS: Record<string, string> = {
   YYYY: '(?<Y>\\d{4})',
+  MMM: '(?<N>\\p{L}+)',
   MM: '(?<M>\\d{2})',
   M: '(?<M>\\d{1,2})',
   DD: '(?<D>\\d{2})',
@@ -86,23 +98,24 @@ const TOKENS: Record<string, string> = {
   ss: '(?<s>\\d{2})',
   SSS: '\\d{1,6}',
   A: '(?<A>[AaPp][Mm])',
+  Z: '(?<Z>Z|UTC|GMT|[A-Z]{2,5}|[+-]\\d{2}(?::?\\d{2})?)',
 };
 
 const formatCache = new Map<string, RegExp>();
 function formatRegex(format: string): RegExp {
   let re = formatCache.get(format);
   if (!re) {
-    const source = format.replace(/YYYY|SSS|MM|DD|HH|mm|ss|M|D|H|A|[.*+?^${}()|[\]\\]/g, (t) =>
+    const source = format.replace(/YYYY|MMM|SSS|MM|DD|HH|mm|ss|M|D|H|A|Z|[.*+?^${}()|[\]\\]/g, (t) =>
       TOKENS[t] ?? `\\${t}`,
     );
-    re = new RegExp(`^${source}$`);
+    re = new RegExp(`^${source}$`, 'u');
     formatCache.set(format, re);
   }
   return re;
 }
 
 /**
- * Parse a date. With a `format` (tokens YYYY MM M DD D HH H mm ss SSS A, or epoch-s,
+ * Parse a date. With a `format` (tokens YYYY MMM MM M DD D HH H mm ss SSS A Z, or epoch-s,
  * epoch-ms, epoch-us) the value must match it. Without one, ISO 8601 and common written forms
  * are tried. Values with a zone become UTC ISO strings (`...Z`); values without one stay
  * floating (`YYYY-MM-DDTHH:mm:ss`), as the participant's local time.
@@ -122,7 +135,15 @@ export function parseDate(raw: string, format?: string): string | null {
     if (!g) return null;
     let hour = Number(g.h ?? 0);
     if (g.A) hour = (hour % 12) + (g.A.toLowerCase() === 'pm' ? 12 : 0);
-    return floating(Number(g.Y), Number(g.M ?? 1), Number(g.D ?? 1), hour, Number(g.m ?? 0), Number(g.s ?? 0));
+    const month = g.N !== undefined ? monthNumber(g.N) : Number(g.M ?? 1);
+    if (month === undefined) return null;
+    const local = floating(Number(g.Y), month, Number(g.D ?? 1), hour, Number(g.m ?? 0), Number(g.s ?? 0));
+    // An offset or UTC makes the time absolute; a zone abbreviation is dropped, as below.
+    const zone = g.Z && /^(Z|UTC|GMT)$/.test(g.Z) ? 'Z' : g.Z?.match(/^[+-]/) ? g.Z : undefined;
+    if (!local || zone === undefined) return local;
+    const offset = zone === 'Z' ? 'Z' : zone.replace(/^([+-]\d{2})$/, '$1:00').replace(/^([+-]\d{2})(\d{2})$/, '$1:$2');
+    const date = new Date(`${local}${offset}`);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
   }
   const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?\s?(Z|UTC|[+-]\d{2}:?\d{2})?$/.exec(s);
   if (iso) {
