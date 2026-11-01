@@ -1,5 +1,4 @@
 import {
-  deriveTables,
   getNode,
   isDecidable,
   isLeaf,
@@ -15,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { LANGUAGES } from '../i18n';
 import { Conversion } from './Conversion';
-import { displayName, formsTable, pathKey, type NodePatch } from './model';
+import { displayName, filterColumns, formsTable, type NodePatch } from './model';
 import { RowFilters } from './RowFilters';
 
 const LEAF_DECISIONS: LeafDecision[] = ['undecided', 'ignore', 'show', 'donate'];
@@ -214,7 +213,7 @@ export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch
       {(node.name === '[*]' || node.name === '{*}') && !leaf && (
         <RowFilters
           node={node}
-          columns={deriveTables(tree).find((table) => pathKey(table.node) === pathKey(path))?.columns ?? []}
+          columns={filterColumns(tree, path)}
           onPatch={(p) => onPatch(path, p)}
         />
       )}

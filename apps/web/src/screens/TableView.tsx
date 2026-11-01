@@ -58,7 +58,7 @@ function Cell({ value, column, onOpen }: { value: FieldValue | undefined; column
     const rows = Array.isArray(value) ? (value as Row[]) : [];
     if (rows.length === 0) return <span className="meta">–</span>;
     // One nested row (a video's channel) shows its first value; more show how many there are.
-    const first = column.columns?.[0];
+    const first = column.columns?.find((c) => c.type !== 'table');
     const label = rows.length === 1 && first ? text(rows[0]![first.id]) : '';
     return (
       <button type="button" className="link-button" onClick={onOpen}>

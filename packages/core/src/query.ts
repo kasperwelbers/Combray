@@ -149,6 +149,22 @@ function compare(a: Cell, b: Cell): number {
   return s < t ? -1 : s > t ? 1 : 0;
 }
 
+// Filters test every row, so each pattern is compiled once. Patterns come from signed project
+// files and the researcher's own workspace; one that does not compile matches nothing.
+const patterns = new Map<string, RegExp | null>();
+function pattern(source: string, flags: string): RegExp | null {
+  const key = `${flags}/${source}`;
+  if (!patterns.has(key)) {
+    if (patterns.size > 200) patterns.clear();
+    try {
+      patterns.set(key, new RegExp(source, flags));
+    } catch {
+      patterns.set(key, null);
+    }
+  }
+  return patterns.get(key)!;
+}
+
 /** Whether a cell passes a filter test. A list cell passes when any item does. */
 export function test(value: Cell, t: FilterTest): boolean {
   if ('empty' in t) return isEmpty(value) === t.empty;
@@ -156,7 +172,7 @@ export function test(value: Cell, t: FilterTest): boolean {
   if ('equals' in t) return value === t.equals || (value !== null && String(value) === String(t.equals));
   if ('in' in t) return t.in.some((x) => test(value, { equals: x }));
   if ('contains' in t) return value !== null && String(value).toLowerCase().includes(t.contains.toLowerCase());
-  if ('matches' in t) return value !== null && new RegExp(t.matches, t.flags === 'i' ? 'i' : '').test(String(value));
+  if ('matches' in t) return value !== null && (pattern(t.matches, t.flags === 'i' ? 'i' : '')?.test(String(value)) ?? false);
   if (isEmpty(value)) return false;
   if (t.min !== undefined && t.min !== null && compare(value, t.min) < 0) return false;
   if (t.max !== undefined && t.max !== null && compare(value, t.max) > 0) return false;

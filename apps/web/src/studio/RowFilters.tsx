@@ -44,7 +44,8 @@ export function RowFilters({
 }) {
   const { t, i18n } = useTranslation(undefined, { lng: 'en' });
   const usable = columns.filter((c) => c.type === 'value' || c.type === 'list' || c.type === 'key');
-  const [column, setColumn] = useState('');
+  const [picked, setColumn] = useState('');
+  const column = usable.some((c) => c.id === picked) ? picked : (usable[0]?.id ?? '');
   const [kind, setKind] = useState<TestKind>('empty');
   const [text, setText] = useState('');
   const [exclude, setExclude] = useState(false);
@@ -58,8 +59,7 @@ export function RowFilters({
 
   function add(event: FormEvent) {
     event.preventDefault();
-    const target = column || usable[0]?.id;
-    if (!target || (needsText && text === '')) return;
+    if (!column || (needsText && text === '')) return;
     if (kind === 'matches') {
       try {
         new RegExp(text);
@@ -70,7 +70,7 @@ export function RowFilters({
     }
     setError(false);
     setText('');
-    onPatch({ filter: [...filters, toFilter(target, kind, text, exclude)] });
+    onPatch({ filter: [...filters, toFilter(column, kind, text, exclude)] });
   }
 
   if (usable.length === 0) return null;
@@ -97,7 +97,7 @@ export function RowFilters({
       <form className="filter-form" onSubmit={add}>
         <label className="field">
           <span>{t('studio.filterColumn')}</span>
-          <select value={column || usable[0]!.id} onChange={(e) => setColumn(e.target.value)}>
+          <select value={column} onChange={(e) => setColumn(e.target.value)}>
             {usable.map((c) => (
               <option key={c.id} value={c.id}>
                 {localize(c.name, i18n.language) || (c.type === 'key' ? t('studio.keyColumn') : t('studio.valueColumn'))}

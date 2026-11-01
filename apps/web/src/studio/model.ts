@@ -3,6 +3,7 @@
  * The core does the decision logic (`@combray/core`); this is what the screens need on top.
  */
 import {
+  deriveTables,
   getNode,
   isDecidable,
   isLeaf,
@@ -12,11 +13,27 @@ import {
   type ImporterEntry,
   type ImporterFile,
   type NodePath,
+  type ColumnDef,
   type ProjectNode,
   type StructureFile,
 } from '@combray/core';
 
 export const pathKey = (path: NodePath) => JSON.stringify(path);
+
+const undecided = (node: ProjectNode): ProjectNode => {
+  const { decision: _decision, ...rest } = node;
+  return node.children ? { ...rest, children: node.children.map(undecided) } : rest;
+};
+
+/**
+ * The columns a filter on the table at `path` can test: every field of its rows, also ignored
+ * ones (an "ad" marker the study does not keep), since filters may read columns they do not
+ * show. Column ids are paths from the row, so they do not depend on the decisions.
+ */
+export function filterColumns(tree: ProjectNode, path: NodePath): ColumnDef[] {
+  const key = pathKey(path);
+  return deriveTables(undecided(tree)).find((table) => pathKey(table.node) === key)?.columns ?? [];
+}
 
 export const isRepeatedName = (name: string) => name === '[*]' || name === '{*}';
 
