@@ -175,6 +175,22 @@ describe('deriveRows', () => {
     expect(deriveRows(tweets, tree, deriveTables(tree))[1]).toEqual([]);
   });
 
+  it('filters on ignored fields and on nested tables without showing them', () => {
+    const tree = projectTreeFromShape(extractShape(tweets));
+    const item = getNode(tree, ['tweets', '[*]'])!;
+    getNode(item, ['stats'])!.decision = 'ignore';
+    item.filter = [
+      { column: 'stats/likes', test: { min: 1 } },
+      { column: 'comments/[*]', test: { min: 1 } },
+    ];
+    const tables = deriveTables(tree);
+    expect(tables[1]!.hidden?.map((c) => [c.id, c.type])).toEqual([['stats/likes', 'value']]);
+    const [, rows] = deriveRows(tweets, tree, tables);
+    expect(rows!.map((r) => r.values)).toEqual([
+      { 'tags/[*]': ['baking', 'tea'], text: 'Madeleines today', 'comments/[*]': 2 },
+    ]);
+  });
+
   it('matches renamed keys through aliases', () => {
     const tree: ProjectNode = base();
     tree.children![0]!.children!.find((c) => c.name === 'time')!.aliases = ['date'];

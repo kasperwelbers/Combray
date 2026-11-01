@@ -1,0 +1,701 @@
+{
+  "format": "combray-structure@1",
+  "root": {
+    "kind": "dir",
+    "name": "",
+    "children": [
+      {
+        "kind": "dir",
+        "name": "Chrome",
+        "children": [
+          {
+            "kind": "map",
+            "name": "BrowserHistory.json",
+            "children": [
+              {
+                "kind": "list",
+                "name": "Browser History",
+                "count": "2-10",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "client_id",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "favicon_url",
+                        "types": [
+                          "url-like"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "page_transition",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "map",
+                        "name": "ptoken"
+                      },
+                      {
+                        "kind": "value",
+                        "name": "time_usec",
+                        "types": [
+                          "int"
+                        ],
+                        "formats": [
+                          "epoch-us"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "title",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "url",
+                        "types": [
+                          "url-like"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "dir",
+        "name": "My Activity",
+        "children": [
+          {
+            "kind": "dir",
+            "name": "Search",
+            "children": [
+              {
+                "kind": "list",
+                "name": "MyActivity.json",
+                "count": "2-10",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "header",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "list",
+                        "name": "products",
+                        "count": "1",
+                        "children": [
+                          {
+                            "kind": "value",
+                            "name": "[*]",
+                            "types": [
+                              "string"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "time",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DDTHH:mm:ss.SSSZ"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "title",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "titleUrl",
+                        "types": [
+                          "url-like"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "element",
+                "name": "MijnActiviteit.html",
+                "children": [
+                  {
+                    "kind": "element",
+                    "name": "html",
+                    "children": [
+                      {
+                        "kind": "element",
+                        "name": "body",
+                        "children": [
+                          {
+                            "kind": "element",
+                            "name": "div.mdl-grid",
+                            "children": [
+                              {
+                                "kind": "list",
+                                "name": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell",
+                                "count": "2-10",
+                                "children": [
+                                  {
+                                    "kind": "element",
+                                    "name": "[*]",
+                                    "children": [
+                                      {
+                                        "kind": "element",
+                                        "name": "div.mdl-grid",
+                                        "children": [
+                                          {
+                                            "kind": "element",
+                                            "name": "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption",
+                                            "children": [
+                                              {
+                                                "kind": "value",
+                                                "name": "#text[0]",
+                                                "types": [
+                                                  "string"
+                                                ]
+                                              },
+                                              {
+                                                "kind": "element",
+                                                "name": "b[0]",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "kind": "element",
+                                            "name": "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1",
+                                            "children": [
+                                              {
+                                                "kind": "value",
+                                                "name": "#text[0]",
+                                                "types": [
+                                                  "string"
+                                                ]
+                                              },
+                                              {
+                                                "kind": "value",
+                                                "name": "#text[1]",
+                                                "types": [
+                                                  "date-like"
+                                                ],
+                                                "formats": [
+                                                  "D MMM YYYY, H:mm:ss Z"
+                                                ]
+                                              },
+                                              {
+                                                "kind": "element",
+                                                "name": "a[0]",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  },
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "@href",
+                                                    "types": [
+                                                      "url-like"
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "kind": "element",
+                                            "name": "div.header-cell.mdl-cell.mdl-cell--12-col",
+                                            "children": [
+                                              {
+                                                "kind": "element",
+                                                "name": "p.mdl-typography--title",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "dir",
+        "name": "YouTube and YouTube Music",
+        "children": [
+          {
+            "kind": "dir",
+            "name": "history",
+            "children": [
+              {
+                "kind": "list",
+                "name": "search-history.json",
+                "count": "2-10",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "header",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "time",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DDTHH:mm:ss.SSSZ"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "title",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "titleUrl",
+                        "types": [
+                          "url-like"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "list",
+                "name": "watch-history.json",
+                "count": "2-10",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "list",
+                        "name": "activityControls",
+                        "count": "1",
+                        "children": [
+                          {
+                            "kind": "value",
+                            "name": "[*]",
+                            "types": [
+                              "string"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "list",
+                        "name": "details",
+                        "count": "1",
+                        "children": [
+                          {
+                            "kind": "map",
+                            "name": "[*]",
+                            "children": [
+                              {
+                                "kind": "value",
+                                "name": "name",
+                                "types": [
+                                  "string"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "header",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "list",
+                        "name": "products",
+                        "count": "1",
+                        "children": [
+                          {
+                            "kind": "value",
+                            "name": "[*]",
+                            "types": [
+                              "string"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "list",
+                        "name": "subtitles",
+                        "count": "1",
+                        "children": [
+                          {
+                            "kind": "map",
+                            "name": "[*]",
+                            "children": [
+                              {
+                                "kind": "value",
+                                "name": "name",
+                                "types": [
+                                  "string"
+                                ]
+                              },
+                              {
+                                "kind": "value",
+                                "name": "url",
+                                "types": [
+                                  "url-like"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "time",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DDTHH:mm:ss.SSSZ"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "title",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "titleUrl",
+                        "types": [
+                          "url-like"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "element",
+                "name": "kijkgeschiedenis.html",
+                "children": [
+                  {
+                    "kind": "element",
+                    "name": "html",
+                    "children": [
+                      {
+                        "kind": "element",
+                        "name": "body",
+                        "children": [
+                          {
+                            "kind": "element",
+                            "name": "div.mdl-grid",
+                            "children": [
+                              {
+                                "kind": "list",
+                                "name": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell",
+                                "count": "2-10",
+                                "children": [
+                                  {
+                                    "kind": "element",
+                                    "name": "[*]",
+                                    "children": [
+                                      {
+                                        "kind": "element",
+                                        "name": "div.mdl-grid",
+                                        "children": [
+                                          {
+                                            "kind": "element",
+                                            "name": "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption",
+                                            "children": [
+                                              {
+                                                "kind": "value",
+                                                "name": "#text[0]",
+                                                "types": [
+                                                  "string"
+                                                ]
+                                              },
+                                              {
+                                                "kind": "value",
+                                                "name": "#text[1]",
+                                                "types": [
+                                                  "string"
+                                                ]
+                                              },
+                                              {
+                                                "kind": "element",
+                                                "name": "b[0]",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "kind": "element",
+                                                "name": "b[1]",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "kind": "element",
+                                            "name": "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1",
+                                            "children": [
+                                              {
+                                                "kind": "value",
+                                                "name": "#text[0]",
+                                                "types": [
+                                                  "string"
+                                                ]
+                                              },
+                                              {
+                                                "kind": "value",
+                                                "name": "#text[1]",
+                                                "types": [
+                                                  "date-like"
+                                                ],
+                                                "formats": [
+                                                  "D MMM YYYY, H:mm:ss Z"
+                                                ]
+                                              },
+                                              {
+                                                "kind": "element",
+                                                "name": "a[0]",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  },
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "@href",
+                                                    "types": [
+                                                      "url-like"
+                                                    ]
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "kind": "element",
+                                                "name": "a[1]",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  },
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "@href",
+                                                    "types": [
+                                                      "url-like"
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "kind": "element",
+                                            "name": "div.header-cell.mdl-cell.mdl-cell--12-col",
+                                            "children": [
+                                              {
+                                                "kind": "element",
+                                                "name": "p.mdl-typography--title",
+                                                "children": [
+                                                  {
+                                                    "kind": "value",
+                                                    "name": "#text[0]",
+                                                    "types": [
+                                                      "string"
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "dir",
+            "name": "subscriptions",
+            "children": [
+              {
+                "kind": "list",
+                "name": "subscriptions.csv",
+                "count": "2-10",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "Channel Id",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Channel URL",
+                        "types": [
+                          "url-like"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Channel title",
+                        "types": [
+                          "string"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "element",
+        "name": "archive_browser.html",
+        "children": [
+          {
+            "kind": "element",
+            "name": "html",
+            "children": [
+              {
+                "kind": "element",
+                "name": "body",
+                "children": [
+                  {
+                    "kind": "element",
+                    "name": "h1",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "#text[0]",
+                        "types": [
+                          "string"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

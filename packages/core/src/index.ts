@@ -24,6 +24,7 @@ export {
   matchChild,
   nameMatches,
   isLeaf,
+  knownKeys,
   DecisionError,
   STRUCTURE_FIELDS,
   ROLES,
@@ -51,7 +52,7 @@ export {
   IMPORTER_FORMAT,
 } from './projectFiles';
 export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';
-export { normalizeTree, MIN_REPEATS } from './normalize';
+export { normalizeTree, prepareUpload, MIN_REPEATS } from './normalize';
 export type { NormalizeOptions } from './normalize';
 export { runQuery, queryColumns, unnestPath, rootTable, datePart, test as testCell, QueryError } from './query';
 export type {

@@ -68,6 +68,11 @@ export interface TableDef {
   columns: ColumnDef[];
   /** Conditions rows must meet to be imported, from the repeated node. */
   filter?: RowFilter[];
+  /**
+   * Columns filters need that the table does not show (an ignored "from ads" field): read to
+   * test rows, never kept in them.
+   */
+  hidden?: ColumnDef[];
 }
 
 export const KEY_COLUMN = '{key}';
@@ -271,6 +276,17 @@ export function deriveTables(root: ProjectNode): TableDef[] {
       });
     }
   });
+  for (const table of tables) {
+    const hidden = (table.filter ?? []).flatMap((f): ColumnDef[] => {
+      if (table.columns.some((c) => c.id === f.column)) return [];
+      const path = f.column.split('/');
+      const node = getNode(root, [...rowsOf(table), ...path]);
+      if (!node) return [];
+      const type = isLeaf(node) ? (path.includes(ITEM_NAME) ? 'list' : 'value') : node.name === ITEM_NAME ? 'table' : undefined;
+      return type ? [{ id: f.column, name: '', path, type, state: 'show', ...conversion(node) }] : [];
+    });
+    if (hidden.length > 0) table.hidden = hidden;
+  }
   return tables;
 }
 
@@ -328,10 +344,13 @@ export function convertValue(value: unknown, column: Pick<ColumnDef, 'transform'
   return column.as ? convert(out, column.as, column.format) : out;
 }
 
-/** Whether a row meets every filter of its table. A filter on a column the table lacks fails. */
+/**
+ * Whether a row meets every filter of its table. A filter on a column the table lacks fails,
+ * so a filter that no longer fits the structure imports nothing rather than everything.
+ */
 function keeps(table: TableDef, values: Record<string, unknown>): boolean {
   return (table.filter ?? []).every((f) => {
-    if (!table.columns.some((c) => c.id === f.column)) return false;
+    if (!(f.column in values)) return false;
     return test((values[f.column] ?? null) as Cell, f.test) !== (f.not === true);
   });
 }
@@ -370,12 +389,17 @@ export function deriveRows(
       );
     }
     const rowProject = getNode(root, rowPath)!;
+    const filtered = new Set(options.raw ? [] : (table.filter ?? []).map((f) => f.column));
+    const columns = [...table.columns, ...(options.raw ? [] : (table.hidden ?? []))];
     for (const { node, parent } of candidates) {
       const values: Record<string, unknown> = {};
-      for (const column of table.columns) {
-        if (column.type === 'table') continue;
+      for (const column of columns) {
         let value: unknown;
-        if (column.type === 'key') value = node.name;
+        if (column.type === 'table') {
+          // Nested counts are filled in below; a filter on one needs it now.
+          if (!filtered.has(column.id)) continue;
+          value = resolve(node, rowProject, column.path).length;
+        } else if (column.type === 'key') value = node.name;
         else {
           const matches = resolve(node, rowProject, column.path);
           value = column.type === 'list' ? matches.map(leafValue) : matches.length > 0 ? leafValue(matches[0]!) : null;
@@ -383,6 +407,7 @@ export function deriveRows(
         values[column.id] = options.raw ? value : convertValue(value, column);
       }
       if (!options.raw && !keeps(table, values)) continue;
+      for (const column of table.hidden ?? []) delete values[column.id];
       rowNodes[index]!.push(node);
       out[index]!.push(parent === undefined ? { values } : { values, parent });
     }

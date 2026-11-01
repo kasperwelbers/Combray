@@ -19,6 +19,7 @@
  * The input tree is not changed. Directories and other files pass through.
  */
 import { inferType } from './infer';
+import { uploadRoot } from './parse';
 import { elementName } from './shape';
 import type { ElementNode, ListNode, MapNode, TreeNode, ValueNode } from './tree';
 
@@ -306,4 +307,12 @@ export function normalizeTree(node: TreeNode, options: NormalizeOptions = {}): T
     default:
       return node;
   }
+}
+
+/**
+ * An upload as it is matched against a project tree: without its own name, unwrapped from a
+ * single top folder (for archives), and normalised.
+ */
+export function prepareUpload(tree: TreeNode, archive: boolean, options: NormalizeOptions = {}): TreeNode {
+  return normalizeTree(uploadRoot(tree, archive), options);
 }

@@ -118,6 +118,23 @@ export function nameMatches(node: ProjectNode, name: string): boolean {
   );
 }
 
+/**
+ * Whether a text is a name the project tree knows: a canonical name or an alias, anywhere. For
+ * `NormalizeOptions.keys`: header text in a participant's HTML only becomes a key when the
+ * researcher's tree has it, so text from the file never becomes a new name in a shape.
+ */
+export function knownKeys(root: ProjectNode): (text: string) => boolean {
+  const names = new Set<string>();
+  const aliased: ProjectNode[] = [];
+  const visit = (node: ProjectNode) => {
+    names.add(node.name);
+    if (node.aliases?.length) aliased.push(node);
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(root);
+  return (text) => names.has(text) || aliased.some((node) => nameMatches(node, text));
+}
+
 /** The child of `parent` that a shape or tree node with this kind and name maps to. */
 export function matchChild(
   parent: ProjectNode,
