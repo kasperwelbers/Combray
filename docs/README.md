@@ -11,6 +11,7 @@ Suggested reading order:
    - [key-design.md](key-design.md): every key from loading data to analysis and withdrawal, with an [explainer for researchers](explainers/keys.html); participants read the in-app Questions page
 4. [universal-importer.md](universal-importer.md): files as trees, importer specs
    - [tree-decisions.md](tree-decisions.md): importers as decisions on the tree, derived tables, HTML, aliases (design)
+   - [structure-versions.md](structure-versions.md): structure reports, which nodes occur together, and why that keeps merges safe (design)
    - [exploration.md](exploration.md): value formats, the researcher's view of the tree, queries over nested tables, charts
 5. [enrichment.md](enrichment.md): URL metadata with consent
 6. [visualization.md](visualization.md): presenting data and prompting reflection
