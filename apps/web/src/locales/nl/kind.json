@@ -1,0 +1,9 @@
+{
+  "dir": "map",
+  "map": "groep",
+  "list": "lijst",
+  "value": "waarde",
+  "element": "HTML-element",
+  "text": "tekst",
+  "blob": "bestand"
+}

@@ -35,7 +35,7 @@ interface Props {
 
 /** The project tree with a decision control on every row. */
 export function DecisionTree(props: Props) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const children = props.tree.children ?? [];
   if (isLeaf(props.tree)) {
     return (
@@ -54,7 +54,7 @@ export function DecisionTree(props: Props) {
 }
 
 function Row(props: Props & { node: ProjectNode; path: NodePath }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
   const { states, undecided, onlyUndecided, open, selected, actions } = props;
   const chain = foldChain(props.node, props.path);
   const top = chain[0]!;

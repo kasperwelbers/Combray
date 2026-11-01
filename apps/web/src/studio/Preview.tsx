@@ -15,7 +15,8 @@ interface Open {
   parentRow?: number;
 }
 
-/** "View as participant": the tables the current decisions produce from the loaded exports. */
+/** "View as participant": the tables the current decisions produce from the loaded exports. Unlike the rest
+ * of the workspace, which is English only, it follows the chosen language, as participants would see it. */
 export function Preview({ tables, hasExports }: Props) {
   const { t, i18n } = useTranslation();
   const [stack, setStack] = useState<Open[]>([]);

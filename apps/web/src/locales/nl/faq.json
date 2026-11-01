@@ -1,0 +1,104 @@
+{
+  "link": "Vragen",
+  "title": "Vragen en antwoorden",
+  "intro": "Hoe Combray je gegevens veilig houdt, wat er gebeurt als je stopt, en wat je kunt doen als er iets misgaat.",
+  "back": "Terug",
+  "art": {
+    "computer": "Jouw computer",
+    "otherComputer": "Andere computer",
+    "server": "Server",
+    "researcher": "Onderzoeker",
+    "yourData": "je gegevens",
+    "locked": "op slot",
+    "dataKey": "gegevenssleutel",
+    "keyToBox": "sleutel van het kistje",
+    "password": "je wachtwoord",
+    "stays": "dit blijft",
+    "minutes": "15 min",
+    "staysServer": "blijft op de server",
+    "youChoose": "jij kiest",
+    "donation": "donatie",
+    "donationKey": "donatiesleutel",
+    "keptApart": "apart bewaard",
+    "everyCopy": "elke kopie: voorgoed onleesbaar",
+    "package": "pakket",
+    "withPassword": "met je wachtwoord"
+  },
+  "items": {
+    "where": {
+      "q": "Waar zijn mijn gegevens?",
+      "art": "Je gegevens gaan op slot met de gegevenssleutel. Die gaat in een klein kistje, en de server bewaart de sleutel van dat kistje.",
+      "a": [
+        "Op deze computer, en nergens anders, tenzij je ervoor kiest iets te delen. Als je je gegevens toevoegt, maakt je browser een sleutel die alleen op deze computer bestaat: de <b>gegevenssleutel</b>. Daarmee gaan je gegevens op slot, zodat wat er op de schijf staat niet te lezen is.",
+        "De gegevenssleutel zelf gaat in een klein kistje, dat ook op deze computer blijft. De sleutel van dat kistje bewaart de Combray-server van het onderzoek."
+      ]
+    },
+    "server": {
+      "q": "Wat doet de Combray-server?",
+      "a": [
+        "De server wordt beheerd door de universiteit. Hij bewaart de sleutel van je kistje en geeft die alleen terug als je je wachtwoord intypt. Je gegevens krijgt hij nooit, dus hij kan ze ook niet lezen.",
+        "Omdat de server het wachtwoord controleert, krijgt iemand die het probeert te raden een paar pogingen en moet daarna steeds langer wachten."
+      ]
+    },
+    "open": {
+      "q": "Hoe open ik mijn gegevens weer?",
+      "art": "Met je wachtwoord krijg je de sleutel van het kistje van de server. Het kistje gaat open, en de gegevenssleutel opent je gegevens.",
+      "a": [
+        "Typ je wachtwoord. De server controleert het en geeft de sleutel van het kistje. Je browser opent het kistje, pakt de gegevenssleutel en maakt je gegevens open."
+      ]
+    },
+    "stop": {
+      "q": "Wat gebeurt er als ik stop, of wegloop?",
+      "art": "Als je stopt, gooit de browser de sleutels en de leesbare gegevens weg. Versleutelde gegevens en een dicht kistje blijven over.",
+      "a": [
+        "Sluit je de pagina, klik je op <b>Vergrendelen</b>, of laat je Combray een kwartier met rust, dan gooit je browser de sleutels weg, en alles wat open stond.",
+        "Wat overblijft, zijn versleutelde gegevens en een dicht kistje. Zonder de server en je wachtwoord kan niemand ze openen, ook niet iemand die de computer mee naar huis neemt."
+      ]
+    },
+    "forgot": {
+      "q": "Ik ben mijn wachtwoord vergeten. Wat nu?",
+      "a": [
+        "Doe je mee via een persoonlijke link, dan kunnen de onderzoekers je helpen. Ze controleren of jij het echt bent en sturen je een link om een nieuw wachtwoord te kiezen. Open die link op de computer waar je je gegevens hebt toegevoegd.",
+        "Zonder persoonlijke link kan niemand de gegevens nog openen, ook de onderzoekers niet. Je kunt opnieuw beginnen en je gegevens nog een keer toevoegen."
+      ]
+    },
+    "who": {
+      "q": "Wie kan mijn gegevens zien?",
+      "a": [
+        "Alleen jij, op deze computer, nadat je je wachtwoord hebt getypt. De server kan ze niet lezen, en de onderzoekers zien alleen wat jij kiest om te delen.",
+        "Eén eerlijke kanttekening: iemand die de server beheert én deze computer in handen heeft, kan met die twee samen de gegevens erop openen. Daarom beheert de universiteit de server, volgens haar regels, en kun je altijd alles verwijderen als je klaar bent."
+      ]
+    },
+    "share": {
+      "q": "Wat gebeurt er als ik mijn gegevens deel?",
+      "art": "Jij kiest wat je deelt. Dat gaat op slot met een nieuwe donatiesleutel, die in het kistje van de onderzoeker gaat. De server bewaart ze apart.",
+      "a": [
+        "Je kiest precies wat je deelt. Je browser maakt een nieuwe sleutel speciaal voor deze donatie, de <b>donatiesleutel</b>, en doet je selectie daarmee op slot. De rest van je gegevens blijft op deze computer, en de onderzoekers krijgen daar nooit de sleutel van.",
+        "De donatiesleutel gaat in het kistje van de onderzoeker. Dat werkt als een brievenbus: iedereen kan er iets in doen, maar alleen de onderzoeker heeft de sleutel die hem opent. De server bewaart je donatie en het kistje op aparte plekken, en kan geen van beide openen."
+      ]
+    },
+    "withdraw": {
+      "q": "Kan ik me na het delen nog bedenken?",
+      "art": "Trek je je donatie in, dan gooit de server het kistje weg, en is elke kopie van de donatie voorgoed onleesbaar.",
+      "a": [
+        "Ja. Trek je je donatie in, dan gooit de server het kistje met de donatiesleutel weg. Vanaf dat moment is elke kopie van je donatie onleesbaar, waar die ook staat, ook op de computer van de onderzoeker. De laatste reservekopieën van de server zijn binnen {{days}} dagen weg.",
+        "Hebben de onderzoekers je donatie al gelezen, dan kunnen ze in theorie iets opschrijven of een kopie bewaren. Ze beloven dat niet te doen, en hun programma's maken niet bewaren de makkelijke weg."
+      ]
+    },
+    "package": {
+      "q": "Kan ik mijn gegevens bewaren, of meenemen naar een andere computer?",
+      "art": "Download je versleutelde gegevens als één bestand, en open het op een andere computer met je wachtwoord.",
+      "a": [
+        "Je kunt je gegevens downloaden als één afgesloten bestand, een <b>Combray-pakket</b>. Het opent op elke computer, maar pas nadat je je wachtwoord typt. Zo kun je het veilig bewaren, meenemen, of de oorspronkelijke download van je computer verwijderen.",
+        "Verwijder je alles in Combray, dan gaat ook het pakket niet meer open."
+      ]
+    },
+    "delete": {
+      "q": "Hoe verwijder ik alles?",
+      "a": [
+        "Open je gegevens en kies onderaan de pagina <b>Alles voor dit onderzoek van deze computer verwijderen</b>. Ben je je wachtwoord vergeten, kies dan <b>opnieuw beginnen</b> op het wachtwoordscherm.",
+        "De server vergeet dan de sleutel van je kistje, zodat zelfs een kopie van de schijf van deze computer niet meer open kan. Daarna verwijdert je browser de gegevens zelf."
+      ]
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 This document follows one participant's data from the moment it is loaded to the moment a researcher analyses it, and names every key on the way. It is the agreed plan ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The local store part is built; donations, the package export and the researcher tools are not yet. [security.md](security.md) records the details of what is built, and [privacy-and-encryption.md](privacy-and-encryption.md) the threat model and constructions.
 
-For a plain-language version with pictures, see [the explainer](explainer/keys.html).
+For a version with pictures, see [the explainer for researchers](explainers/keys.html). Participants get the same story in the app, on the Questions page (`/{project}/faq`, `apps/web/src/screens/Faq.tsx`).
 
 ## In one paragraph
 
@@ -74,7 +74,11 @@ A participant withdraws with their withdrawal token, or asks the researcher, who
 
 From that moment no copy of the donation can be opened, wherever it is: not the researcher's local cache, not a backup of the donation storage.
 
-**Backups are the weak spot.** A backup of the key database brings withdrawn keys back. The key database is therefore a separate file with a short, documented backup retention (proposed: 30 days), and participants are told that withdrawal is complete within that time. Donation storage can be backed up as long as the institution likes: without keys it is ciphertext.
+**Backups are the weak spot.** A backup of the key database brings withdrawn keys back. The key database is therefore a separate file with its own backup retention, and participants are told that withdrawal is complete within that time. Donation storage can be backed up as long as the institution likes: without keys it is ciphertext.
+
+- **A setting, `COMBRAY_KEY_BACKUP_RETENTION_DAYS`, 30 by default.** The server publishes it to the client, which shows it on the Questions page and the withdrawal screen. The deployment guide asks the institution to set its backups of the key database to match. Combray does not make the backups itself, so it cannot enforce the number; it states it.
+- **Withdrawals survive a restore.** The withdrawal tombstones live in the donation database, not the key database. On start, the server deletes every sealed key that has a tombstone, so restoring an old key backup cannot bring a withdrawn donation back.
+- **This matches the GDPR.** Erasure must happen "without undue delay" (Art. 17), and requests are answered within a month (Art. 12(3)). Supervisory authorities accept that backups expire on their normal cycle when the data is beyond use until then and the person is told.
 
 ### 7. Forgotten password
 

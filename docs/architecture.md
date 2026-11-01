@@ -80,7 +80,7 @@ Recommendation: **React SPA with Vite**, installable as a PWA so a lab laptop ke
 
 **TypeScript first, Rust/WASM where measured.** The core is TypeScript in a worker ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)). Parsing a 2 GB Takeout and aggregating millions of nodes is where JavaScript may struggle; if measurements show that, the hot path moves to Rust compiled to WASM, tested against the same cases. DuckDB-WASM is an alternative for tabular aggregation; powerful but several megabytes and table-centric, so better as an optional plugin than as the foundation.
 
-**Internationalisation.** i18next, as in DigitalFootprintsLab. English and Dutch from day one; importers carry language variants of file and key names.
+**Internationalisation.** i18next, as in DigitalFootprintsLab. Everything participants see is in English and Dutch from day one; researcher tools and documents are English only. Importers carry language variants of file and key names. How to translate is in [translation.md](translation.md).
 
 ## Combray server
 

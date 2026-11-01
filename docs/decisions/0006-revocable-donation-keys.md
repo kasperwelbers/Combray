@@ -24,7 +24,7 @@ The full flows and the rejected alternatives are in [key-design.md](../key-desig
 ## Consequences
 
 - Withdrawal reaches local copies of the ciphertext, not plaintext that a researcher exported. Saving decrypted data makes the researcher responsible for it under the GDPR.
-- Backups of the key database delay withdrawal; it gets a short documented retention, separate from donation storage.
+- Backups of the key database delay withdrawal. Their retention is a server setting (30 days by default) that participants are told about, and the server re-applies withdrawals after a restore ([key-design.md](../key-design.md#6-withdrawing)).
 - Analysis needs the server to be reachable, and researcher credentials. A stolen private key alone no longer opens donations.
 - Decryption lives in one Rust crate (`combray-crypto`) with bindings for R and Python, so it is not reimplemented per language.
 - The server needs researcher access tokens before donations can be fetched.

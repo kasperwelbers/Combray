@@ -1,0 +1,18 @@
+{
+  "not-found": {
+    "title": "We konden dit onderzoek niet vinden",
+    "text": "Kijk de link die je van de onderzoekers hebt gekregen nog even na."
+  },
+  "unreachable": {
+    "title": "We konden Combray niet bereiken",
+    "text": "Is deze computer verbonden met internet? Probeer het zo nog eens."
+  },
+  "needs-id": {
+    "title": "Dit onderzoek werkt met persoonlijke links",
+    "text": "Open de persoonlijke link die je van de onderzoekers hebt gekregen, zodat je gegevens voor jou bewaard worden."
+  },
+  "reset-no-store": {
+    "title": "Open deze link op je eigen computer",
+    "text": "Met deze link kies je een nieuw wachtwoord voor gegevens die je eerder op een andere computer hebt toegevoegd. Open hem op de computer waar je je gegevens hebt toegevoegd."
+  }
+}

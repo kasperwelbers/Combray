@@ -54,7 +54,7 @@ These apply to every change, however small.
 - TypeScript strict mode in the client; heavy processing runs in web workers, never on the main thread.
 - Rust: stable toolchain, `clippy` clean, no `unsafe` without a comment explaining why.
 - Keep the server small. If something can run in the browser, it runs in the browser.
-- UI copy is warm, plain and non-judgemental (see [docs/design-identity.md](docs/design-identity.md#tone-of-voice)). All user-facing strings go through i18n; Dutch and English are first-class.
+- UI copy is warm, plain and non-judgemental (see [docs/design-identity.md](docs/design-identity.md#tone-of-voice)). All participant-facing strings go through i18n (`apps/web/src/locales/{language}/{feature}.json`, see [docs/translation.md](docs/translation.md)); Dutch and English are first-class, and a test checks they match. Researcher tools and docs are English only.
 - Accessibility: WCAG 2.2 AA, keyboard navigable, respects `prefers-reduced-motion`.
 - Decisions that are hard to reverse get a short ADR in `docs/decisions/`.
 

@@ -97,6 +97,7 @@ It prints a one-time link (valid for 72 hours) that the participant opens on the
 
 - Health endpoint, structured logs without data values, Prometheus metrics (counts and timings only).
 - Backups: the data directory and the bucket contain only ciphertext and metadata; the store master key and project private keys are backed up separately.
+- Backups of the donation key database (planned, with donation storage) are kept no longer than `COMBRAY_KEY_BACKUP_RETENTION_DAYS` (30 by default), because a withdrawn donation is only gone for good once no backup holds its key. Participants are told this number. See [key-design.md](key-design.md#6-withdrawing).
 - Upgrades: database migrations run on startup; the binary refuses to start if a migration would lose data without an explicit flag.
 - Releases: signed binaries for Linux (x86_64, aarch64), macOS and Windows, and a multi-arch image on GHCR, with published SPA bundle hashes.
 

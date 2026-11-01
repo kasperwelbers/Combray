@@ -1,0 +1,17 @@
+{
+  "title": "Add your data",
+  "intro": "Choose the zip file you downloaded from a platform (such as Google Takeout or TikTok), a folder, or single files. Everything is read and kept on this computer only.",
+  "chooseFiles": "Choose files",
+  "chooseFolder": "Choose a folder",
+  "drop": "or drop them here",
+  "failed": "Something went wrong while reading this. Nothing was stored.",
+  "step": {
+    "reading_one": "Reading {{count}} file…",
+    "reading_other": "Reading {{count}} files…",
+    "parsing": "Unpacking and reading…",
+    "shape": "Looking at the structure…",
+    "encrypting": "Storing it safely, encrypted…",
+    "done": "Done",
+    "importers": "Looking for familiar things in it…"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "memories": "Memory lane",
+  "timeline": "Over time",
+  "top": "Most often",
+  "showingOnly": "Showing only",
+  "showAll": "Show everything again",
+  "nothing": "Nothing to show here.",
+  "undated": "Without a date",
+  "untitled": "(no title)",
+  "noDates": "There are no dates in this data.",
+  "per": "Per",
+  "unit": {
+    "day": "day",
+    "week": "week",
+    "month": "month"
+  },
+  "count_one": "{{count}} item",
+  "count_other": "{{count}} items",
+  "timelineCaption": "How many items there are per {{unit}}. The highest bar is {{max}}. Choose a bar to see those memories.",
+  "undatedCount_one": "{{count}} item has no date.",
+  "undatedCount_other": "{{count}} items have no date.",
+  "groupBy": "Count by",
+  "distinct_one": "{{count}} different value in total.",
+  "distinct_other": "{{count}} different values in total."
+}

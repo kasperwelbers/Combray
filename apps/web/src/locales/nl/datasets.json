@@ -1,0 +1,13 @@
+{
+  "files_one": "{{count}} bestand",
+  "files_other": "{{count}} bestanden",
+  "items_one": "{{count}} onderdeel",
+  "items_other": "{{count}} onderdelen",
+  "imported": "Toegevoegd op {{date}}",
+  "open": "Bekijken",
+  "delete": "Verwijderen",
+  "confirmDelete": "“{{name}}” van deze computer verwijderen?",
+  "browse": "Alles doorbladeren",
+  "found": "Wat we vonden",
+  "nothingFound": "We herkennen hier nog niets in, maar je kunt wel alles doorbladeren."
+}

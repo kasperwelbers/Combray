@@ -1,0 +1,9 @@
+{
+  "dir": "folder",
+  "map": "group",
+  "list": "list",
+  "value": "value",
+  "element": "HTML element",
+  "text": "text",
+  "blob": "file"
+}

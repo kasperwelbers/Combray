@@ -76,7 +76,7 @@ const ancestorsOf = (path: NodePath) => path.slice(0, -1).map((_, i) => pathKey(
  * project tree (structure and settings) is kept as a draft in this browser.
  */
 export function Studio() {
-  const { t } = useTranslation();
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const [initial] = useState(loadDraft);
   const [tree, setTree] = useState<ProjectNode | undefined>(initial.tree);
   const [pending, setPending] = useState<ImporterEntry[]>(initial.pending);
