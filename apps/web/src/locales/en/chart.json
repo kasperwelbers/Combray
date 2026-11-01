@@ -1,0 +1,40 @@
+{
+  "empty": "Nothing to draw yet: no rows have a value here.",
+  "timeline": "Timeline of {{measure}}",
+  "bars": "Bars of {{measure}}",
+  "explore": "Chart values; use the arrow keys to move along the timeline",
+  "along": "Along",
+  "count": "Rows of",
+  "per": "Per",
+  "format": "Written as",
+  "show": "Show",
+  "of": "Of",
+  "split": "Split by",
+  "noSplit": "Nothing",
+  "none": "(empty)",
+  "failed": "This chart could not be made from these exports.",
+  "weekOf": "week of {{date}}",
+  "rowsOf": "Number of rows in {{table}}",
+  "showTable": "Show as a table",
+  "showChart": "Show as a chart",
+  "moreCategories_one": "{{count}} more value not shown",
+  "moreCategories_other": "{{count}} more values not shown",
+  "moreSeries_one": "{{count}} more series not shown",
+  "moreSeries_other": "{{count}} more series not shown",
+  "part": {
+    "year": "year",
+    "month": "month",
+    "week": "week",
+    "day": "day",
+    "weekday": "day of the week",
+    "hour": "hour of the day"
+  },
+  "measure": {
+    "count": "Number of rows",
+    "sum": "Sum of {{column}}",
+    "mean": "Average of {{column}}",
+    "min": "Lowest {{column}}",
+    "max": "Highest {{column}}",
+    "distinct": "Different values of {{column}}"
+  }
+}

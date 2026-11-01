@@ -53,7 +53,7 @@ And optionally:
 | `transform` | Built-in transforms, in order (below). |
 | `script` | A JavaScript function `(value, row) => result`, run in the sandbox (below). |
 | `as` | Convert to `string`, `int`, `float`, `bool`, `datetime`, `url`, `domain`, `duration` (seconds) or `json`. Values that do not convert become `null`. |
-| `format` | For `datetime`: tokens `YYYY MM M DD D HH H mm ss SSS A` (e.g. `YYYY-MM-DD HH:mm:ss`), or `epoch-s`, `epoch-ms`, `epoch-us`. Without it, ISO 8601, `DD-MM-YYYY` and written dates in English, Dutch, German and French are recognised. |
+| `format` | For `datetime`: tokens `YYYY MMM MM M DD D HH H mm ss SSS A Z` (e.g. `YYYY-MM-DD HH:mm:ss`; `MMM` is a month name, `Z` a zone or offset), or `epoch-s`, `epoch-ms`, `epoch-us`. Without it, ISO 8601, `DD-MM-YYYY` and written dates in English, Dutch, German and French are recognised. |
 
 Dates with a time zone become UTC (`2024-03-01T09:15:00.000Z`). Dates without one stay as written (`2024-03-04T10:20:30`), which is the participant's local time.
 

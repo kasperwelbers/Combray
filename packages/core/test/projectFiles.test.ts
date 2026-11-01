@@ -9,14 +9,12 @@ import {
   ProjectFileError,
   projectTreeFromShape,
   setDecision,
-  setTable,
   splitProjectTree,
 } from '../src';
 import { watchHistory } from './fixtures';
 
 function decided() {
   let tree = projectTreeFromShape(extractShape(watchHistory));
-  tree = setTable(tree, [], true);
   tree = setDecision(tree, ['[*]', 'time'], 'donate');
   getNode(tree, ['[*]', 'time'])!.label = { en: 'Watched at', nl: 'Bekeken op' };
   getNode(tree, ['[*]', 'title'])!.aliases = ['titel', { regex: '^Title$', flags: 'i' }];
@@ -27,8 +25,8 @@ describe('project files', () => {
   it('split into structure and settings, and join back to the same tree', () => {
     const tree = decided();
     const { structure, importer } = splitProjectTree(tree, 'YouTube');
-    expect(JSON.stringify(structure)).not.toMatch(/decision|label|aliases|table/);
-    expect(importer.entries.map((e) => e.path)).toEqual([[], ['[*]', 'time'], ['[*]', 'title']]);
+    expect(JSON.stringify(structure)).not.toMatch(/decision|label|aliases/);
+    expect(importer.entries.map((e) => e.path)).toEqual([['[*]', 'time'], ['[*]', 'title']]);
     const roundTrip = JSON.parse(JSON.stringify({ structure, importer }));
     const { tree: joined, pending } = joinProjectTree(
       parseStructureFile(roundTrip.structure),
@@ -58,5 +56,16 @@ describe('project files', () => {
       'invalid regular expression',
     );
     expect(() => parseImporterFile(importer({ path: 'a', kind: 'value' }))).toThrow('path');
+  });
+
+  it('accepts formats made of tokens only, so no values can travel in them', () => {
+    const structure = (formats: unknown) => ({
+      format: 'combray-structure@1',
+      root: { kind: 'value', name: '', types: ['date-like'], formats },
+    });
+    expect(() => parseStructureFile(structure(['YYYY-MM-DD', 'MMM D, YYYY, H:mm:ss A Z', 'epoch-ms']))).not.toThrow();
+    expect(() => parseStructureFile(structure(['Marcel YYYY']))).toThrow('formats');
+    expect(() => parseStructureFile(structure(['2024-03-01']))).toThrow('formats');
+    expect(() => parseStructureFile(structure(Array(9).fill('YYYY')))).toThrow('formats');
   });
 });
