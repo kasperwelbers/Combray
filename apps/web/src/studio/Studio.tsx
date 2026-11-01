@@ -7,6 +7,7 @@ import {
   parseStructureFile,
   projectTreeFromShape,
   setDecision,
+  seenTogether,
   setKeysAreData,
   suggestAfterMerge,
   suggestMerges,
@@ -18,6 +19,7 @@ import {
   type LeafDecision,
   type NodePath,
   type ProjectNode,
+  type Shape,
   type StructureFile,
 } from '@combray/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -67,6 +69,8 @@ export function Studio() {
   const [tree, setTree] = useState<ProjectNode | undefined>(initial.tree);
   const [pending, setPending] = useState<ImporterEntry[]>(initial.pending);
   const [exports, setExports] = useState<StudioExport[]>([]);
+  /** The shapes of the loaded exports: what each one has, to tell which nodes occur together. */
+  const [shapes, setShapes] = useState<Map<number, Shape>>(new Map());
   const [selected, setSelected] = useState<NodePath>();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [onlyUndecided, setOnlyUndecided] = useState(false);
@@ -100,6 +104,16 @@ export function Studio() {
     };
   }, [tree, exports]);
 
+  // Nodes that occur together in a loaded export are different nodes: never suggest merging them.
+  const together = useCallback(
+    (from: NodePath, into: NodePath) => (tree ? seenTogether(tree, [...shapes.values()], from, into) : 0),
+    [tree, shapes],
+  );
+  const shownSuggestions = useMemo(
+    () => suggestions.filter((s) => together(s.from, s.into) === 0),
+    [suggestions, together],
+  );
+
   const states = useMemo(() => (tree ? effectiveStates(tree) : new Map()), [tree]);
   const undecided = useMemo(() => (tree ? undecidedBelow(tree, states) : new Map()), [tree, states]);
   const counts = useMemo(() => (tree ? countDecisions(tree, states) : undefined), [tree, states]);
@@ -119,6 +133,7 @@ export function Studio() {
     try {
       const { export: info, shape } = await addExport(uploads, setProgress);
       setExports((e) => [...e, info]);
+      setShapes((m) => new Map(m).set(info.id, shape));
       if (tree) {
         setSuggestions((s) => [...s, ...suggestMerges(tree, shape)]);
         const merged = mergeShape(tree, shape);
@@ -139,6 +154,11 @@ export function Studio() {
   async function removeExport(id: number) {
     await studio.removeExport(id);
     setExports((e) => e.filter((x) => x.id !== id));
+    setShapes((m) => {
+      const next = new Map(m);
+      next.delete(id);
+      return next;
+    });
   }
 
   async function openFiles(files: FileList | null) {
@@ -236,6 +256,11 @@ export function Studio() {
 
   function merge(from: NodePath, into: NodePath) {
     if (!tree) return;
+    const count = together(from, into);
+    if (count > 0) {
+      setMessage({ text: t('studio.mergeTogether', { count }), error: true });
+      return;
+    }
     try {
       const result = mergeNodes(tree, from, into);
       // What was inside both now sits side by side: suggest pairs there next.
@@ -323,7 +348,7 @@ export function Studio() {
       {tree && counts && (
         <>
           <Suggestions
-            suggestions={suggestions}
+            suggestions={shownSuggestions}
             onMerge={(s) => merge(s.from, s.into)}
             onDismiss={(s) => setSuggestions((all) => all.filter((x) => !samePair(x, s)))}
             onShow={(path) => {

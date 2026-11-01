@@ -1,6 +1,6 @@
 # Structure reports: knowing which nodes occur together
 
-Status: **designed, not built**. Agreed with Kasper on 2026-11-01. It replaces the "only new paths" consent flow in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent) and [security.md](security.md#structure-metadata-and-consent).
+Status: **designed; the merge check is built for the studio's own exports** (`together.ts`, see point 5). The rest is not built. Agreed with Kasper on 2026-11-01. It replaces the "only new paths" consent flow in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent) and [security.md](security.md#structure-metadata-and-consent).
 
 ## Why
 
@@ -16,7 +16,7 @@ To apply it, researchers need to know which nodes occur together. A plain union 
 2. **Right after an upload, the participant is asked to share its structure**: the names of the parts of their data, never the content. Asking right away lets researchers spot platform changes early. In a lab, the researcher can decide on new paths while the participant explores, and later the server can help with automated suggestions.
 3. **New names are reviewed.** If the structure contains paths that are not in the published tree, the prompt lists them for review, because only those can carry something unexpected. Every other name is one the researcher already approved. The text says that the shared structure also shows which known parts they have (such as whether they have uploads).
 4. **The server stores each structure** without any participant id, session or exact time, and keeps one copy of identical structures with a count. New paths are added to `structure.json` as undecided.
-5. **The studio refuses to merge nodes that occur together** in a stored structure, and merge suggestions skip them. The researcher's own exports count too.
+5. **The studio refuses to merge nodes that occur together** in a stored structure, and merge suggestions skip them. The researcher's own exports count too. Built for the exports loaded in the studio (`seenTogether` in `packages/core/src/together.ts`); matching goes by canonical name and alias, so evidence survives earlier merges. Stored participant structures come with the server work.
 6. **Before donating, the client refreshes the published tree** (a conditional request with an ETag, so it is cheap when nothing changed), so decisions the researcher made during the session apply.
 
 A participant who has paths the researcher has not decided on yet will be asked to review them again, until the researcher decides. That is accepted: it is one consent step, and it adds evidence.
