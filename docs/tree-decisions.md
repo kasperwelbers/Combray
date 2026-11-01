@@ -46,11 +46,12 @@ Besides the decision, a node in the project tree can have:
 | `label` | any | Display name per language (`{en: Date, nl: Datum}`): table names, column names |
 | `description` | donated leaves | One participant-facing sentence ("the time you watched each video"), used in donation previews and in [missing-field requests](#missing-requested-fields) |
 | `aliases` | any | Other names for the same node: literal, glob or regular expression (see [Aliases](#aliases-and-merging)) |
-| `as`, `format`, `transform`, `script` | leaves | Conversion, as in the current field spec, now attached to the node |
+| `as`, `format`, `transform` | leaves | Conversion, as in the current field spec, now attached to the node: "Read as" in the researcher UI. Scripts are not ported yet |
 | `role` | leaves | View hint: `date`, `title`, `url`, `group` (replaces `display`) |
 | `raw` | donated leaves | Donate the value as it is in the file instead of transformed ([What is donated](#what-is-donated)) |
 | `lifter` | inner | A sandboxed script that turns each row subtree into a map ([HTML](#html), layer 3) |
-| `where`, derived fields, enrichers | table | Row filter, fields computed from other columns (`from` + transform or script), and which columns may be enriched |
+| `filter` | repeated (`[*]`, `{*}`) | Which rows to import: a list of tests on columns (`equals`, `in`, `contains`, `matches`, `empty`, `min`, `max`, each with an optional `not`), all of which must pass. A filter may test a column that is not shown, such as an ignored leaf or the size of a nested table |
+| derived fields, enrichers | table | Planned: fields computed from other columns (`from` + transform or script), and which columns may be enriched |
 
 ## Tables
 
@@ -105,10 +106,13 @@ We handle HTML in three layers. Each produces a tree, so decisions, tables and a
 - **Single or repeated.** An element that is single in one place and repeated in another (one link in a row, or three) is one node in the project tree: the single element counts as the list's only item. The same goes for a JSON key that is `null` in some records and a list or map in others.
 - **Positional text.** Text nodes are numbered among their text siblings: `#text[0]`, `#text[1]` (`<br>` already separates them). Each becomes a value with an inferred type, so the shape says "text 1 is date-like".
 - **Data attributes.** `href`, `src`, `datetime`, `title`, `alt`, `value` and `content` become values named `@href` and so on. Empty elements (`<br>`, empty cells) are dropped.
-- **Semantic HTML.** A `<table>` with header cells becomes a list of maps keyed by header. A `<dl>` becomes a map from `dt` to `dd`. Header text is only used as a key when it matches a label or alias in the project tree, because the participant's shape never contains text (see the privacy note below).
+- **Semantic HTML.** A `<table>` becomes a list of rows, each a map from column to cell. The header is the `<thead>` row, or a first row of only `<th>` cells. A `<dl>` becomes a map from term to description. Header and term text is only used as a key when it is a name or alias in the project tree (`knownKeys`), because the participant's shape never contains text (see the privacy note below). Otherwise cells are named by position (`#cell[0]`) and a term stays a value next to its description (`#dt[0]`, `#dd[0]`). The researcher UI allows any header text as a key, because researchers work on their own exports; that is how header names get into the project tree.
+- **Running text.** Inline elements mixed with text (`Watched <a>video</a> by <a>channel</a>`) are numbered by position (`a[0]`, `a[1]`) instead of becoming a list, so the video and the channel are separate columns.
+- **Bare siblings.** Two siblings with the same tag and no classes only become a list when they hold the same kinds of things. Otherwise (a caption `div` and a date `div`) they are positions: `div[0]`, `div[1]`. Elements that are items by nature (`li`, `tr`, `option`, `article`) and three or more alike siblings are always a list.
+- **Wrapping links.** A link around a single element, present in some rows and not in others, gives its `@href` to that element, so the element keeps one position.
 - **Wrapper folding.** Chains of single-child elements fold into one step in the researcher UI.
 
-After normalisation, Google My Activity is a list of `outer-cell` rows with leaves such as `content-cell…body-1/#text[0]` (string, "Searched for"), `a/@href` (url-like), `a/#text[0]` (the query) and `#text[1]` (date-like). That is an implicit table with typed but unnamed columns, named after the file. Semantic HTML (`<table>`, `<dl>`) is not handled yet.
+After normalisation, Google My Activity is a list of `outer-cell` rows with leaves such as `content-cell…body-1/#text[0]` (string, "Searched for"), `a/@href` (url-like), `a/#text[0]` (the query) and `#text[1]` (date-like). That is an implicit table with typed but unnamed columns, named after the file. Synthetic examples of common export layouts (My Activity, Instagram, Facebook, Snapchat, an account page with a `<dl>`) are in `packages/core/test/html/`.
 
 **Layer 2: labels from the researcher.** The researcher works on their own export in the researcher UI, so they see the values next to the positions. They label the date-like text `date` and the link `url`. Types do most of the work, since there is usually one date-like and one url-like position per row. Participants only see labels.
 
@@ -131,6 +135,8 @@ A project defines **upload points**, each for one platform: "TikTok (zip or JSON
 - **One top folder in an archive is unwrapped.** A zip whose entries all sit in `Takeout/` gives the same tree as picking the `Takeout` folder itself: the root holds `Chrome/`, `YouTube and YouTube Music/` and so on.
 - **Per-user names inside the root** (`messages/inbox/johnsmith_1234/`) go through the existing dictionary collapse and name screening, so they become `inbox/{*}/`.
 
+In the project config, `uploads` lists the upload points. Each names a platform pack (`{"id": "youtube", "pack": "google-takeout", "name": {...}}`), whose project tree the client matches uploads against. The client tries each point (and, for a single file, the file inside a folder) and keeps the one that finds the most rows in collections. Without `uploads`, the YAML importers run as before.
+
 This also limits the size of the project tree. Ten participants with ten differently named files produce one tree, and identical structure is stored once because the tree is a union. The client still caps how many new paths it offers to send at once (around 500), and shows a summary instead of a long list when there are many.
 
 ## Aliases and merging
@@ -138,7 +144,7 @@ This also limits the size of the project tree. Ten participants with ten differe
 - A node has one canonical name and a set of aliases. A participant's path matches the canonical name first, then the aliases. The current `{watch-history.json,kijkgeschiedenis.json}` becomes a node `watch-history.json` with the alias `kijkgeschiedenis.json`.
 - **Merging.** A new undecided node `date` next to a known `timestamp` can be merged into it in the researcher UI. This adds `date` as an alias and merges the children recursively. Children that exist on both sides with different decisions are listed for the researcher to resolve.
 - **The tree view shows merged nodes once**, with their aliases as small tags.
-- **Suggestions.** When a participant shape has a new node where a known node is missing, at the same position and with the same kind and type, the researcher UI suggests merging ("is `date` the same as `timestamp`?"). This catches renames and translations.
+- **Suggestions.** When a new export adds nodes next to known ones of the same kind, the researcher UI suggests merging ("is `date` the same as `timestamp`?"). Candidates are scored on their structure (the last three steps of every path below them) and, for inner nodes, also on name similarity; suggestions below 0.35 are not shown. After a merge, the children of the merged pair are compared the same way. This catches renames and translations (`kijkgeschiedenis.json`, `Your Activity` and `Je activiteit`). The code is in `suggest.ts`.
 - Regular expression aliases also let researchers collapse dictionary-like keys that the extractor missed.
 
 ## How participants see the tree
@@ -148,6 +154,8 @@ Participants never browse the raw tree. They see:
 1. **Collections**: the derived tables, with label, row count and the first few columns. Tables with donated columns come first.
 2. **Other data**: undecided leaves and paths the project has not seen yet, arranged with the same rules: implicit tables at repeated nodes, columns by shortest unique suffix, lists as counts you can open.
 3. **Breadcrumbs with folding**: a run of inner nodes without a label is shown as one step (`history › … › url`) and expands on request.
+
+Built: collections (requested first), other data in a folded section, breadcrumbs with folding, and a table view with nested tables, dates and links formatted by `as` and `role`. Paths the project does not know are marked new; nothing is sent yet ([consent flows](#unknown-paths-and-consent) are next).
 
 The researcher UI has a "view as participant" toggle that renders the researcher's own export with the current decisions, which is the quickest check that they make sense.
 
@@ -184,7 +192,7 @@ Keeping them apart means the server adding new paths never collides with the res
 
 ## What happens to importer specs
 
-Platform packs become shared `importer.json` files plus a reference `structure.json`, versioned with synthetic fixtures like the current importers. The researcher UI edits them, and hand-editing stays possible. Current specs convert mechanically:
+Platform packs become shared `importer.json` files plus a reference `structure.json`, versioned with synthetic fixtures like the current importers. This is done for Google Takeout and TikTok (`importers/*/importer.json`); `structure.json` is built from the fixtures by a test, which also checks that the derived rows match the YAML importers' expected output. The researcher UI edits them, and hand-editing stays possible. Current specs convert mechanically:
 
 | Current spec | Project tree |
 | --- | --- |
@@ -208,13 +216,13 @@ The current runner stays until the derivation covers all platform packs. Dataset
 ## Implementation plan
 
 1. **Core** (built: `decisions.ts`, `projectFiles.ts`). Project tree types, effective decisions, alias matching, merging, comparing a participant shape with a project tree (known, unknown, missing), and the two JSON files.
-2. **Nameless root and upload points** (partly built: `uploadRoot`, `mergeDirs`). Root without a name, unwrapping one top folder, merging split zips. Still to do: upload points in the project config.
-3. **Table inference** (built: `derive.ts`). Every list of objects is a table, nested where it sits; maps whose keys are data become key and value tables; shortest unique suffix. Conversions (`as`) are not applied yet.
-4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins. Still to do: `<table>` and `<dl>`, and tuning on team members' own exports.
-5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, labels, descriptions, aliases, merging, "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in the side panel, value formats and a first chart builder are described in [exploration.md](exploration.md). Still to do: merge suggestions, lifter editing, registering the files with a server project.
-6. **Participant UI.** Collections, other data, breadcrumbs with folding, nested table navigation.
+2. **Nameless root and upload points** (built: `uploadRoot`, `mergeDirs`, `prepareUpload`, `uploads` in the project config). Root without a name, unwrapping one top folder, merging split zips.
+3. **Table inference** (built: `derive.ts`). Every list of objects is a table, nested where it sits; maps whose keys are data become key and value tables; shortest unique suffix. Conversions and row filters are applied (`deriveRows` with `raw: true` turns both off).
+4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins, `<table>` and `<dl>`, running text, bare siblings, wrapping links. Still to do: tuning on team members' own exports.
+5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, labels, descriptions, aliases, merging, "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in the side panel, value formats and a first chart builder are described in [exploration.md](exploration.md). Merge suggestions, "Read as" conversions, roles and row filters are built. Still to do: lifter editing, registering the files with a server project.
+6. **Participant UI** (built: `worker/derived.ts`, `screens/TableView.tsx`). Collections, other data, breadcrumbs with folding, nested table navigation, new paths marked locally.
 7. **Consent flows.** Sending unknown paths, then missing-field requests in the donation step.
-8. **Conversion.** Convert the platform packs to project trees and retire the row/field runner once the outputs match.
+8. **Conversion** (packs converted; runner kept). Google Takeout and TikTok are project trees whose outputs match the YAML importers. The row/field runner stays as the fallback for projects without upload points, until the consent flows are built and new packs are written as project trees.
 
 ## Decided questions
 

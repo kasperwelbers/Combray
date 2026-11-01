@@ -11,9 +11,8 @@ import {
   deriveRows,
   deriveTables,
   extractShape,
-  normalizeTree,
+  prepareUpload,
   runQuery,
-  uploadRoot,
   type DerivedRow,
   type ProjectNode,
   type TableDef,
@@ -71,7 +70,7 @@ const api: StudioApi = {
     onProgress({ step: 'shape' });
     // HTML is normalised so rows and positions compare (docs/tree-decisions.md#html). Header
     // text may name columns here: this is the researcher's own export, and they see it.
-    const tree = normalizeTree(uploadRoot(parsed.tree, parsed.source === 'archive'), { keys: () => true });
+    const tree = prepareUpload(parsed.tree, parsed.source === 'archive', { keys: () => true });
     const info: StudioExport = { id: nextId++, name: parsed.tree.name, nodeCount: countNodes(tree) };
     exports.set(info.id, { info, tree });
     onProgress({ step: 'done' });

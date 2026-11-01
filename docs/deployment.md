@@ -22,9 +22,11 @@ The `combray-server` binary (Rust, statically linked) embeds the built web clien
 combray-data/
 ├── combray.toml        config
 ├── combray.sqlite      store key records (built); later researcher accounts, projects, sessions, receipts, enrichment cache
-├── projects/           signed project configs and platform packs
+├── projects/           project configs (signed in Phase 2) and platform packs
 ├── donations/          encrypted envelopes (unless S3 is configured)
 ```
+
+A project config's `uploads` lists its upload points; each names a platform pack, such as `google-takeout` or `tiktok`, whose project tree the client matches uploads against ([tree-decisions.md](tree-decisions.md#upload-points-and-the-nameless-root)). See `deploy/examples/projects/example.json`.
 
 No object storage is needed: donations and vault blobs live in this directory by default. S3 is an optional backend.
 

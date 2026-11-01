@@ -1,6 +1,6 @@
 # Exploring data: formats, the researcher's view, queries and charts
 
-Status: **partly built** (2026-10-29). Value formats, the researcher's tables-and-fields view, the query pipeline and a first chart builder in the researcher workspace exist. Charts for participants, saved views and the AI helper writing queries are next.
+Status: **partly built** (2026-10-29). Value formats, the researcher's tables-and-fields view, the query pipeline and a first chart builder in the researcher workspace exist. Parsing settings per field ("Read as", see [tree-decisions.md](tree-decisions.md#node-properties)) exist since 2026-11-01. Charts for participants, saved views and the AI helper writing queries are next.
 
 This picks up from [tree-decisions.md](tree-decisions.md): once a project tree says which fields are shown and donated, and tables are inferred from the structure, researchers and participants need to explore what is in them. [visualization.md](visualization.md) describes the participant-facing views and probes; this document is about the machinery underneath, and about what researchers see while they set up a project.
 
@@ -97,9 +97,8 @@ The same builder is meant for participants, on their own data, inside the partic
 
 1. **Charts for participants**: the builder in the participant views, on the fields the project shows, with the researcher's saved charts as starting points.
 2. **Saved views**: chart specs and queries in `importer.json`, with labels and descriptions, validated like the rest of the file.
-3. **Parsing settings per field**: the format a field is parsed with (picked from the formats seen), used by charts, the preview and donations.
-4. **The AI helper writes queries and chart specs** from the structure, formats and the question asked ("how often did I watch at night?"). It returns a spec; the client runs it.
-5. **More verbs**: `join`, `pivot`, windows.
+3. **The AI helper writes queries and chart specs** from the structure, formats and the question asked ("how often did I watch at night?"). It returns a spec; the client runs it.
+4. **More verbs**: `join`, `pivot`, windows.
 
 ## Open questions
 

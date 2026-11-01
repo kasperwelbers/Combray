@@ -14,7 +14,7 @@ Cross-cutting decisions that still need an answer, with the current recommendati
 | 6b | Studio form factor | Local binary with localhost UI, Tauri app, small key tool plus browser UI | **Decided:** a small local key tool (keys, config signing, decryption); researcher UI in the browser ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)) | Done |
 | 6c | Researcher login on a university server | Passkeys, OIDC/SAML SSO (e.g. SURFconext), both | Passkeys built in, SSO optional | Phase 2 |
 | 6d | Server storage | Own disk storage, S3 | Own storage (SQLite + data directory) by default, S3 optional | Phase 2 |
-| 7 | Importer spec format | YAML, JSON | YAML on disk, JSON Schema for validation (not built yet) | Yes |
+| 7 | Importer spec format | YAML, JSON | **Decided:** project trees as JSON (`structure.json` and `importer.json`, validated in `projectFiles.ts`), see [tree-decisions](tree-decisions.md#storage). The YAML specs stay as the fallback runner until the consent flows are built | Done |
 | 8 | Chart library | Vega-Lite, Observable Plot, custom | Vega-Lite, lazily loaded, plus custom item views. The first timeline is a small custom SVG chart: Vega compiles expressions with `new Function`, which our CSP forbids, so adopting it needs `vega-interpreter` | Phase 1 |
 | 9 | Enrichment cache scope | Shared across studies, per study, none | Shared by default, per study or none configurable | Phase 3 |
 | 10 | AI providers | Local (OpenAI-compatible), Anthropic API, both | Both, behind one provider interface; the model only ever sees metadata | Phase 5 |

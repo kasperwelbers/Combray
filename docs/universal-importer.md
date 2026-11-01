@@ -53,6 +53,8 @@ Paths are relative where it helps: an importer selects a *row path* and then *fi
 
 ## Importers
 
+This section describes the first importer format, which is still the fallback runner. Projects with upload points use project trees instead ([tree-decisions.md](tree-decisions.md)).
+
 An importer is a small YAML (or JSON) document. It **marks paths**, says how to **convert** them, and optionally runs a **script** for anything unusual.
 
 ```yaml
@@ -153,7 +155,7 @@ Shapes are hashed into **fingerprints** so importers can declare which variants 
 
 ## Open questions
 
-- YAML or JSON for importer specs? YAML is friendlier to write by hand; JSON is simpler to generate. Recommendation: YAML on disk, JSON schema for validation, both accepted.
+- ~~YAML or JSON for importer specs?~~ Decided: project trees are JSON (`structure.json` and `importer.json`, see [tree-decisions.md](tree-decisions.md#storage)); the YAML specs stay as the fallback runner.
 - How should importers handle very large HTML exports (e.g. old Google Takeout `MyActivity.html`)? A streaming HTML tokenizer in Rust may be needed instead of `DOMParser`.
 - Should we keep the "cookbook" concept (groups of recipes per platform) as a "platform pack" with instructions, importers, default views and enrichers together? Recommendation: yes.
 - Should there be a public importer registry that deployments can pull from, and how are importers reviewed before inclusion?
