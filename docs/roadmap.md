@@ -27,17 +27,16 @@ Goal: import a Google Takeout and a TikTok export, explore them, entirely in the
 
 Goal: a researcher with no programming experience creates a project, registers it on a shared server, runs sessions, and decrypts donations locally.
 
-- Local key tool v0: generate keys with guided backup, sign project configs, decrypt donations, export ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
+- [x] Researcher sign-in (email link and passkey) and the key page: personal keys under passkey PRF with a recovery code, project keys, grants after comparing key codes, opening donations to CSV ([ADR 0007](decisions/0007-browser-key-page.md), [researcher-keys.md](researcher-keys.md)). Replaces the local key tool. [ ] Signed project configs.
 - Researcher UI in the browser: create a project, configure from platform packs, register on a server, create participant codes, download encrypted donations.
 - Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, donation storage on its own disk.
-- `combray-crypto`: HPKE with X-Wing, envelope format, signatures, key files; test vectors shared with the client.
-- Revocable donation keys ([ADR 0006](decisions/0006-revocable-donation-keys.md)): sealed keys in a separate key database, researcher access tokens, fetch on use, withdrawal with tombstones.
+- [x] `packages/seal`: HPKE with X-Wing, envelope format, personal and project keys. No Rust crypto is needed for now.
+- [x] Revocable donation keys ([ADR 0006](decisions/0006-revocable-donation-keys.md)): sealed keys in a separate key database, fetch on use, withdrawal with tombstones re-applied on start.
 - Combray package: export the encrypted store as one file and restore it on any device with the password ([key-design.md](key-design.md#8-planned-the-combray-package-export-and-restore)).
-- R package for analysis (fetch keys, decrypt in memory, never store), on `combray-crypto` through extendr; Python later.
-- CLI equivalents of the key tool functions for power users.
-- Donation flow: preview, exclusions, consent receipts, probes and answers.
+- R package for analysis (fetch keys, decrypt in memory, never store); Python later. Needs a way to hold a personal key without a passkey (a device key from the key page).
+- Donation flow: preview, exclusions, consent receipts, probes and answers, the `#k=` key check, a receipt with the withdrawal token.
 - [x] Researcher workspace with path decisions (ignore, show, donate) on the tree, derived tables, aliases and HTML normalisation ([tree-decisions.md](tree-decisions.md#implementation-plan)). Upload points, the participant view of derived tables (collections, other data, nested tables), "Read as" conversions, row filters, merge suggestions, Google Takeout and TikTok as project trees, and [finding the export in an upload](tree-decisions.md#finding-the-export-in-an-upload) (one uploader per platform, name patterns, required parts, skipping new parts, names first with fixed limits). [ ] The consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent), with shared structures and merge checks from [structure-versions.md](structure-versions.md)) and missing-field requests; lifters.
-- Docker image and compose file; deployment guide.
+- [x] Docker image and compose file; deployment guide for a pilot with two host names ([deployment.md](deployment.md#pilot-checklist)).
 - External review of the crypto design.
 
 ## Phase 3: enrichment

@@ -1,12 +1,12 @@
 # Key design: stores, donations and withdrawal
 
-This document follows one participant's data from the moment it is loaded to the moment a researcher analyses it, and names every key on the way. It is the agreed plan ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The local store part is built; donations, the package export and the researcher tools are not yet. [security.md](security.md) records the details of what is built, and [privacy-and-encryption.md](privacy-and-encryption.md) the threat model and constructions.
+This document follows one participant's data from the moment it is loaded to the moment a researcher analyses it, and names every key on the way. It is the agreed plan ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The local store, donation sealing and storage, withdrawal, and the researchers' key page are built; the participant donate screen and the package export are not yet. How researchers sign in and hold their keys is in [researcher-keys.md](researcher-keys.md) ([ADR 0007](decisions/0007-browser-key-page.md)). [security.md](security.md) records the details of what is built, and [privacy-and-encryption.md](privacy-and-encryption.md) the threat model and constructions.
 
 For a version with pictures, see [the explainer for researchers](explainers/keys.html). Participants get the same story in the app, on the Questions page (`/{project}/faq`, `apps/web/src/screens/Faq.tsx`).
 
 ## In one paragraph
 
-The participant's data is encrypted in their browser with a **data key**. The data key is kept in a **locked box** on the device; the key to that box is on the server and is handed out only for the participant's password. When the participant donates, the browser takes only what they chose, encrypts it with a fresh **donation key**, and locks that donation key in a box that only the **researcher key** opens. The server keeps the donation and its locked key apart. Researchers fetch the locked keys every time they analyse, and never save them. If a participant withdraws, the server throws the locked key away, and every copy of that donation, wherever it is, becomes unreadable.
+The participant's data is encrypted in their browser with a **data key**. The data key is kept in a **locked box** on the device; the key to that box is on the server and is handed out only for the participant's password. When the participant donates, the browser takes only what they chose, encrypts it with a fresh **donation key**, and locks that donation key in a box that only the **project key** opens. The project key itself is kept only in boxes that each researcher's passkey opens. The server keeps the donation and its locked key apart. Researchers fetch the locked keys every time they analyse, and never save them. If a participant withdraws, the server throws the locked key away, and every copy of that donation, wherever it is, becomes unreadable.
 
 ## The keys
 
@@ -17,12 +17,13 @@ The participant's data is encrypted in their browser with a **data key**. The da
 | **Box key** (store KEK) | Derived on the server from the store master key and a per-store salt | On the server; sent to the browser for the right password, used once, wiped | The server, and the browser for a moment after login |
 | **Password** | Chosen by the participant, at least 8 characters | Only in the participant's head; the server keeps an Argon2id hash | The participant |
 | **Donation key** | Fresh random AES-256 key for one donation | Made in the browser at donation time; only ever stored sealed | The researcher's tools, in memory |
-| **Sealed donation key** | The donation key, sealed with HPKE (X-Wing) to a researcher public key | On the server, in a key table separate from the donations | Whoever holds the researcher private key **and** may fetch it from the server |
-| **Researcher key pair** | X-Wing (X25519 + ML-KEM-768) key pair for the project | Public key in the signed project config; private key only on researchers' computers | The project's researchers |
-| **Researcher access token** | A credential that lets a researcher list donations and fetch sealed keys | Server stores a hash; one per researcher, revocable | One researcher |
+| **Sealed donation key** | The donation key, sealed with HPKE (X-Wing) to the project key | On the server, in a key database separate from the donations | A member with access, on the key page, who may fetch it from the server |
+| **Project key** | X-Wing (X25519 + ML-KEM-768) key pair for the project | Public key and fingerprint in the project config; the private key only sealed to each member's personal key | Members with access, on the key page, in memory |
+| **Personal key** | X-Wing key pair per researcher, from a master secret | Public key on the server; master secret on the server only locked under the researcher's passkey (PRF), and as their recovery code | One researcher, after a passkey or the recovery code |
+| **Researcher session** | Email link plus passkey | `HttpOnly` cookie on the key site; a separate studio session without key access | One researcher |
 | **Withdrawal token** | Random secret from the donation receipt | Kept by the participant (device, package, or printed receipt); server stores a hash | The participant |
 
-Two things never meet in one place by design: the locked box and its key (device and server), and the sealed donation keys and the researcher private key (server and researcher's computer).
+Two things never meet in one place by design: the locked box and its key (device and server), and the sealed donation keys and an open project key (server, and a researcher's key page while it is unlocked).
 
 ## The flows
 
@@ -46,7 +47,7 @@ Nothing reaches the researcher until this step, and only what the participant ch
 
 1. The participant previews the donation, removes items, answers questions and consents ([consent layer](privacy-and-encryption.md#consent-layer)).
 2. The browser picks a random 128-bit donation id and a fresh donation key, and encrypts the payload in chunks (STREAM construction, AAD binding project id, donation id, chunk index and last-chunk flag).
-3. It seals the donation key to each researcher public key in the signed project config, with HPKE (X-Wing, HKDF-SHA-256, AES-256-GCM). The HPKE `info` binds the project id and donation id, so a sealed key cannot be moved to another donation.
+3. It checks the project key against the fingerprint in the participant's link (`#k=`), then seals the donation key to it, with HPKE (X-Wing, HKDF-SHA-256, AES-256-GCM). The HPKE `info` binds the project id and donation id, so a sealed key cannot be moved to another donation.
 4. It uploads the envelope and the sealed keys together. The server stores the envelope in donation storage and the sealed keys in a separate key database, and returns a **withdrawal token**. The token goes into the participant's receipt.
 
 The store's data key is never sealed for the researcher. See [why](#rejected-a-researcher-copy-of-the-data-key).
@@ -55,14 +56,14 @@ The store's data key is never sealed for the researcher. See [why](#rejected-a-r
 
 Researchers may keep the encrypted donations on their own computer: they are useless there without the sealed keys. Every analysis starts by fetching the sealed keys from the server:
 
-1. The tool (local key tool, R package, later Python) syncs the encrypted envelopes it does not have yet into a local cache, and learns which donations were withdrawn.
+1. The tool (the key page now; an R package, later Python) syncs the encrypted envelopes it does not have yet into a local cache, and learns which donations were withdrawn.
 2. It deletes the local envelopes of withdrawn donations.
-3. It fetches the sealed keys for the donations it needs, with the researcher's access token, opens them with the private key, decrypts in memory, and hands the data to the analysis.
+3. It fetches the sealed keys for the donations it needs, in the researcher's session, opens them with the project key, decrypts in memory, and hands the data to the analysis.
 4. It never writes a donation key or plaintext to disk.
 
 A researcher who exports or saves decrypted data takes on the responsibility for that copy under the GDPR, including deleting it when a participant withdraws. The tools make the safe way the easy way; they cannot stop a researcher who sets out to keep a copy.
 
-The collaborator model follows from this. Each researcher gets their own access token. A researcher who leaves the project has their token revoked and can no longer fetch keys. That does not protect against someone who saved keys or data while they had access, and nothing could.
+The collaborator model follows from this. Each researcher signs in on their own and has their own sealed copy of the project key. A researcher who leaves the project is removed: their copy is deleted and they can no longer fetch keys. That does not protect against someone who saved keys or data while they had access, and nothing could.
 
 ### 6. Withdrawing
 
@@ -106,30 +107,31 @@ What we give up is that data is tied to one browser. The protection stays the sa
 | Who | Has | Can read local data | Can read a donation |
 | --- | --- | --- | --- |
 | Someone with the participant's laptop or a package | Ciphertext, locked box | No (needs the password, guessed online only) | No |
-| Server operator | Box keys, password hashes, envelopes, sealed keys | Only with the participant's device too | No (needs the researcher private key) |
+| Server operator | Box keys, password hashes, envelopes, sealed keys, sealed project keys, locked personal keys | Only with the participant's device too | No (needs a researcher's passkey or recovery code), unless they serve a malicious key page ([limits](researcher-keys.md#limits)) |
 | Someone who stole the server database | Same as operator, without the store master key if kept apart | No | No |
-| Researcher | Private key, access token, local envelopes | No (never gets the data key) | Yes, while the donation is not withdrawn and their token is valid |
-| Someone with a researcher's laptop | Private key, maybe local envelopes | No | Only with the researcher's token too |
+| Researcher | Passkey, recovery code, a session | No (never gets the data key) | Yes, while the donation is not withdrawn and they are a member |
+| Someone with a researcher's email | Sign-in links | No | No: the link alone cannot use the passkey or recovery code |
+| Someone with a researcher's unlocked phone or laptop | Their passkey | No | Yes, as that researcher. Remove the passkey and the member if a device is lost |
 | Future quantum computer | Recorded envelopes and sealed keys | No | No, as long as ML-KEM holds |
 
-## Server side, planned
+## Server side
 
-Donation storage and the key database are separate: different SQLite files (and on a VM, different volumes), so they can be backed up differently. Endpoints, under `/api/v1`:
+Donation storage and the key database are separate: different SQLite files (and on a VM, different volumes), so they can be backed up differently. Endpoints, under `/api/v1` (built):
 
 | Endpoint | Caller | Purpose |
 | --- | --- | --- |
-| `POST /p/{project}/donations` | Web client | Upload an envelope and its sealed keys; returns the withdrawal token |
+| `POST /p/{project}/donations` | Web client | Upload an envelope and its sealed key; returns the withdrawal token |
 | `POST /donations/{id}/withdraw` | Web client | Withdraw with the withdrawal token |
-| `GET /projects/{id}/donations` | Researcher | List donations (id, day, size bucket) and tombstones |
-| `GET /projects/{id}/donations/{d}` | Researcher | Download one envelope |
-| `POST /projects/{id}/donation-keys` | Researcher | Fetch sealed keys for a list of donation ids (`Cache-Control: no-store`) |
-| `DELETE /projects/{id}/donations/{d}` | Researcher | Withdraw on a participant's behalf |
+| `GET /projects/{id}/donations` | Researcher (key page, studio) | List donations (id, day) and tombstones |
+| `GET /projects/{id}/donations/{d}` | Researcher (key page) | Download one envelope |
+| `POST /projects/{id}/donation-keys` | Researcher (key page) | Fetch sealed keys for a list of donation ids (`Cache-Control: no-store`) |
+| `DELETE /projects/{id}/donations/{d}` | Researcher (key page) | Withdraw on a participant's behalf |
 
-Researcher endpoints need an access token scoped to one project and one researcher. Until researcher accounts exist, the server operator issues and revokes them with a server command, as with reset links. The server logs counts of key fetches per token and day, never donation ids, so a project can show who accessed keys when.
+Researcher endpoints need a signed-in member of the project; the key page's routes exist only on the key site. The server logs the number of sealed keys served, never donation ids.
 
 ## Researcher tools, sketched
 
-Decryption is written once, in Rust (`combray-crypto`), and used by the local key tool and, through bindings, by R (extendr) and Python (PyO3). Nobody has to reimplement X-Wing.
+The key page opens donations today. For R and Python, decryption would come from `packages/seal` (run in a small embedded JavaScript runtime) or a Rust port with shared test vectors. How these packages get the personal key without a passkey is open ([researcher-keys.md](researcher-keys.md#limits)); a device key added from the key page is the likely answer, and the sketch below assumes it.
 
 A first sketch of the R package:
 
@@ -139,8 +141,7 @@ library(combray)
 con <- combray_connect(
   server  = "https://combray.uni.nl",
   project = "willow",
-  token   = Sys.getenv("COMBRAY_TOKEN"),   # or keyring
-  key     = "~/keys/willow.combraykey"     # asks for the key file's passphrase
+  key     = combray_device_key()            # added once from the key page, kept in the keyring
 )
 
 combray_sync(con)                 # download new envelopes, delete withdrawn ones

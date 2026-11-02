@@ -1,10 +1,10 @@
 # Security
 
-This document records every security choice in Combray that exists in code today, why we made it, and what it does not protect against. [privacy-and-encryption.md](privacy-and-encryption.md) describes the wider design, including donation encryption, which is not built yet. Where the two overlap, this document describes what is implemented. [key-design.md](key-design.md) walks through every key, built and planned, in one place.
+This document records every security choice in Combray that exists in code today, why we made it, and what it does not protect against. [privacy-and-encryption.md](privacy-and-encryption.md) describes the wider design. Donation sealing, storage and withdrawal, and researcher sign-in and keys, are built for the pilot; the participant donate screen is not yet. Where the two overlap, this document describes what is implemented. [key-design.md](key-design.md) walks through every key, built and planned, in one place.
 
-Changing anything in the local store, the store key service, the Content Security Policy or the server's handling of requests means updating this document in the same change. Decisions that are hard to reverse also get an ADR. The store key design is [ADR 0004](decisions/0004-server-held-store-keys.md).
+Changing anything in the local store, the store key service, `packages/seal`, researcher sign-in, the key page, the Content Security Policy or the server's handling of requests means updating this document in the same change. Decisions that are hard to reverse also get an ADR. The store key design is [ADR 0004](decisions/0004-server-held-store-keys.md); researcher keys are [ADR 0007](decisions/0007-browser-key-page.md).
 
-> Nothing here has had an external review yet. The constructions are standard ones from vetted libraries (WebCrypto in the browser; RustCrypto's `argon2`, `hkdf` and `sha2` on the server), and no primitives are home-made.
+> Nothing here has had an external review yet. The constructions are standard ones from vetted libraries (WebCrypto and `@hpke/core` with `@hpke/hybridkem-x-wing` in the browser; RustCrypto's `argon2`, `hkdf` and `sha2`, and `webauthn-rs`, on the server), and no primitives are home-made.
 
 ## Contents
 
@@ -15,12 +15,14 @@ Changing anything in the local store, the store key service, the Content Securit
    - [Password reset](#password-reset)
 4. [Session hygiene](#session-hygiene)
 5. [XSS and code integrity](#xss-and-code-integrity)
-6. [Server](#server)
-7. [Transport](#transport)
-8. [Structure metadata and consent](#structure-metadata-and-consent)
-9. [Supply chain](#supply-chain)
-10. [Decision log](#decision-log)
-11. [Open questions](#open-questions)
+6. [Researcher sign-in and keys](#researcher-sign-in-and-keys)
+   - [Donation envelope](#donation-envelope)
+7. [Server](#server)
+8. [Transport](#transport)
+9. [Structure metadata and consent](#structure-metadata-and-consent)
+10. [Supply chain](#supply-chain)
+11. [Decision log](#decision-log)
+12. [Open questions](#open-questions)
 
 ## What we protect
 
@@ -35,6 +37,9 @@ The participant's data download package, and everything derived from it, stays o
 | A network attacker | Café Wi-Fi | TLS everywhere, with HSTS. |
 | A researcher of the project | Wants to read a participant's local data | A password reset needs the participant's device too, and only works for participants with an id in that project. The server never has the data. |
 | A malicious importer script | A shared importer tries to exfiltrate | A QuickJS sandbox with no network or DOM (see [plugins.md](plugins.md)). |
+| Someone with the server's databases | Reads donations and keys | Envelopes and donation keys are sealed to the project key, which the server holds only sealed to researchers' personal keys, which it holds only locked under their passkeys. |
+| Someone with a researcher's email | Requests a sign-in link | The link only allows using a passkey or the recovery code. It cannot open keys or reach donations. |
+| A bug or XSS in the participant app or studio | Tries to reach researcher keys | Keys exist only on the key page, on another origin. The studio session gets no key material, and the main site has no key routes. |
 
 **Out of scope**, stated honestly:
 
@@ -243,10 +248,10 @@ So even if a bug somewhere passes data into an HTML sink, the browser refuses it
 | --- | --- | --- |
 | `X-Content-Type-Options` | `nosniff` | Files are never interpreted as another type (for example, a data file as script). |
 | `Referrer-Policy` | `no-referrer` | Our URLs (project ids, the key fingerprint later) never leak to other sites. |
-| `Permissions-Policy` | camera, microphone, geolocation off | Not needed, so not available to injected script either. |
+| `Permissions-Policy` | camera, microphone, geolocation off; on the main site also `publickey-credentials-get` and `-create` | Not needed, so not available to injected script either. Passkeys can only be used on the key page. |
 | `Cross-Origin-Opener-Policy` | `same-origin` | Other windows cannot get a handle on ours. |
 | `Strict-Transport-Security` | one year (set by Caddy) | Browsers never fall back to plain HTTP. |
-| `Cache-Control` | `no-store` on key responses | KEKs are never cached. |
+| `Cache-Control` | `no-store` on key responses | KEKs, sealed keys and envelopes are never cached. |
 
 ### Why not "only signed code"
 
@@ -267,12 +272,87 @@ What we do instead:
 
 Vega compiles expressions with `new Function`, which our CSP forbids. If we adopt Vega or Vega-Lite, it must run with `vega-interpreter`, never by adding `'unsafe-eval'`.
 
+## Researcher sign-in and keys
+
+Built for the pilot. The design, with the reasons and the user flows, is in [researcher-keys.md](researcher-keys.md) ([ADR 0007](decisions/0007-browser-key-page.md)). This section records the constructions and the checks.
+
+### Two origins
+
+The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participant app, studio) and the key site (`COMBRAY_KEYS_URL`: the key page and the key API). A request is routed by its `Host` header; an unknown host gets the main site. Routes that return key material (sealed project keys, sealed donation keys, envelopes, wrapped personal keys) and every passkey ceremony exist only on the key site. The passkey RP ID is the key host, and the main site's `Permissions-Policy` turns WebAuthn off.
+
+### Sessions
+
+| | Email level | Full |
+| --- | --- | --- |
+| How | Email link (`#login=` token, 15 minutes, single use) | Passkey, or recovery code, after the email level |
+| Lasts | 15 minutes | 2 hours on the key site; 12 hours for a studio session |
+| Can | Register or use a passkey, use the recovery code | Everything the researcher may do on that site |
+
+- Cookies: `__Host-combray` on https (plain `combray` on http for development), `HttpOnly`, `Secure` on https, `SameSite=Strict`, `Path=/`, no `Domain`. Sessions are bound to their site: a key-site session does not work on the main site or the other way round.
+- The server stores SHA-256 hashes of session ids, login tokens and handoff codes, never the values. Session ids are 256-bit random and rotated when a session is upgraded.
+- **CSRF**: every request that is not `GET` or `HEAD` must carry an `Origin` equal to its site's origin, and `Sec-Fetch-Site`, when present, must be `same-origin` or `none`. Bodies are JSON or bytes, never forms.
+- **Rate limits**: email links 20 per IP per 10 minutes and 3 per address per 15 minutes; recovery codes 5 per researcher per hour; donations 60 per IP per 10 minutes. The email answer is the same for known and unknown addresses.
+- **Studio handoff**: a one-time code (two minutes) created by a full key-site session, sent in the fragment to `/studio/`, and traded for a main-site session. Studio sessions cannot create handoffs.
+- **Email** goes through SMTP with TLS (`lettre`). The SMTP URL never appears in logs or `Debug` output.
+
+### Passkeys
+
+`webauthn-rs` checks registrations and assertions (user verification required, discoverable credentials, at most ten per researcher). Ceremony state is kept in server memory for five minutes and used once. The page asks for the PRF extension on every ceremony with the salt `SHA-256("combray/prf-salt/v1")`. The JSON sent to the server is built by hand, with `extensions: {}`: the PRF output is never serialised. (`PublicKeyCredential.toJSON()` would include client extension results, so the page does not use it.)
+
+### Constructions
+
+All with `@hpke/core` 1.9 and `@hpke/hybridkem-x-wing` 0.7 (HPKE base mode, X-Wing, HKDF-SHA-256, AES-256-GCM) and WebCrypto, in `packages/seal`. HKDF calls use an empty salt and the label as `info`.
+
+| What | Construction |
+| --- | --- |
+| Master secret | 32 random bytes (`crypto.getRandomValues`) |
+| Personal key | X-Wing key pair from the seed `HKDF(master, "combray/personal-key/v1", 32)` |
+| Recovery sign-in | The server keeps `SHA-256(HKDF(master, "combray/recovery-sign-in/v1", 32))` and compares in constant time |
+| Recovery code | The master secret in Crockford base32, plus two check characters from `SHA-256("combray/recovery-check/v1" ‖ secret)`, in groups of six. Case and `I/L/O` are forgiven |
+| Passkey lock | `key = HKDF(PRF output, "combray/personal-key-wrap/v1", 32)`; `nonce (12) ‖ AES-256-GCM(key, master, aad = "combray/personal-key-wrap/v1" \0 researcher \0 credential)`, 60 bytes |
+| Project key | X-Wing key pair from a random 32-byte seed |
+| Sealed project key | HPKE seal of the seed to a personal key, `info = "combray/project-key/v1" \0 project \0 researcher` |
+| Fingerprint | base64url of `SHA-256("combray/key-fingerprint/v1\0" ‖ public key)[0..16]` |
+| Key code | Crockford base32 of `SHA-256("combray/key-code/v1\0" ‖ public key)[0..10]`, four groups of four (80 bits) |
+
+The page checks every personal key it opens against the public key the server has on record, and every project key against the project's public key, and refuses to go on when they differ. A server that substitutes a key is caught at the next use, except at a grant, which is what the key code comparison is for.
+
+### Donation envelope
+
+```
+"CMBRDON1" | u32 header length | header (JSON) | chunk* (u32 length | AES-256-GCM ciphertext)
+header = { v: 1, project, donation, key, chunkBytes, chunks, created }
+```
+
+- A fresh 256-bit **donation key** per donation. `donation` is a random 128-bit id; `key` is the project key fingerprint; `created` is the day only.
+- Chunk `i` (1 MiB of plaintext) uses the nonce `i` as 11 bytes big-endian followed by 1 on the last chunk and 0 otherwise, and the additional data `SHA-256(magic ‖ header)`. The header fixes the chunk count, so reordered, dropped, added or truncated chunks fail.
+- The donation key is HPKE-sealed to the project key with `info = "combray/donation-key/v1" \0 project \0 donation` and the header hash as additional data, so it opens only for this envelope.
+- The client sends `u32 length ‖ sealed key (JSON) ‖ envelope` in one request. The server checks the header's project, a valid fresh id and the current fingerprint, then writes the envelope to `donations/{project}/{id}` and the sealed key to the separate key database (`secure_delete`), and returns a withdrawal token (the server keeps its SHA-256).
+- Withdrawal deletes the sealed key and the envelope and keeps a tombstone in the donation index. On start, the server deletes any sealed key that has a tombstone, so a restored key backup cannot bring a withdrawal back.
+- Sealed donation keys are served only to a member with access, on the key site, in batches of at most 500, with `no-store`. The server logs the count of keys served, never ids.
+
+### The key page
+
+- One HTML file, built deterministically (`apps/keys/build.mjs`). The script and style are inline and unminified; the CSP in a `<meta>` tag and the identical header pin them by SHA-256. Nothing else can run or load: `default-src 'none'`, `connect-src 'self'`, `form-action 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`, Trusted Types with no policies.
+- Elements are built with `textContent` and attributes; the repo's test bans `innerHTML`, `eval` and `new Function` in `apps/keys` and `packages/seal`.
+- Keys are held in module memory only, never in storage. Lock, `pagehide` and 15 minutes idle overwrite and drop them.
+- Exports are CSV and JSON made in memory and saved with a `blob:` link. CSV cells that start with `=`, `+`, `-`, `@`, tab or carriage return get a leading apostrophe, so a spreadsheet does not run participant data as a formula.
+- The release publishes `combray-keys.html` and its SHA-256, so anyone can compare with what a server serves.
+
+### What changed and why (pilot)
+
+- **No local key tool.** Replaced by the key page with passkeys, because installing a tool and keeping a key file was the bigger risk for the researchers Combray is for. The cost is trusting the server not to serve a malicious key page; see [researcher-keys.md](researcher-keys.md#limits).
+- **One project key with member copies**, instead of sealing each donation to every researcher. Adding a colleague then needs no change to existing donations, and removing one deletes their copy.
+- **No signed configs.** The `#k=` fingerprint in the participant link pins the project key instead.
+- **No Rust crypto.** Nothing on the server opens anything; one TypeScript implementation is used by the participant client and the key page.
+
 ## Server
 
 - **Logs** contain the method, the route *template* (for example `/api/v1/stores/{id}/unlock`, without the id), the status and the duration. Never URLs, bodies, headers, passwords, store ids or IPs. Errors are logged by class only.
 - **Input:** store ids are validated before any lookup, and project ids are restricted to `[a-z0-9-]`, which rules out path traversal. Request bodies to the key service are capped at 8 KiB. Passwords are capped at 1,024 bytes.
 - **Container:** distroless base image, non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`. The data directory is the only writable volume, and the store master key comes in as a read-only Docker secret.
-- **Storage:** SQLite in the data directory, with WAL and `secure_delete`. It holds no participant data and no keys.
+- **Storage:** SQLite in the data directory, with WAL and `secure_delete`. The store database holds no participant data and no keys. Research accounts (`research.sqlite`), the donation index (`donations.sqlite`) and the sealed donation keys (`COMBRAY_DONATION_KEYS_DB`) are separate files, so the key database can have its own volume and a short backup retention. Donations are ciphertext.
+- **Researcher input:** emails are normalised and capped; project ids, donation ids and credential ids are validated before any lookup; donation bodies are capped by `COMBRAY_MAX_DONATION_MB` (64 by default), other researcher bodies at 64 KiB.
 
 ## Transport
 
@@ -300,7 +380,7 @@ The researcher workspace (`/studio/`) works on the researcher's own exports. The
 
 - Lockfiles (`pnpm-lock.yaml`, `Cargo.lock`) are committed, and CI installs with `--frozen-lockfile` and `--locked`.
 - pnpm only resolves package versions that have been published for at least a week (`minimumReleaseAge` in `pnpm-workspace.yaml`), so a hijacked release is likely to be caught before we pick it up.
-- The client's crypto uses only WebCrypto. The server uses RustCrypto (`argon2`, `hkdf`, `sha2`, `subtle`), `getrandom` for randomness and `rusqlite` with bundled SQLite. New dependencies that touch data or keys need a reason in the PR.
+- The participant client's store crypto uses only WebCrypto. Donation sealing and researcher keys use `@hpke/core` and `@hpke/hybridkem-x-wing` (by the same author, pure TypeScript over WebCrypto and `@noble` primitives) in `packages/seal`. The server uses `webauthn-rs` (with OpenSSL) for passkeys, `lettre` for mail, and RustCrypto (`argon2`, `hkdf`, `sha2`, `subtle`), `getrandom` for randomness and `rusqlite` with bundled SQLite. New dependencies that touch data or keys need a reason in the PR.
 - Rust code forbids `unsafe` (`unsafe_code = "forbid"` in the workspace).
 
 ## Decision log
@@ -324,9 +404,17 @@ The researcher workspace (`/studio/`) works on the researcher's own exports. The
 | Full structure shared after upload, new names reviewed; published tree with decided nodes only | Only new paths; named versions; reference trees or hashes of unreviewed paths sent to clients | Researchers need to know which nodes occur together to merge safely, and counts. Reviewing only new names keeps the effort small. Clients never get structure the researcher has not reviewed |
 | No SRI for now | SRI on all scripts | Same-origin scripts gain nothing; revisit if anything is ever loaded cross-origin |
 | Reproducible builds and published hashes | "Signed code only" | No browser standard enforces signed code for a normal website |
+| Researcher keys on a browser key page, locked under passkey PRF | Local key tool; keys held by the server; keys by email | Nothing to install or lose for low-tech researchers, while the server still cannot open donations ([ADR 0007](decisions/0007-browser-key-page.md)) |
+| Key page on its own origin, one hash-pinned file | Key handling inside the studio | A bug in the large apps cannot reach keys; the page can be read and checked against a release hash |
+| Email link plus passkey, no passwords | Passwords with TOTP; institutional login now | Nothing to reuse or phish; institutional login can replace the email step later |
+| One project key with sealed member copies, granted after comparing key codes | Seal each donation to every researcher | Colleagues can be added without touching donations; the code comparison stops a server-substituted key |
+| Recovery code (the master secret) as the only fallback | Server-side recovery; a second passkey only | The server must not be able to recover keys; a printed code survives losing every device |
+| `#k=` key fingerprint in the participant link | Signed configs now | Pins the key, which is what confidentiality needs, without a signing key to manage in the pilot |
 
 ## Open questions
 
+- **R and Python access** to donations without a passkey: a device key added from the key page, or the recovery code on a trusted machine?
+- **Who reviews the key page and `packages/seal`** before a study with real participants beyond the pilot.
 - **Identity by email or phone**, as an alternative to researcher-issued participant ids. It would allow self-service password reset, but the server would hold contact details. For now, we stick to participant ids.
 - **Who may create reset links** once researcher accounts exist: every researcher of a project, or only its owners? And should a project be able to switch resets off while still using ids?
 - **OPAQUE** (or another password-authenticated key exchange), so the server never sees passwords. It is worth it if it can be done with audited libraries on both sides.

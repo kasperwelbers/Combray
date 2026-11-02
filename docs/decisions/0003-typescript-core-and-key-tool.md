@@ -1,6 +1,6 @@
 # ADR 0003: TypeScript core first, a small local key tool, MIT licence
 
-- **Status:** accepted
+- **Status:** accepted; the local key tool (decision 2) is superseded by [ADR 0007](0007-browser-key-page.md)
 - **Date:** 2026-10-29
 - **Amends:** [ADR 0002](0002-modular-components.md) (the researcher tool) and open questions 2, 6b and 13
 

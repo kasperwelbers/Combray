@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { encodePayload, fromBase64Url, sealDonation, sealedToJson } from '@combray/seal';
+import { donationRequest, encodePayload, fromBase64Url, sealDonation } from '@combray/seal';
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -169,12 +169,7 @@ describe.skipIf(!enabled)('key page', () => {
       answers: { q1: 'yes' },
     });
     const donation = await sealDonation(payload, { projectId: 'willow', projectPublicKey: fromBase64Url(config.donation_key.public_key) });
-    const meta = new TextEncoder().encode(JSON.stringify(sealedToJson(donation.sealedKey)));
-    const body = new Uint8Array(4 + meta.length + donation.envelope.length);
-    new DataView(body.buffer).setUint32(0, meta.length);
-    body.set(meta, 4);
-    body.set(donation.envelope, 4 + meta.length);
-    const response = await fetch(`${MAIN}/api/v1/p/willow/donations`, { method: 'POST', headers: { origin: MAIN }, body });
+    const response = await fetch(`${MAIN}/api/v1/p/willow/donations`, { method: 'POST', headers: { origin: MAIN }, body: donationRequest(donation) });
     expect(response.status).toBe(201);
 
     await ada.page.reload();

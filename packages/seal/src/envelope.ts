@@ -156,3 +156,18 @@ export async function openDonation(
   if (at !== envelope.byteLength) throw new InvalidEnvelope('trailing bytes');
   return { header, payload: concat(...out) };
 }
+
+/**
+ * The body of `POST /api/v1/p/{project}/donations`: the sealed key and the envelope in one
+ * request, which the server stores apart.
+ *
+ *   u32 big-endian length | sealed donation key as JSON ({ enc, ciphertext }, base64url) | envelope
+ */
+export function donationRequest(donation: Pick<Donation, 'envelope' | 'sealedKey'>): Uint8Array<ArrayBuffer> {
+  const key = utf8(JSON.stringify({ enc: toBase64Url(donation.sealedKey.enc), ciphertext: toBase64Url(donation.sealedKey.ciphertext) }));
+  const body = new Uint8Array(4 + key.length + donation.envelope.length);
+  new DataView(body.buffer).setUint32(0, key.length);
+  body.set(key, 4);
+  body.set(donation.envelope, 4 + key.length);
+  return body;
+}

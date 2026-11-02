@@ -67,14 +67,14 @@ S4 = scene("You choose what to share; it is locked with a new donation key, whic
     + use("letterbox", 296, 150, 44, 38, "terra") + use("locked", 346, 150, 44, 36, "green")
     + label(343, 206, "kept apart", "middle", "cap"))
 
-S5 = scene("Each time, the researcher fetches the box from the server, opens it with the researcher key, reads, and throws the donation key away",
+S5 = scene("Each time, the researcher fetches the box from the server, opens it with the project key, reads, and throws the donation key away",
     hall(16, 44) + use("letterbox", 20, 150, 44, 38, "terra") + use("locked", 68, 150, 44, 36, "green")
     + arrow("M66 160 C130 120, 180 110, 238 104")
     + label(150, 100, "every time", "middle", "cap")
     + use("laptop", 238, 46, 132, 102) + label(304, 36, "Researcher", "middle")
     + use("cards", 262, 58, 48, 38) + use("key", 318, 78, 40, 17, "green")
     + use("key", 160, 44, 52, 22, "terra") + arrow("M214 56 C226 58, 236 64, 244 74")
-    + label(186, 36, "researcher key", "middle", "cap")
+    + label(186, 36, "project key", "middle", "cap")
     + use("locked", 246, 162, 44, 36, "green") + label(268, 210, "stays locked", "middle", "cap")
     + arrow("M346 102 L354 150") + use("bin", 338, 152, 38, 44))
 
@@ -131,12 +131,12 @@ STEPS = [
         "This is what makes shared lab computers safe: the next person at the computer cannot open anything without the password, and password guessing is limited by the server.",
     ], note="You never get the data key. It covers everything a participant loaded, including what they choose not to share."),
     step(3, S4, "A donation gets its own key, locked for you", [
-        "When a participant donates, they choose exactly what to share. The browser makes a fresh <b>donation key</b> for that selection, and seals it to your project's public key: like a letterbox, anyone can put a key in, only your private key opens it.",
+        "When a participant donates, they choose exactly what to share. The browser makes a fresh <b>donation key</b> for that selection, and seals it to your project's public key: like a letterbox, anyone can put a key in, only your project key opens it.",
         "The server stores the encrypted donation and the sealed key in separate places, and can open neither. The sealing uses a hybrid post-quantum construction (X-Wing), so recording the traffic today does not help an attacker with a future quantum computer.",
     ]),
     step(4, S5, "Your tools borrow the key, every time", [
-        "Your analysis tool (the local key tool, or the R package) may keep the encrypted donations on your computer. Every time you analyse, it fetches the sealed keys from the server, opens them with your private key, decrypts in memory, and throws the keys away when it is done.",
-        "So a copy of your laptop's disk holds only ciphertext, and a stolen private key alone is not enough: the server also has to hand over the sealed keys, which needs your access token.",
+        "You open donations on the <b>key page</b>, a small page of its own that you unlock with your passkey (Face ID, a fingerprint, or your phone). Every time, it fetches the sealed keys from the server, opens them with the project key, decrypts in memory, and throws the keys away when it is done. Later the R package will work the same way.",
+        "The server keeps the project key only locked for each researcher, and your copy only locked under your passkey, so it cannot open anything itself. Nothing is installed on your computer, and nothing is left on it unless you save an export.",
     ]),
     step(5, S6, "Withdrawal reaches every copy", [
         "When a participant withdraws, or asks you to withdraw for them, the server deletes the sealed keys and the envelope, and keeps a note that the donation was withdrawn. Your tool then deletes its local copy too. Any copy that is left, anywhere, can no longer be opened.",
@@ -153,15 +153,16 @@ TABLE = '''<div class="tablewrap"><table>
 <tr><th>The participant, with their password</th><td><span class="yes">●</span>Yes</td><td><span class="yes">●</span>Yes, until withdrawn</td></tr>
 <tr><th>Someone with the participant's computer</th><td><span class="no">○</span>No</td><td><span class="no">○</span>No</td></tr>
 <tr><th>The server operator</th><td><span class="no">○</span>Only with the participant's computer too</td><td><span class="no">○</span>No</td></tr>
-<tr><th>You, the researcher</th><td><span class="no">○</span>No</td><td><span class="yes">●</span>Yes, until withdrawn or your token is revoked</td></tr>
-<tr><th>Someone with your laptop</th><td><span class="no">○</span>No</td><td><span class="no">○</span>Only with your access token too</td></tr>
+<tr><th>You, the researcher</th><td><span class="no">○</span>No</td><td><span class="yes">●</span>Yes, until withdrawn or you are removed from the project</td></tr>
+<tr><th>Someone with your email</th><td><span class="no">○</span>No</td><td><span class="no">○</span>No: they also need your passkey or recovery code</td></tr>
 </tbody></table></div>'''
 
 CHECKLIST = '''<ul class="checks">
-<li><b>Back up your private key</b> the way your key tool guides you: an encrypted key file plus a paper copy with your data steward. Without it, nobody can open the donations.</li>
+<li><b>Keep your recovery code safe</b>, printed or saved apart from your passkey. If you lose both, a colleague can give you access again; if nobody on the project has access, nobody can open the donations.</li>
+<li><b>Compare key codes</b> when you give a colleague access, by phone or in person. It is what stops anyone slipping in a key of their own.</li>
 <li><b>Analyse without saving.</b> Write scripts that start from the encrypted donations and fetch the keys, rather than saving decrypted data.</li>
 <li><b>In R, turn off "Save workspace on exit"</b> (RStudio: Tools, Global Options, General, set it to Never). Otherwise <code>.RData</code> quietly keeps decrypted data.</li>
-<li><b>Keep your access token private</b>, and ask for it to be revoked when you leave the project. Each researcher has their own.</li>
+<li><b>Use a synced passkey</b> (iCloud Keychain, Google Password Manager, or a password manager), so losing a phone does not lock you out. Remove a lost device's passkey on the key page.</li>
 <li><b>If you export data, you own that copy.</b> Keep a list of exports, so you can delete a participant's data when they withdraw.</li>
 </ul>'''
 
@@ -170,8 +171,7 @@ R_SNIPPET = '''<pre><code>library(combray)
 con &lt;- combray_connect(
   server  = "https://combray.uni.nl",
   project = "willow",
-  token   = Sys.getenv("COMBRAY_TOKEN"),
-  key     = "~/keys/willow.combraykey"   # asks for the key file's passphrase
+  key     = combray_device_key()     # added once from the key page
 )
 
 combray_sync(con)                 # new donations in, withdrawn ones out
@@ -188,7 +188,7 @@ LEGEND = '<ul class="legend">' + "".join([
     keyitem("key", "dusk", "Box key.", "Held by the server, released only for the participant's password."),
     keyitem("key", "green", "Donation key.", "Fresh for every donation, covering only what was shared."),
     keyitem("letterbox", "terra", "Sealed key.", "The donation key sealed to your public key, kept by the server."),
-    keyitem("key", "terra", "Your private key.", "Only on your computer. Opens sealed keys."),
+    keyitem("key", "terra", "Project key.", "Opens sealed keys. Kept locked for each researcher, under their passkey."),
 ]) + "</ul>"
 
 BODY = f'''
@@ -199,7 +199,7 @@ BODY = f'''
 <ul class="cast">
 <li><h3>The participant's computer</h3><p>Holds their data, encrypted. It leaves only as a donation they choose.</p></li>
 <li><h3>The Combray server</h3><p>Run by the university. Holds keys and encrypted donations, but can read neither the data nor the donations.</p></li>
-<li><h3>Your computer</h3><p>Holds your private key. Opens donations, in memory, while the participant allows it.</p></li>
+<li><h3>The key page</h3><p>Unlocked with your passkey. Opens donations, in memory, while the participant allows it.</p></li>
 </ul>
 {LEGEND}
 {"".join(STEPS)}
@@ -210,7 +210,7 @@ BODY = f'''
 <h2 class="sec">Analysing in R</h2>
 <p class="fine">The R package is planned. This is a sketch of how it will work; nothing is written to disk except the encrypted donations.</p>
 {R_SNIPPET}
-<footer>The full design, with every key, the constructions and the alternatives we rejected, is in <a href="https://github.com/kasperwelbers/Combray/blob/main/docs/key-design.md">key-design.md</a>.</footer>
+<footer>The full design, with every key, the constructions and the alternatives we rejected, is in <a href="https://github.com/kasperwelbers/Combray/blob/main/docs/key-design.md">key-design.md</a>; how you sign in and hold your keys is in <a href="https://github.com/kasperwelbers/Combray/blob/main/docs/researcher-keys.md">researcher-keys.md</a>.</footer>
 </div>'''
 
 
