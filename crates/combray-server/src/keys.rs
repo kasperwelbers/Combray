@@ -15,11 +15,10 @@
 //!   after verifying who the participant is. A reset replaces the password hash and keeps the
 //!   KEK, so the data on the device opens again.
 
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::Engine;
@@ -29,6 +28,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use tokio::sync::Semaphore;
+
+use crate::limits::RateLimit;
+use crate::util::{self, now_secs, valid_random_id};
 
 const KEK_INFO: &[u8] = b"combray/store-kek/v1/";
 const SCHEMA_VERSION: i64 = 2;
@@ -112,40 +114,18 @@ pub struct NewStore {
     pub delete_token: String,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum Bucket {
-    Attempt,
-    Create,
-}
-
 pub struct KeyService {
     db: Mutex<Connection>,
     master: [u8; 32],
     cost: Argon2Cost,
-    limits: RateLimits,
     /// Argon2 is memory hard: bound how many hashes run at once.
     hashing: Semaphore,
-    windows: Mutex<HashMap<(Bucket, IpAddr), (Instant, u32)>>,
-}
-
-fn now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+    attempts_per_ip: RateLimit<IpAddr>,
+    creates_per_ip: RateLimit<IpAddr>,
 }
 
 fn random<const N: usize>() -> Result<[u8; N], KeyError> {
-    let mut bytes = [0u8; N];
-    getrandom::fill(&mut bytes).map_err(|_| KeyError::Internal("random"))?;
-    Ok(bytes)
-}
-
-fn valid_store_id(id: &str) -> bool {
-    id.len() == 22
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    util::random().map_err(|_| KeyError::Internal("random"))
 }
 
 fn check_password(password: &str) -> Result<(), KeyError> {
@@ -226,9 +206,9 @@ impl KeyService {
             db: Mutex::new(db),
             master,
             cost,
-            limits,
             hashing: Semaphore::new(parallel),
-            windows: Mutex::new(HashMap::new()),
+            attempts_per_ip: RateLimit::new(limits.attempts, limits.window),
+            creates_per_ip: RateLimit::new(limits.creates, limits.window),
         })
     }
 
@@ -267,34 +247,10 @@ impl KeyService {
         .map_err(|_| KeyError::Internal("join"))?
     }
 
-    /// Count a request from `ip` against its window; refuse it once the window is full.
-    fn rate_limit(&self, bucket: Bucket, ip: IpAddr) -> Result<(), KeyError> {
-        let max = match bucket {
-            Bucket::Attempt => self.limits.attempts,
-            Bucket::Create => self.limits.creates,
-        };
-        let now = Instant::now();
-        let window = self.limits.window;
-        let mut windows = self
-            .windows
-            .lock()
-            .map_err(|_| KeyError::Internal("lock"))?;
-        if windows.len() > 100_000 {
-            windows.retain(|_, (start, _)| now.duration_since(*start) < window);
-        }
-        let entry = windows.entry((bucket, ip)).or_insert((now, 0));
-        if now.duration_since(entry.0) >= window {
-            *entry = (now, 0);
-        }
-        if entry.1 >= max {
-            let retry = window
-                .saturating_sub(now.duration_since(entry.0))
-                .as_secs()
-                .max(1);
-            return Err(KeyError::TooManyAttempts { retry_after: retry });
-        }
-        entry.1 += 1;
-        Ok(())
+    fn limited(limit: &RateLimit<IpAddr>, ip: IpAddr) -> Result<(), KeyError> {
+        limit
+            .hit(ip)
+            .map_err(|retry_after| KeyError::TooManyAttempts { retry_after })
     }
 
     /// Create a store for a project (and participant, if any) protected by `password`. The
@@ -307,7 +263,7 @@ impl KeyService {
         password: &str,
     ) -> Result<NewStore, KeyError> {
         check_password(password)?;
-        self.rate_limit(Bucket::Create, ip)?;
+        Self::limited(&self.creates_per_ip, ip)?;
         let store_id = URL_SAFE_NO_PAD.encode(random::<16>()?);
         let kek_salt = random::<32>()?;
         let pw_salt = random::<16>()?;
@@ -350,13 +306,13 @@ impl KeyService {
         store_id: &str,
         password: &str,
     ) -> Result<Vec<u8>, KeyError> {
-        if !valid_store_id(store_id) {
+        if !valid_random_id(store_id) {
             return Err(KeyError::NotFound);
         }
         if password.len() > MAX_PASSWORD_BYTES {
             return Err(KeyError::InvalidPassword);
         }
-        self.rate_limit(Bucket::Attempt, ip)?;
+        Self::limited(&self.attempts_per_ip, ip)?;
         let now = now_secs();
         // Count this attempt as failed up front, in one transaction with the lockout check.
         let (kek_salt, pw_salt, pw_hash, cost, failures) = {
@@ -435,10 +391,10 @@ impl KeyService {
         store_id: &str,
         delete_token: &str,
     ) -> Result<(), KeyError> {
-        if !valid_store_id(store_id) {
+        if !valid_random_id(store_id) {
             return Err(KeyError::NotFound);
         }
-        self.rate_limit(Bucket::Attempt, ip)?;
+        Self::limited(&self.attempts_per_ip, ip)?;
         let token = URL_SAFE_NO_PAD
             .decode(delete_token)
             .map_err(|_| KeyError::WrongPassword { retry_after: None })?;
@@ -497,11 +453,11 @@ impl KeyService {
         token: &str,
         password: &str,
     ) -> Result<String, KeyError> {
-        if !valid_store_id(store_id) {
+        if !valid_random_id(store_id) {
             return Err(KeyError::NotFound);
         }
         check_password(password)?;
-        self.rate_limit(Bucket::Attempt, ip)?;
+        Self::limited(&self.attempts_per_ip, ip)?;
         let token_hash = URL_SAFE_NO_PAD
             .decode(token)
             .map(Sha256::digest)

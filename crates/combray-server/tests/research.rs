@@ -70,6 +70,7 @@ impl Fixture {
                 donation_keys_db: dir.path().join("keys/donation-keys.sqlite"),
                 mail: MailConfig::Outbox(dir.path().join("outbox")),
                 max_donation_bytes: 1024 * 1024,
+                key_backup_retention_days: 30,
             }),
             data_dir: data,
         };
@@ -898,6 +899,7 @@ async fn donations_are_stored_fetched_on_use_and_withdrawn() {
         .json(Method::GET, MAIN, "/api/v1/p/willow/config", None, None)
         .await;
     assert_eq!(config["donation_key"]["fingerprint"], "fp");
+    assert_eq!(config["donation_key"]["withdrawal_complete_days"], 30);
 
     // Envelopes for another project or key are refused.
     let (status, _) = donate(

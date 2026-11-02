@@ -78,6 +78,10 @@ pub struct ResearchConfig {
     pub donation_keys_db: PathBuf,
     pub mail: MailConfig,
     pub max_donation_bytes: usize,
+    /// How long backups of the donation key database are kept
+    /// (`COMBRAY_KEY_BACKUP_RETENTION_DAYS`, 30 by default). Combray does not make the backups;
+    /// it tells participants that a withdrawal is complete within this many days.
+    pub key_backup_retention_days: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -138,6 +142,10 @@ impl Config {
                     .unwrap_or(64)
                     * 1024
                     * 1024,
+                key_backup_retention_days: std::env::var("COMBRAY_KEY_BACKUP_RETENTION_DAYS")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(30),
             }),
             _ => None,
         };
@@ -204,12 +212,21 @@ async fn project_config(State(state): State<AppState>, UrlPath(id): UrlPath<Stri
             {
                 p.remove("pattern");
             }
-            if let (Some(r), Some(obj)) = (&state.research, config.as_object_mut()) {
+            if let (Some(r), Some(rc), Some(obj)) = (
+                &state.research,
+                &state.config.research,
+                config.as_object_mut(),
+            ) {
                 match r.accounts.project_key(&id) {
                     Ok(Some(key)) => {
                         obj.insert(
                             "donation_key".into(),
-                            json!({ "public_key": key.public_key, "fingerprint": key.fingerprint }),
+                            json!({
+                                "public_key": key.public_key,
+                                "fingerprint": key.fingerprint,
+                                // A withdrawal is complete once no backup holds the key.
+                                "withdrawal_complete_days": rc.key_backup_retention_days,
+                            }),
                         );
                     }
                     Ok(None) => {}

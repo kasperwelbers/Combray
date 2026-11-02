@@ -1,7 +1,18 @@
-{$COMBRAY_DOMAIN} {
+# Two sites, one server: the participant app and studio, and the key page on its own host name
+# (docs/researcher-keys.md#two-addresses). Caddy keeps the Host header, which the server uses to
+# tell them apart.
+(combray) {
 	encode zstd gzip
 	# Browsers only ever reach Combray over HTTPS (see docs/security.md#transport).
 	header Strict-Transport-Security "max-age=31536000"
 	# No access logs: they would contain URLs (see docs/privacy-and-encryption.md).
 	reverse_proxy combray:8080
+}
+
+{$COMBRAY_DOMAIN} {
+	import combray
+}
+
+keys.{$COMBRAY_DOMAIN} {
+	import combray
 }

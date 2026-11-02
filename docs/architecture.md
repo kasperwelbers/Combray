@@ -92,9 +92,9 @@ The server is intentionally small, and **multi-tenant**: one installation serves
 2. **Serve the web client** (embedded in the binary) and each project's signed config.
 3. **Store-key service** (built). Hold a key encryption key per participant store, released only for the store's password, with lockout and rate limits (see [security.md](security.md#store-keys)). These keys protect data that stays in the browser; they cannot decrypt donations.
 4. **Enrichment.** Accept batches of sanitised URLs, fetch public metadata quickly and politely, cache it without linking it to participants, stream results back (see [enrichment.md](enrichment.md)).
-5. **Donation storage.** Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers, and delete them on request. The sealed donation keys go into a separate key database with its own short backup retention, so deleting them withdraws every copy of a donation ([key-design.md](key-design.md)).
+5. **Donation storage** (built). Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers, and delete them on request. The sealed donation keys go into a separate key database with its own short backup retention, so deleting them withdraws every copy of a donation ([key-design.md](key-design.md)).
 6. **Optional AI proxy.** Forward helper requests (metadata only, see [ai-helper.md](ai-helper.md)) to a configured model, so API keys never reach the browser.
-7. **Optional private-key escrow** (later): store a copy of a project's private key encrypted under a researcher passkey (see [privacy-and-encryption.md](privacy-and-encryption.md#optional-passkey-protected-key-backup)).
+7. **Researcher accounts and keys** (built): email link and passkey sign-in, personal keys locked under the passkey, project keys sealed to members, and the key page on its own host name ([researcher-keys.md](researcher-keys.md)).
 
 Not the server's job: parsing DDPs, running importers, analysing data, and above all decrypting donations.
 

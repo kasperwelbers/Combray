@@ -45,13 +45,15 @@ impl std::fmt::Debug for MailConfig {
 
 impl MailConfig {
     pub fn from_env() -> MailConfig {
+        // Empty counts as unset, so docker compose can pass `${COMBRAY_SMTP_URL:-}`.
+        let var = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
         match (
-            std::env::var("COMBRAY_SMTP_URL"),
-            std::env::var("COMBRAY_MAIL_FROM"),
-            std::env::var("COMBRAY_MAIL_OUTBOX"),
+            var("COMBRAY_SMTP_URL"),
+            var("COMBRAY_MAIL_FROM"),
+            var("COMBRAY_MAIL_OUTBOX"),
         ) {
-            (Ok(url), Ok(from), _) => MailConfig::Smtp { url, from },
-            (_, _, Ok(dir)) => MailConfig::Outbox(PathBuf::from(dir)),
+            (Some(url), Some(from), _) => MailConfig::Smtp { url, from },
+            (_, _, Some(dir)) => MailConfig::Outbox(PathBuf::from(dir)),
             _ => MailConfig::Disabled,
         }
     }
