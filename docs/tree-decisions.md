@@ -51,6 +51,9 @@ Besides the decision, a node in the project tree can have:
 | `raw` | donated leaves | Donate the value as it is in the file instead of transformed ([What is donated](#what-is-donated)) |
 | `lifter` | inner | A sandboxed script that turns each row subtree into a map ([HTML](#html), layer 3) |
 | `filter` | repeated (`[*]`, `{*}`) | Which rows to import: a list of tests on columns (`equals`, `in`, `contains`, `matches`, `empty`, `min`, `max`, each with an optional `not`), all of which must pass. A filter may test a column that is not shown, such as an ignored leaf or the size of a nested table |
+| `required` | any | An upload only fits the tree when this node is there, by its name or any alias ([Finding the export](#finding-the-export-in-an-upload)) |
+| `newChildren` | inner | `ask` (the default) or `skip`: whether parts this node has never seen below it are read, shown and offered for structure sharing. Passed down until a node sets its own ([New parts](#new-parts-ask-or-skip)) |
+| `find` | the root | Name patterns for finding the export inside a bigger upload, such as `Takeout` or `watch-history*.json` ([Finding the export](#finding-the-export-in-an-upload)) |
 | derived fields, enrichers | table | Planned: fields computed from other columns (`from` + transform or script), and which columns may be enriched |
 
 ## Tables
@@ -126,18 +129,70 @@ Layer 1 needs changes to `extractShape` (counts for repeated siblings, positiona
 
 ## Upload points and the nameless root
 
-A project defines **upload points**, each for one platform: "TikTok (zip or JSON)", "Google Takeout (zip)". An upload point says what it accepts (a file, a folder or zips) and in which formats.
+A project defines **upload points**, each for one platform: "TikTok", "Google Takeout". Participants get **one uploader per upload point**, and each uploader only matches its own platform's tree. One tree could technically hold several platforms, but we recommend one platform per upload point: the messages to participants name the platform, and matching stays predictable.
 
-- **The upload is a nameless root.** The name of the uploaded file or folder is never recorded or sent. `kaspers_tiktok.csv` and `mygoogledata/` reveal nothing, and renaming does not create a new tree.
-- **There are no file nodes.** Files and folders inside the root are ordinary nodes, matched by name and aliases like keys inside a file. Paths start at the root: `Takeout/YouTube and YouTube Music/history/watch-history.json/[*]/title`, or `[*]/Date` for a single CSV.
+- **The upload is a nameless root.** The name of the uploaded file or folder is never recorded or sent, and nothing checks it. `kaspers_tiktok.json` and `mygoogledata/` reveal nothing, and renaming does not create a new tree.
+- **There are no file nodes.** Files and folders inside the root are ordinary nodes, matched by name and aliases like keys inside a file. Paths start at the root: `YouTube and YouTube Music/history/watch-history.json/[*]/title` for a Takeout, or `Activity/Like List/ItemFavoriteList/[*]/Date` for TikTok, whose root is the JSON file itself.
 - **The format comes from sniffing the content**, with the extension as a hint, not from the name.
-- **Split archives merge.** Google Takeout can come as `takeout-…-001.zip`, `-002.zip`. An upload point accepts several and merges them into one root.
-- **One top folder in an archive is unwrapped.** A zip whose entries all sit in `Takeout/` gives the same tree as picking the `Takeout` folder itself: the root holds `Chrome/`, `YouTube and YouTube Music/` and so on.
+- **Split archives merge.** Google Takeout can come as `takeout-…-001.zip`, `-002.zip`. Picking several archives merges them into one root.
 - **Per-user names inside the root** (`messages/inbox/johnsmith_1234/`) go through the existing dictionary collapse and name screening, so they become `inbox/{*}/`.
 
-In the project config, `uploads` lists the upload points. Each names a platform pack (`{"id": "youtube", "pack": "google-takeout", "name": {...}}`), whose project tree the client matches uploads against. The client tries each point (and, for a single file, the file inside a folder) and keeps the one that finds the most rows in collections. Without `uploads`, the YAML importers run as before.
+In the project config, `uploads` lists the upload points. Each names a platform pack (`{"id": "youtube", "pack": "google-takeout", "name": {...}}`), whose project tree the client matches uploads against. Without `uploads`, the YAML importers run as before, on everything that was picked.
 
 This also limits the size of the project tree. Ten participants with ten differently named files produce one tree, and identical structure is stored once because the tree is a union. The client still caps how many new paths it offers to send at once (around 500), and shows a summary instead of a long list when there are many.
+
+## Finding the export in an upload
+
+Agreed with Kasper on 2026-11-02. Participants pick a file, a folder or zips. Usually that is the export itself, but not always: a zip wraps a `Takeout/` folder, someone picks their whole Downloads folder, or (the worst case) their `C:` drive. Matching paths *inside* files alone is too risky: with partial matches, any file that happens to share a path would fit. So the client finds the root in four steps, looking at names before it opens anything.
+
+1. **The upload is the root.** The picked file or folder (or the contents of the picked zips) is tried as the root, without looking at its name.
+2. **Wrappers are stepped into.** If the upload holds exactly one entry, that entry is tried too, and so on, up to four levels: `takeout-….zip` › `Takeout/`, or a TikTok zip holding only `user_data_tiktok.json`. A zip found this way is opened. The tree decides which level fits, so a Takeout with only YouTube in it keeps `YouTube and YouTube Music/` as part of the tree instead of being stepped into.
+3. **Optionally, the export is looked for inside a bigger upload.** If the upload itself does not fit and the tree's root has `find` patterns, every file, folder or zip in the upload whose name matches a pattern is a candidate, each with its own wrapper levels. Patterns are names with `*` wildcards, compared without regard to case: `Takeout`, `takeout-*.zip`, `user_data*.json`. A pattern must have at least three letters or digits besides an extension, so `*` and `*.json`, which would open every file, are refused. Without patterns there is no search: the upload has to be the export.
+4. **The participant chooses when more than one fits.** We never guess silently. Folders can be chosen together (the parts of a split export); a file root is one file. The paths are shown on the device only.
+
+### When does a root fit
+
+A candidate fits the tree when:
+
+- **every required node is there**, by its name or any of its aliases, and
+- **something the study shows or asks for is there**: a path to a leaf with a `show` or `donate` decision.
+
+A folder is checked on names alone: a file in it must lead, through folders the tree knows, to a file the study uses, and required folders and files must be present. A file root (TikTok's JSON) has no name to check, so it is opened and its structure compared; it must be the same kind as the tree's root (a map, a list, an HTML page). Required nodes inside files are checked once the root is read.
+
+There is no threshold to tune. Researchers who want a stricter match mark more nodes required.
+
+**Required nodes.** `required` is a toggle on any node. Because matching goes by name *or* alias, a required node that was merged with another (`history` and `geschiedenis`) is satisfied by either name: a Dutch export with only `geschiedenis` still fits. A merge keeps the node required if either side was. There is no unmerge yet; if one is added, both nodes keep the setting. Use it for parts every export has. A participant whose export lacks a required part cannot add it, so a required leaf deep inside a list (every export must have at least one row with it) is rarely a good idea.
+
+### Names first, and fixed limits
+
+The order protects the participant:
+
+1. **Only names are listed.** Picked zips are read to list their entries, but nothing is inflated. Zips inside the upload are only opened when they are a wrapper or their name matches a pattern.
+2. **Only name matches are opened**, and only to check their structure.
+3. **Only the chosen root is read**, and in it only the files the tree wants: files in ignored parts are left out (unless they hold a required node), and so are files the tree does not know below a node that skips new children. The raw bytes kept on the device are those files only, never the rest of the upload.
+
+Combray sets hard limits that researchers cannot change (`UPLOAD_LIMITS` in `locate.ts`):
+
+| Limit | Value | Above it, the participant is told |
+| --- | --- | --- |
+| Files in an upload, counted by name (archives' contents included) | 100,000 | to pick the export itself |
+| Files or folders whose names match a pattern | 10 | to pick the export itself |
+| Bytes read: archives opened, files checked, files of the root | 4 GiB | that it is too large, and to make a smaller export if they can |
+
+When nothing fits, the participant is told that this does not look like an export of that platform, and to pick the zip or folder they downloaded. Nothing is stored in any of these cases. The values are first guesses: a full Takeout with photos is larger than 4 GiB, which is one reason the Takeout pack skips products it does not know.
+
+### New parts: ask or skip
+
+`newChildren: 'skip'` on an inner node means parts it has never seen below it (by name or alias) are **not read, not shown, and not offered** for structure sharing. It is passed down: every node below follows it until one sets `ask` again. Known children are unaffected. The researcher accepts missing renamed or new parts there in return for a smaller, safer upload and shorter questions. New paths are never donated anyway (clients only get decided paths), so this only changes what is read, shown and asked about.
+
+The Takeout pack sets `skip` on the root, because a Takeout holds every Google product the participant exported, and `ask` on the products it knows (Chrome, My Activity, YouTube), so new files there still come up. We start with this plain toggle; a glob of allowed new names is parked until a case needs it.
+
+### Packs
+
+- **Google Takeout**: the root is the Takeout folder's contents; `find`: `Takeout`, `takeout-*.zip`; skips unknown products.
+- **TikTok**: the root is the JSON export itself, so `user_data.json` and `user_data_tiktok.json` need no names or aliases; `find`: `user_data*.json`, for a JSON inside a bigger folder.
+
+The researcher workspace reads the researcher's own exports without a tree to match: a file or picked folder as it is, a zip stepped into once if it holds one entry. The code is in `packages/core/src/locate.ts`.
 
 ## Aliases and merging
 
@@ -219,7 +274,7 @@ The current runner stays until the derivation covers all platform packs. Dataset
 ## Implementation plan
 
 1. **Core** (built: `decisions.ts`, `projectFiles.ts`). Project tree types, effective decisions, alias matching, merging, comparing a participant shape with a project tree (known, unknown, missing), and the two JSON files.
-2. **Nameless root and upload points** (built: `uploadRoot`, `mergeDirs`, `prepareUpload`, `uploads` in the project config). Root without a name, unwrapping one top folder, merging split zips.
+2. **Nameless root and upload points** (built: `locate.ts`, `mergeDirs`, `uploads` in the project config). Root without a name, merging split zips, one uploader per upload point, and [finding the export](#finding-the-export-in-an-upload): wrapper levels, `find` patterns, required nodes, names first with fixed limits, and the participant choosing between candidates. `newChildren` is respected when reading, showing and comparing structure.
 3. **Table inference** (built: `derive.ts`). Every list of objects is a table, nested where it sits; maps whose keys are data become key and value tables; shortest unique suffix. Conversions and row filters are applied (`deriveRows` with `raw: true` turns both off).
 4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins, `<table>` and `<dl>`, running text, bare siblings, wrapping links. Still to do: tuning on team members' own exports.
 5. **Researcher UI** (built: `/studio/` in the web client). Tree with decisions, labels, descriptions, aliases, merging, "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in the side panel, value formats and a first chart builder are described in [exploration.md](exploration.md). Merge suggestions (skipping nodes that occur together in a loaded export, which also cannot be merged), "Read as" conversions, roles and row filters are built. Still to do: lifter editing, registering the files with a server project.
@@ -243,6 +298,15 @@ Answered by Kasper on 2026-11-01 ([structure-versions.md](structure-versions.md)
 
 - **Structure versions.** Not stored as named versions. Participants are asked right after upload to share their full structure (names only), reviewing only the names that are new. Each structure is stored, and two nodes that occur in one are never merged.
 - **What clients receive.** Only nodes the researcher has decided on (`ignore`, `show` or `donate`). Unreviewed structure is never sent to participants.
+
+Answered by Kasper on 2026-11-02 ([Finding the export](#finding-the-export-in-an-upload)):
+
+- **Matching the root.** The upload is the root, without a name check, and wrappers are stepped into. Searching a bigger upload needs name patterns on the tree's root (globs, no catch-alls), plus the same structure check. When several candidates fit, the participant chooses.
+- **One platform per uploader.** Recommended, not enforced.
+- **Required nodes.** A toggle on any node; any alias satisfies it, merged nodes keep it.
+- **New parts.** A plain `ask` or `skip` on inner nodes, passed down. No glob of allowed names for now.
+- **Protecting the participant.** Names first, then only name matches are opened, then only the root is read. Combray's limits on files, candidates and bytes are fixed.
+- **Single files placed in a tree.** The client no longer places a single file (`watch-history.json`) into a folder tree by its name. Participants pick the export they downloaded; a project that wants single files gives them an upload point whose tree is that file.
 
 ## Open questions
 

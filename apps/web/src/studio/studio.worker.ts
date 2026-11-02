@@ -9,9 +9,11 @@ import {
   chartQuery,
   countNodes,
   deriveRows,
+  defaultRoot,
   deriveTables,
   extractShape,
-  prepareUpload,
+  normalizeTree,
+  readSpot,
   runQuery,
   type DerivedRow,
   type ProjectNode,
@@ -20,7 +22,7 @@ import {
 } from '@combray/core';
 import * as Comlink from 'comlink';
 
-import { parseUpload } from '../worker/upload';
+import { listUpload } from '../worker/upload';
 import type { PreviewRow, PreviewTable, PreviewValue, StudioApi, StudioExport } from './api';
 
 const MAX_TEXT = 300;
@@ -66,12 +68,15 @@ function allRows(projectTree: ProjectNode, tables: TableDef[]): DerivedRow[][] {
 
 const api: StudioApi = {
   async addExport(uploads, onProgress) {
-    const parsed = await parseUpload(uploads, onProgress);
-    onProgress({ step: 'shape' });
+    onProgress({ step: 'looking' });
+    // The researcher's own export defines the root: a file or picked folder as it is, an
+    // archive stepped into once (docs/tree-decisions.md#finding-the-export-in-an-upload).
+    const listing = await listUpload(uploads);
+    const read = await readSpot(listing, await defaultRoot(listing));
     // HTML is normalised so rows and positions compare (docs/tree-decisions.md#html). Header
     // text may name columns here: this is the researcher's own export, and they see it.
-    const tree = prepareUpload(parsed.tree, parsed.source === 'archive', { keys: () => true });
-    const info: StudioExport = { id: nextId++, name: parsed.tree.name, nodeCount: countNodes(tree) };
+    const tree = normalizeTree(read.tree, { keys: () => true });
+    const info: StudioExport = { id: nextId++, name: listing.name, nodeCount: countNodes(tree) };
     exports.set(info.id, { info, tree });
     onProgress({ step: 'done' });
     return { export: info, shape: extractShape(tree) };

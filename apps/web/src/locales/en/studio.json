@@ -207,5 +207,29 @@
   "suggestScore": "{{score}}% alike",
   "suggestMerge": "Yes, merge",
   "suggestDismiss": "No",
-  "suggestShow": "Show {{name}}"
+  "suggestShow": "Show {{name}}",
+  "matchTitle": "Matching uploads",
+  "required": "Required: an upload only fits when this is there",
+  "requiredHelp": "Any of its names counts, so a merged or aliased part is satisfied by either name. Use it for parts every export has; a participant without them cannot add their data.",
+  "requiredTag": "required",
+  "newChildren": "New parts below this",
+  "newChildrenInherit": "As above ({{state}})",
+  "newChildrenAsk": "Read, show and ask about them",
+  "newChildrenSkip": "Skip them",
+  "newChildrenState": {
+    "ask": "ask",
+    "skip": "skip"
+  },
+  "newChildrenHelp": "Skipped parts are never opened, shown or offered for structure sharing. That keeps uploads small and the questions short, but you will not hear about renamed or new parts here.",
+  "skipTag": "skips new",
+  "findTitle": "Finding the export in a bigger upload",
+  "findHelp": "Participants pick their export as a zip, a folder or a file, and that is tried first, without looking at its name. If it does not fit, Combray looks inside it for files or folders with one of these names, such as Takeout or watch-history*.json. Use * as a wildcard; letters can be upper or lower case.",
+  "newPattern": "A file or folder name",
+  "badPattern": "That pattern {{problem}}.",
+  "problem": {
+    "too-many-files": "This upload has more files than Combray looks through. Pick the export itself.",
+    "too-big": "This upload is larger than Combray reads in a browser."
+  },
+  "uploadSettings": "How uploads are matched",
+  "rootHelp": "The upload itself: the file, folder or zip a participant picks, without its name. Below are the settings for matching uploads to this tree."
 }

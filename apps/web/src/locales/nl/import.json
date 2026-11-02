@@ -1,17 +1,30 @@
 {
   "title": "Je gegevens toevoegen",
   "intro": "Kies het zipbestand dat je van een platform hebt gedownload (zoals Google Takeout of TikTok), een map, of losse bestanden. Alles wordt alleen op deze computer gelezen en bewaard.",
+  "titleFor": "Je {{name}}-gegevens toevoegen",
+  "introFor": "Kies het zipbestand of de map die je van {{name}} hebt gedownload. We openen alleen wat bij je {{name}}-export hoort, en alles wordt alleen op deze computer gelezen en bewaard.",
+  "yourData": "gegevens",
   "chooseFiles": "Bestanden kiezen",
   "chooseFolder": "Een map kiezen",
   "drop": "of sleep ze hierheen",
   "failed": "Er ging iets mis bij het lezen. Er is niets bewaard.",
   "step": {
-    "reading_one": "{{count}} bestand lezen…",
-    "reading_other": "{{count}} bestanden lezen…",
-    "parsing": "Uitpakken en lezen…",
-    "shape": "Naar de structuur kijken…",
+    "looking": "We kijken wat je hebt gekozen…",
     "encrypting": "Veilig en versleuteld bewaren…",
     "done": "Klaar",
     "importers": "Kijken of we iets herkennen…"
+  },
+  "problem": {
+    "no-fit": "Dit lijkt geen {{name}}-export, dus we hebben het niet toegevoegd. Kies het zipbestand of de map die je van {{name}} hebt gedownload.",
+    "too-many-files": "Hier staan te veel bestanden om door te kijken. Kies de {{name}}-export zelf: het zipbestand of de map die je hebt gedownload. Er is niets bewaard.",
+    "too-many-candidates": "We vonden hier te veel bestanden die je {{name}}-export zouden kunnen zijn. Kies de export zelf: het zipbestand of de map die je hebt gedownload. Er is niets bewaard.",
+    "too-big": "Dit is te groot om in je browser te lezen, dus er is niets bewaard. Maak als het kan een nieuwe {{name}}-export met alleen de gegevens waar het onderzoek om vraagt."
+  },
+  "choose": {
+    "title": "We vonden meer dan één {{name}}-export",
+    "one": "Welke zullen we toevoegen? Alleen wat je kiest wordt gelezen.",
+    "several": "Welke zullen we toevoegen? Kwam je export in meerdere delen, kies ze dan allemaal. Alleen wat je kiest wordt gelezen.",
+    "add": "Toevoegen",
+    "cancel": "Annuleren"
   }
 }

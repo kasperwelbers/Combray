@@ -1,19 +1,11 @@
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-import { createSandbox, matchingImporters, parseEntries, runImporter, type Row } from '@combray/core';
+import { createSandbox, matchingImporters, runImporter, type Row } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
 import { importers } from '../index';
-
-const root = join(import.meta.dirname, '..', 'fixtures');
-
-function files(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    return statSync(path).isDirectory() ? files(path) : [path];
-  });
-}
+import { FIXTURES as root, fixtureNames, loadFixture } from './load';
 
 describe('bundled importers', () => {
   it('are valid and have unique ids', () => {
@@ -24,7 +16,7 @@ describe('bundled importers', () => {
 
   it('are each exercised by at least one fixture', () => {
     const covered = new Set<string>();
-    for (const fixture of readdirSync(root)) {
+    for (const fixture of fixtureNames()) {
       const expected = JSON.parse(readFileSync(join(root, fixture, 'expected.json'), 'utf8')) as Record<string, unknown>;
       for (const id of Object.keys(expected)) covered.add(id);
     }
@@ -32,13 +24,9 @@ describe('bundled importers', () => {
   });
 });
 
-describe.each(readdirSync(root))('fixture %s', (fixture) => {
+describe.each(fixtureNames())('fixture %s', (fixture) => {
   it('produces the expected rows', async () => {
-    const input = join(root, fixture, 'input');
-    const tree = parseEntries(
-      fixture,
-      files(input).map((path) => ({ path: relative(input, path).split('\\').join('/'), bytes: readFileSync(path) })),
-    );
+    const tree = loadFixture(fixture);
     const sandbox = await createSandbox();
     const actual: Record<string, Row[]> = {};
     for (const spec of matchingImporters(tree, importers)) {

@@ -5,7 +5,7 @@ export { parsePath, findPath, globMatch, PathError } from './path';
 export type { Path, PathMatch, Segment, NamePattern, ElementSelector } from './path';
 export { extractShape, screenName, elementName, countBucket, mergeAll, shapeSize, ITEM_NAME, COLLAPSED_NAME } from './shape';
 export type { Shape, CountBucket } from './shape';
-export { parseFile, parseEntries, parseZip, mergeDirs, uploadRoot, decodeText, jsonToTree } from './parse';
+export { parseFile, parseEntries, parseZip, mergeDirs, decodeText, jsonToTree, isNoise } from './parse';
 export type { ParseOptions, FileEntry } from './parse';
 export { flatten, unflatten, locationOf } from './flat';
 export type { FlatNode } from './flat';
@@ -20,6 +20,9 @@ export {
   ignoreOverrides,
   mergeNodes,
   compareShape,
+  matchShape,
+  requiredPaths,
+  closedNodes,
   getNode,
   matchChild,
   nameMatches,
@@ -37,6 +40,8 @@ export type {
   EffectiveState,
   MergeConflict,
   ShapeComparison,
+  MergeShapeOptions,
+  NewChildren,
   Role,
   RowFilter,
 } from './decisions';
@@ -52,7 +57,7 @@ export {
   IMPORTER_FORMAT,
 } from './projectFiles';
 export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';
-export { normalizeTree, prepareUpload, MIN_REPEATS } from './normalize';
+export { normalizeTree, MIN_REPEATS } from './normalize';
 export type { NormalizeOptions } from './normalize';
 export { runQuery, queryColumns, unnestPath, rootTable, datePart, QueryError } from './query';
 export type {
@@ -71,5 +76,25 @@ export type {
 export { chartQuery, chartData } from './chart';
 export type { ChartSpec, ChartData, ChartPoint } from './chart';
 export { suggestMerges, suggestAfterMerge } from './suggest';
+export {
+  UploadListing,
+  locateRoot,
+  defaultRoot,
+  readSpot,
+  findPatternProblem,
+  UploadProblemError,
+  UPLOAD_LIMITS,
+} from './locate';
+export type {
+  UploadFile,
+  UploadLimits,
+  UploadProblem,
+  Spot,
+  ReadSpot,
+  ReadRoot,
+  RootChoice,
+  Located,
+  LocateResult,
+} from './locate';
 export type { MergeSuggestion } from './suggest';
 export { occursIn, seenTogether } from './together';

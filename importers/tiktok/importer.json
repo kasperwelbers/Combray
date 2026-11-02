@@ -2,19 +2,19 @@
   "format": "combray-importer@1",
   "name": {"en": "TikTok", "nl": "TikTok"},
   "entries": [
-    {"path": ["user_data.json"], "kind": "map", "aliases": ["user_data_tiktok.json"]},
-    {"path": ["user_data.json", "Activity"], "kind": "map", "aliases": ["Your Activity", "Likes and Favorites"]},
-    {"path": ["user_data.json", "Activity", "Like List"], "kind": "map"},
-    {"path": ["user_data.json", "Activity", "Like List", "ItemFavoriteList"], "kind": "list", "aliases": ["itemFavoriteList"], "label": {"en": "TikTok likes", "nl": "TikTok-likes"}},
-    {"path": ["user_data.json", "Activity", "Like List", "ItemFavoriteList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
-    {"path": ["user_data.json", "Activity", "Like List", "ItemFavoriteList", "[*]", "Link"], "kind": "value", "decision": "show", "aliases": ["link", "VideoLink"], "label": {"en": "Video", "nl": "Video"}, "role": "url", "as": "url"},
-    {"path": ["user_data.json", "Activity", "Search History"], "kind": "map", "aliases": ["Searches"]},
-    {"path": ["user_data.json", "Activity", "Search History", "SearchList"], "kind": "list", "aliases": ["searchList"], "label": {"en": "TikTok searches", "nl": "TikTok-zoekopdrachten"}},
-    {"path": ["user_data.json", "Activity", "Search History", "SearchList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
-    {"path": ["user_data.json", "Activity", "Search History", "SearchList", "[*]", "SearchTerm"], "kind": "value", "decision": "show", "aliases": ["searchTerm"], "label": {"en": "Search", "nl": "Zoekopdracht"}, "role": "title"},
-    {"path": ["user_data.json", "Activity", "Video Browsing History"], "kind": "map", "aliases": ["Watch History"]},
-    {"path": ["user_data.json", "Activity", "Video Browsing History", "VideoList"], "kind": "list", "aliases": ["videoList"], "label": {"en": "TikTok watch history", "nl": "TikTok-kijkgeschiedenis"}},
-    {"path": ["user_data.json", "Activity", "Video Browsing History", "VideoList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
-    {"path": ["user_data.json", "Activity", "Video Browsing History", "VideoList", "[*]", "Link"], "kind": "value", "decision": "show", "aliases": ["link", "VideoLink"], "label": {"en": "Video", "nl": "Video"}, "role": "url", "as": "url"}
+    {"path": [], "kind": "map", "find": ["user_data*.json"]},
+    {"path": ["Activity"], "kind": "map", "aliases": ["Your Activity", "Likes and Favorites"]},
+    {"path": ["Activity", "Like List"], "kind": "map"},
+    {"path": ["Activity", "Like List", "ItemFavoriteList"], "kind": "list", "aliases": ["itemFavoriteList"], "label": {"en": "TikTok likes", "nl": "TikTok-likes"}},
+    {"path": ["Activity", "Like List", "ItemFavoriteList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
+    {"path": ["Activity", "Like List", "ItemFavoriteList", "[*]", "Link"], "kind": "value", "decision": "show", "aliases": ["link", "VideoLink"], "label": {"en": "Video", "nl": "Video"}, "role": "url", "as": "url"},
+    {"path": ["Activity", "Search History"], "kind": "map", "aliases": ["Searches"]},
+    {"path": ["Activity", "Search History", "SearchList"], "kind": "list", "aliases": ["searchList"], "label": {"en": "TikTok searches", "nl": "TikTok-zoekopdrachten"}},
+    {"path": ["Activity", "Search History", "SearchList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
+    {"path": ["Activity", "Search History", "SearchList", "[*]", "SearchTerm"], "kind": "value", "decision": "show", "aliases": ["searchTerm"], "label": {"en": "Search", "nl": "Zoekopdracht"}, "role": "title"},
+    {"path": ["Activity", "Video Browsing History"], "kind": "map", "aliases": ["Watch History"]},
+    {"path": ["Activity", "Video Browsing History", "VideoList"], "kind": "list", "aliases": ["videoList"], "label": {"en": "TikTok watch history", "nl": "TikTok-kijkgeschiedenis"}},
+    {"path": ["Activity", "Video Browsing History", "VideoList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
+    {"path": ["Activity", "Video Browsing History", "VideoList", "[*]", "Link"], "kind": "value", "decision": "show", "aliases": ["link", "VideoLink"], "label": {"en": "Video", "nl": "Video"}, "role": "url", "as": "url"}
   ]
 }

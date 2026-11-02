@@ -28,6 +28,9 @@ export interface RowFilter {
 }
 export type EffectiveState = 'ignore' | 'show' | 'donate';
 
+/** Whether a node reads, shows and asks about parts it has never seen below it. */
+export type NewChildren = 'ask' | 'skip';
+
 /** Another name for a node: a glob (`*` wildcard, `\*` literal star) or a regular expression. */
 export type Alias = string | { regex: string; flags?: string };
 
@@ -59,6 +62,22 @@ export interface ProjectNode {
   role?: Role;
   /** Repeated nodes (`[*]`, `{*}`): conditions a row must meet, all of them, to be imported. */
   filter?: RowFilter[];
+  /**
+   * An upload only fits the tree when this node is there, by its name or any alias
+   * (docs/tree-decisions.md#finding-the-export-in-an-upload).
+   */
+  required?: true;
+  /**
+   * Inner nodes: whether parts this node has never seen below it are read, shown and offered
+   * for structure sharing (`ask`, the default) or skipped (`skip`). Passed down: a node without
+   * a setting follows its parent.
+   */
+  newChildren?: NewChildren;
+  /**
+   * The root only: name patterns (globs) for finding the export inside a bigger upload, when
+   * the upload itself does not fit. See `findPatternProblem` for what a pattern must be.
+   */
+  find?: string[];
   label?: Localized;
   /** One participant-facing sentence, for donated leaves. */
   description?: Localized;
@@ -234,6 +253,33 @@ function absorb(node: ProjectNode, shape: Shape): void {
   copyStructure(merged, node);
 }
 
+/** Whether a node skips new children: its own `newChildren`, or else its parent's. */
+const closedHere = (node: ProjectNode, parentClosed: boolean) =>
+  node.newChildren === undefined ? parentClosed : node.newChildren === 'skip';
+
+/**
+ * Nodes whose new children are skipped: `newChildren: 'skip'` on them, or on their nearest
+ * ancestor that has a setting.
+ */
+export function closedNodes(root: ProjectNode): Set<ProjectNode> {
+  const out = new Set<ProjectNode>();
+  const visit = (node: ProjectNode, parentClosed: boolean) => {
+    const closed = closedHere(node, parentClosed);
+    if (closed) out.add(node);
+    for (const child of node.children ?? []) visit(child, closed);
+  };
+  visit(root, false);
+  return out;
+}
+
+export interface MergeShapeOptions {
+  /**
+   * Leave out positions below nodes that skip new children (`newChildren: 'skip'`), as a
+   * participant's client does. The researcher workspace keeps everything.
+   */
+  skipClosed?: boolean;
+}
+
 /**
  * Add a shape to a project tree. Positions are matched by kind and by canonical name or
  * alias; new positions are added undecided. Returns the new tree and the paths of the added
@@ -242,21 +288,23 @@ function absorb(node: ProjectNode, shape: Shape): void {
 export function mergeShape(
   root: ProjectNode,
   shape: Shape,
+  options: MergeShapeOptions = {},
 ): { tree: ProjectNode; added: NodePath[] } {
   const tree = structuredClone(root);
   const added: NodePath[] = [];
-  const visit = (node: ProjectNode, s: Shape, path: NodePath) => {
+  const visit = (node: ProjectNode, s: Shape, path: NodePath, parentClosed: boolean) => {
     absorb(node, s);
+    const closed = closedHere(node, parentClosed);
     for (const child of s.children ?? []) {
       const match = matchChild(node, child.kind, child.name);
       if (match) {
-        visit(match, child, [...path, match.name]);
+        visit(match, child, [...path, match.name], closed);
         continue;
       }
       const item = listTwin(node, child.kind, child.name);
       if (item) {
         const list = node.children!.find((c) => c.children?.includes(item))!;
-        visit(item, { ...child, name: ITEM_NAME }, [...path, list.name, ITEM_NAME]);
+        visit(item, { ...child, name: ITEM_NAME }, [...path, list.name, ITEM_NAME], closed);
         continue;
       }
       const single = elementTwin(node, child);
@@ -270,9 +318,10 @@ export function mergeShape(
           children: [{ ...rest, name: ITEM_NAME }],
         };
         node.children = node.children!.map((c) => (c === single ? list : c));
-        visit(list, child, [...path, list.name]);
+        visit(list, child, [...path, list.name], closed);
         continue;
       }
+      if (closed && options.skipClosed) continue;
       const twins = (node.children ?? []).filter((c) => nameMatches(c, child.name));
       if (isNullOnly(child) && twins.length > 0) continue;
       const nullTwin = twins.find(isNullOnly);
@@ -282,7 +331,7 @@ export function mergeShape(
       added.push([...path, named.name]);
     }
   };
-  visit(tree, unifyElementTwins(shape), []);
+  visit(tree, unifyElementTwins(shape), [], false);
   return { tree, added };
 }
 
@@ -355,7 +404,7 @@ export function setDecision(root: ProjectNode, path: NodePath, decision: LeafDec
 export interface MergeConflict {
   /** Path of the merged node, under the target. */
   path: NodePath;
-  field: 'decision' | 'label' | 'description';
+  field: 'decision' | 'label' | 'description' | 'newChildren';
 }
 
 /**
@@ -393,7 +442,9 @@ export function mergeNodes(
       }
     }
     absorb(dst, toShape({ ...src, children: undefined }));
-    for (const field of ['decision', 'label', 'description'] as const) {
+    // Required means present by any name, so the merged node is required if either was.
+    if (src.required) dst.required = true;
+    for (const field of ['decision', 'label', 'description', 'newChildren'] as const) {
       if (src[field] === undefined) continue;
       if (dst[field] === undefined) (dst as unknown as Record<string, unknown>)[field] = src[field];
       else if (JSON.stringify(dst[field]) !== JSON.stringify(src[field])) {
@@ -416,44 +467,81 @@ export interface ShapeComparison {
   unknown: { path: string[]; shape: Shape }[];
   /** Donated leaves in the project tree that this shape does not have. */
   missing: NodePath[];
+  /** Required nodes (`required`) that this shape does not have, by any of their names. */
+  missingRequired: NodePath[];
+}
+
+/**
+ * Walk a shape along a project tree. Returns the project nodes the shape has; positions the
+ * tree does not know go to `onUnknown`, with whether they sit below an ignored node or below a
+ * node that skips new children.
+ */
+function walkShape(
+  root: ProjectNode,
+  shape: Shape,
+  onUnknown: (path: string[], shape: Shape, where: { ignored: boolean; closed: boolean }) => void = () => {},
+): Set<ProjectNode> {
+  const seen = new Set<ProjectNode>();
+  const visit = (node: ProjectNode, s: Shape, path: string[], parentIgnored: boolean, parentClosed: boolean) => {
+    seen.add(node);
+    const ignored = parentIgnored || node.decision === 'ignore';
+    const closed = closedHere(node, parentClosed);
+    for (const child of s.children ?? []) {
+      const match = matchChild(node, child.kind, child.name);
+      const item = match ? undefined : listTwin(node, child.kind, child.name);
+      const single = match || item ? undefined : elementTwin(node, child);
+      if (match) visit(match, child, [...path, child.name], ignored, closed);
+      else if (item) visit(item, { ...child, name: ITEM_NAME }, [...path, child.name, ITEM_NAME], ignored, closed);
+      else if (single) for (const i of child.children ?? []) visit(single, i, [...path, child.name], ignored, closed);
+      else if (node.collapsed) {
+        onUnknown([...path, COLLAPSED_NAME], { ...child, name: COLLAPSED_NAME }, { ignored, closed });
+      } else onUnknown([...path, child.name], child, { ignored, closed });
+    }
+  };
+  visit(root, unifyElementTwins(shape), [], false, false);
+  return seen;
+}
+
+/** The project nodes a participant's shape has, matched by kind and by name or alias. */
+export function matchShape(root: ProjectNode, shape: Shape): Set<ProjectNode> {
+  return walkShape(root, shape);
+}
+
+/** Paths of the required nodes (`required`) in a project tree, top first. */
+export function requiredPaths(root: ProjectNode): NodePath[] {
+  const out: NodePath[] = [];
+  const visit = (node: ProjectNode, path: NodePath) => {
+    if (node.required) out.push(path);
+    for (const child of node.children ?? []) visit(child, [...path, child.name]);
+  };
+  visit(root, []);
+  return out;
 }
 
 /**
  * Compare a participant's shape with the project tree, locally. Unknown positions are the
  * candidates for the structure-metadata consent request; they are never donated. Ignored
  * subtrees are skipped: what is below an ignored node is never imported, so it is not asked
- * for either.
+ * for either. Nor are new positions below a node that skips new children.
  */
 export function compareShape(root: ProjectNode, shape: Shape): ShapeComparison {
   const unknown: ShapeComparison['unknown'] = [];
-  const seen = new Set<ProjectNode>();
-  const visit = (node: ProjectNode, s: Shape, path: string[]) => {
-    seen.add(node);
-    if (node.decision === 'ignore') return;
-    for (const child of s.children ?? []) {
-      const match = matchChild(node, child.kind, child.name);
-      const item = match ? undefined : listTwin(node, child.kind, child.name);
-      const single = match || item ? undefined : elementTwin(node, child);
-      if (match) visit(match, child, [...path, child.name]);
-      else if (item) visit(item, { ...child, name: ITEM_NAME }, [...path, child.name, ITEM_NAME]);
-      else if (single) for (const i of child.children ?? []) visit(single, i, [...path, child.name]);
-      else if (node.collapsed) {
-        unknown.push({ path: [...path, COLLAPSED_NAME], shape: { ...child, name: COLLAPSED_NAME } });
-      } else unknown.push({ path: [...path, child.name], shape: child });
-    }
-  };
-  visit(root, unifyElementTwins(shape), []);
+  const seen = walkShape(root, shape, (path, s, { ignored, closed }) => {
+    if (!ignored && !closed) unknown.push({ path, shape: s });
+  });
   const states = effectiveStates(root);
   const missing: NodePath[] = [];
+  const missingRequired: NodePath[] = [];
   const findMissing = (node: ProjectNode, path: NodePath) => {
     const donated = isLeaf(node)
       ? states.get(node) === 'donate'
       : node.name === COLLAPSED_NAME && node.decision === 'donate' && states.get(node) !== 'ignore';
     if (donated && !seen.has(node)) missing.push(path);
+    if (node.required && !seen.has(node)) missingRequired.push(path);
     for (const child of node.children ?? []) findMissing(child, [...path, child.name]);
   };
   findMissing(root, []);
-  return { unknown, missing };
+  return { unknown, missing, missingRequired };
 }
 
 /**

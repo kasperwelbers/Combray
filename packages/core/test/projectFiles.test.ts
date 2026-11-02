@@ -92,4 +92,22 @@ describe('project files', () => {
       'invalid regular expression',
     );
   });
+
+  it('keeps how uploads are matched: find patterns on the root, required parts, new children', () => {
+    const tree = decided();
+    tree.find = ['watch-history*.json'];
+    tree.newChildren = 'skip';
+    getNode(tree, ['[*]', 'time'])!.required = true;
+    const { structure, importer: settings } = splitProjectTree(tree);
+    expect(settings.entries[0]).toEqual({ path: [], kind: 'list', find: ['watch-history*.json'], newChildren: 'skip' });
+    const parsed = parseImporterFile(JSON.parse(JSON.stringify(settings)));
+    expect(joinProjectTree(structure, parsed).tree).toEqual(tree);
+
+    const root = { path: [], kind: 'list' };
+    expect(() => parseImporterFile(importer({ ...root, find: ['*.json'] }))).toThrow('three letters');
+    expect(() => parseImporterFile(importer({ ...root, find: [] }))).toThrow('find');
+    expect(() => parseImporterFile(importer({ path: ['a'], kind: 'map', find: ['Takeout'] }))).toThrow('only the root');
+    expect(() => parseImporterFile(importer({ ...root, newChildren: 'never' }))).toThrow('ask or skip');
+    expect(() => parseImporterFile(importer({ ...root, required: false }))).toThrow('required');
+  });
 });

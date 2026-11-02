@@ -1,119 +1,41 @@
 {
   "format": "combray-structure@1",
   "root": {
-    "kind": "dir",
+    "kind": "map",
     "name": "",
     "children": [
       {
         "kind": "map",
-        "name": "user_data.json",
+        "name": "Activity",
         "children": [
           {
             "kind": "map",
-            "name": "Activity",
+            "name": "Like List",
             "children": [
               {
-                "kind": "map",
-                "name": "Like List",
+                "kind": "list",
+                "name": "ItemFavoriteList",
+                "count": "1",
                 "children": [
                   {
-                    "kind": "list",
-                    "name": "ItemFavoriteList",
-                    "count": "1",
+                    "kind": "map",
+                    "name": "[*]",
                     "children": [
                       {
-                        "kind": "map",
-                        "name": "[*]",
-                        "children": [
-                          {
-                            "kind": "value",
-                            "name": "Date",
-                            "types": [
-                              "date-like"
-                            ],
-                            "formats": [
-                              "YYYY-MM-DD HH:mm:ss"
-                            ]
-                          },
-                          {
-                            "kind": "value",
-                            "name": "Link",
-                            "types": [
-                              "url-like"
-                            ]
-                          }
+                        "kind": "value",
+                        "name": "Date",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DD HH:mm:ss"
                         ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "kind": "map",
-                "name": "Search History",
-                "children": [
-                  {
-                    "kind": "list",
-                    "name": "SearchList",
-                    "count": "1",
-                    "children": [
+                      },
                       {
-                        "kind": "map",
-                        "name": "[*]",
-                        "children": [
-                          {
-                            "kind": "value",
-                            "name": "Date",
-                            "types": [
-                              "date-like"
-                            ],
-                            "formats": [
-                              "YYYY-MM-DD HH:mm:ss"
-                            ]
-                          },
-                          {
-                            "kind": "value",
-                            "name": "SearchTerm",
-                            "types": [
-                              "string"
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "kind": "map",
-                "name": "Video Browsing History",
-                "children": [
-                  {
-                    "kind": "list",
-                    "name": "VideoList",
-                    "count": "2-10",
-                    "children": [
-                      {
-                        "kind": "map",
-                        "name": "[*]",
-                        "children": [
-                          {
-                            "kind": "value",
-                            "name": "Date",
-                            "types": [
-                              "date-like"
-                            ],
-                            "formats": [
-                              "YYYY-MM-DD HH:mm:ss"
-                            ]
-                          },
-                          {
-                            "kind": "value",
-                            "name": "Link",
-                            "types": [
-                              "url-like"
-                            ]
-                          }
+                        "kind": "value",
+                        "name": "Link",
+                        "types": [
+                          "url-like"
                         ]
                       }
                     ]
@@ -124,23 +46,95 @@
           },
           {
             "kind": "map",
-            "name": "Profile",
+            "name": "Search History",
             "children": [
               {
-                "kind": "map",
-                "name": "Profile Information",
+                "kind": "list",
+                "name": "SearchList",
+                "count": "1",
                 "children": [
                   {
                     "kind": "map",
-                    "name": "ProfileMap",
+                    "name": "[*]",
                     "children": [
                       {
                         "kind": "value",
-                        "name": "userName",
+                        "name": "Date",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DD HH:mm:ss"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "SearchTerm",
                         "types": [
                           "string"
                         ]
                       }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "map",
+            "name": "Video Browsing History",
+            "children": [
+              {
+                "kind": "list",
+                "name": "VideoList",
+                "count": "2-10",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "Date",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DD HH:mm:ss"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Link",
+                        "types": [
+                          "url-like"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "map",
+        "name": "Profile",
+        "children": [
+          {
+            "kind": "map",
+            "name": "Profile Information",
+            "children": [
+              {
+                "kind": "map",
+                "name": "ProfileMap",
+                "children": [
+                  {
+                    "kind": "value",
+                    "name": "userName",
+                    "types": [
+                      "string"
                     ]
                   }
                 ]

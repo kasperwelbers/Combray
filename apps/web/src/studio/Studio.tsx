@@ -29,7 +29,7 @@ import { Dropzone } from '../components/Dropzone';
 import type { ImportProgress, Upload } from '../worker/api';
 import type { PreviewTable, StudioExport } from './api';
 import { addExport, studio } from './client';
-import { DecisionTree, type TreeView } from './DecisionTree';
+import { DecisionTree } from './DecisionTree';
 import {
   countDecisions,
   decideBelow,
@@ -129,7 +129,7 @@ export function Studio() {
   async function addFiles(uploads: Upload[]) {
     if (uploads.length === 0) return;
     setMessage(undefined);
-    setProgress({ step: 'reading', files: 0 });
+    setProgress({ step: 'looking' });
     try {
       const { export: info, shape } = await addExport(uploads, setProgress);
       setExports((e) => [...e, info]);
@@ -144,8 +144,10 @@ export function Studio() {
         setOpen(new Set(shape.children?.map((c) => pathKey([c.name])) ?? []));
         setMessage({ text: t('studio.started') });
       }
-    } catch {
-      setMessage({ text: t('import.failed'), error: true });
+    } catch (error) {
+      // Combray's fixed limits apply to the researcher's own exports too.
+      const problem = error instanceof Error && ['too-many-files', 'too-big'].includes(error.message) ? error.message : undefined;
+      setMessage({ text: problem ? t(`studio.problem.${problem}`) : t('import.failed'), error: true });
     } finally {
       setProgress(undefined);
     }
@@ -337,7 +339,7 @@ export function Studio() {
       </div>
 
       <div aria-live="polite">
-        {progress && <p className="message">{t(`import.step.${progress.step}`, { count: progress.files ?? 0 })}</p>}
+        {progress && <p className="message">{t(`import.step.${progress.step}`)}</p>}
         {message && (
           <p className={`message${message.error ? ' error' : ''}`} role={message.error ? 'alert' : undefined}>
             {message.text}
@@ -390,6 +392,14 @@ export function Studio() {
                 />
                 {t('studio.hideIgnored')}
               </label>
+              <button
+                type="button"
+                className="button quiet"
+                aria-pressed={selected?.length === 0}
+                onClick={() => setSelected([])}
+              >
+                {t('studio.uploadSettings')}
+              </button>
             </div>
             <p className="meta">{t(`studio.viewHelp.${view}`)}</p>
             <div className="studio-grid">
