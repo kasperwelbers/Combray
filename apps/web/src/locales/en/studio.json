@@ -67,6 +67,8 @@
   "merged_zero": "Merged.",
   "merged_one": "Merged. {{count}} setting differed on both sides; the one you merged into was kept.",
   "merged_other": "Merged. {{count}} settings differed on both sides; the ones you merged into were kept.",
+  "mergeTogether_one": "Not merged: both parts are in one of your loaded exports, so they hold different data.",
+  "mergeTogether_other": "Not merged: both parts are in {{count}} of your loaded exports, so they hold different data.",
   "previewTitle": "View as participant",
   "previewIntro": "The tables participants will see with your current decisions, filled with your own export.",
   "previewEmpty": "Add an export to see the preview.",
