@@ -231,5 +231,17 @@
     "too-big": "This upload is larger than Combray reads in a browser."
   },
   "uploadSettings": "How uploads are matched",
-  "rootHelp": "The upload itself: the file, folder or zip a participant picks, without its name. Below are the settings for matching uploads to this tree."
+  "rootHelp": "The upload itself: the file, folder or zip a participant picks, without its name. Below are the settings for matching uploads to this tree.",
+  "accountTitle": "Your account",
+  "signedOut": "Sign in on the key page to see your projects here. You can also use this workspace without signing in: your exports and decisions stay in this browser.",
+  "handoffFailed": "That sign-in link from the key page has been used or has expired. Open the studio from the key page again.",
+  "signInOnKeyPage": "Sign in on the key page",
+  "signedInAs": "Signed in as {{email}}.",
+  "noProjects": "You are not a member of any project yet. Ask the server operator to add you.",
+  "projectNoKey": "no project key yet",
+  "projectReady": "ready for donations",
+  "projectNoAccess": "waiting for a colleague to give you access",
+  "keysElsewhere": "Keys and donations are handled on the key page only, never in this workspace.",
+  "openKeyPage": "Open the key page",
+  "signOut": "Sign out of the studio"
 }

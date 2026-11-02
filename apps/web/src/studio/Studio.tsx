@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Dropzone } from '../components/Dropzone';
+import { Account } from './Account';
 import type { ImportProgress, Upload } from '../worker/api';
 import type { PreviewTable, StudioExport } from './api';
 import { addExport, studio } from './client';
@@ -287,6 +288,7 @@ export function Studio() {
     <div className="studio">
       <h1>{t('studio.title')}</h1>
       <p>{t('studio.intro')}</p>
+      <Account />
 
       <div className="studio-top">
         <section className="card" aria-labelledby="studio-exports">

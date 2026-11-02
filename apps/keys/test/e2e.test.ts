@@ -8,7 +8,7 @@
  * comparing key codes, unlocking after a reload, and signing in with the recovery code.
  */
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,6 +22,9 @@ const binary = join(repo, 'target/debug/combray-server');
 const port = 18_000 + Math.floor(Math.random() * 1000);
 const MAIN = `http://localhost:${port}`;
 const KEYS = `http://keys.localhost:${port}`;
+/** The built web client, for the studio handoff (`pnpm --filter @combray/web build`). */
+const WEB = join(repo, 'apps/web/dist');
+const hasWeb = existsSync(join(WEB, 'index.html'));
 
 let dir: string;
 let server: ChildProcess;
@@ -35,7 +38,7 @@ function env() {
     COMBRAY_PUBLIC_URL: MAIN,
     COMBRAY_KEYS_URL: KEYS,
     COMBRAY_DATA_DIR: join(dir, 'data'),
-    COMBRAY_WEB_DIR: join(dir, 'web'),
+    COMBRAY_WEB_DIR: WEB,
     COMBRAY_KEYS_PAGE: join(repo, 'apps/keys/dist/index.html'),
     COMBRAY_STORE_MASTER_KEY_FILE: join(dir, 'store-master.key'),
     COMBRAY_MAIL_OUTBOX: join(dir, 'outbox'),
@@ -128,8 +131,6 @@ describe.skipIf(!enabled)('key page', () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'combray-e2e-'));
     mkdirSync(join(dir, 'data/projects'), { recursive: true });
-    mkdirSync(join(dir, 'web'), { recursive: true });
-    writeFileSync(join(dir, 'web/index.html'), '<!doctype html><title>Combray</title>');
     writeFileSync(join(dir, 'data/projects/willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' } }));
     cli('researcher', 'add', 'ada@uni.example');
     cli('project', 'add-researcher', 'willow', 'ada@uni.example');
@@ -194,6 +195,21 @@ describe.skipIf(!enabled)('key page', () => {
     expect(csv).toContain('A video,2026-10-02');
   }, 60_000);
 
+  it.skipIf(!hasWeb)('opens the studio with a one-time handoff, without key material', async () => {
+    const page = ada.page;
+    await page.getByRole('button', { name: 'Open the studio' }).click();
+    await page.getByText('Signed in as ada@uni.example.').waitFor();
+    await page.getByText('ready for donations').waitFor();
+    expect(page.url()).toBe(`${MAIN}/studio/`);
+    // The studio session cannot fetch envelopes or keys: those are for the key page only.
+    const status = await page.evaluate(async () => (await fetch('/api/v1/projects/willow/donation-keys', { method: 'POST', body: '{"ids":[]}', headers: { 'content-type': 'application/json' } })).status);
+    expect([404, 405]).toContain(status);
+    // Leaving the key page locked the keys: unlock again for the next steps.
+    await page.goto(KEYS);
+    await page.getByRole('button', { name: 'Use passkey' }).click();
+    await page.getByRole('heading', { name: 'Your keys' }).waitFor();
+  }, 60_000);
+
   it('gives a colleague access after comparing key codes', async () => {
     await ada.page.getByLabel('Add a colleague by email').fill('bob@uni.example');
     await ada.page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -231,6 +247,7 @@ describe.skipIf(!enabled)('key page', () => {
   }, 60_000);
 
   it('ran without CSP violations or script errors', () => {
-    expect(consoleErrors.filter((e) => !e.includes('401'))).toEqual([]);
+    // 401: probing for a session; 404: the studio probing for key routes it must not have.
+    expect(consoleErrors.filter((e) => !/status of 40[14]/.test(e))).toEqual([]);
   });
 });
