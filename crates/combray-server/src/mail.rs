@@ -89,33 +89,48 @@ impl Mailer {
         !matches!(self, Mailer::Disabled)
     }
 
-    pub async fn send(&self, to: &str, subject: &str, body: String) -> Result<(), ()> {
+    pub async fn send(&self, to: &str, subject: &str, body: String) -> Result<(), MailError> {
         match self {
             Mailer::Smtp(smtp) => {
                 let Smtp { transport, from } = smtp.as_ref();
-                let to = to.parse().map_err(|_| ())?;
+                let to = to.parse().map_err(|_| MailError::Address)?;
                 let message = Message::builder()
                     .from(from.clone())
                     .to(to)
                     .subject(subject)
                     .header(ContentType::TEXT_PLAIN)
                     .body(body)
-                    .map_err(|_| ())?;
+                    .map_err(|_| MailError::Message)?;
                 transport.send(message).await.map(|_| ()).map_err(|_| {
                     tracing::error!(error_class = "smtp", "could not send a sign-in email");
+                    MailError::Send
                 })
             }
             Mailer::Outbox(dir) => {
+                let suffix = crate::util::random::<6>().map_err(|_| MailError::Send)?;
                 let name = format!(
                     "{}-{}.txt",
                     crate::util::now_secs(),
-                    crate::accounts::b64(&crate::util::random::<6>().map_err(|_| ())?)
+                    crate::accounts::b64(&suffix)
                 );
                 let text = format!("To: {to}\nSubject: {subject}\n\n{body}");
-                tokio::fs::create_dir_all(dir).await.map_err(|_| ())?;
-                tokio::fs::write(dir.join(name), text).await.map_err(|_| ())
+                tokio::fs::create_dir_all(dir)
+                    .await
+                    .map_err(|_| MailError::Send)?;
+                tokio::fs::write(dir.join(name), text)
+                    .await
+                    .map_err(|_| MailError::Send)
             }
-            Mailer::Disabled => Err(()),
+            Mailer::Disabled => Err(MailError::Disabled),
         }
     }
+}
+
+/// Why a mail was not sent. Never carries the address or the message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MailError {
+    Disabled,
+    Address,
+    Message,
+    Send,
 }
