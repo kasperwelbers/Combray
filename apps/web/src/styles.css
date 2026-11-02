@@ -264,6 +264,11 @@ main {
   box-shadow: var(--shadow);
 }
 
+.import-cards {
+  display: grid;
+  gap: 1.5rem;
+}
+
 .lock {
   width: min(520px, 100% - 2rem);
   margin: 4rem auto;
@@ -903,6 +908,16 @@ main.wide {
 
 .node-panel h2 {
   word-break: break-word;
+}
+
+/* Fieldsets size to their content by default; a long option would push the panel wider. */
+.node-panel fieldset {
+  min-width: 0;
+}
+
+.node-panel select {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .panel-group {

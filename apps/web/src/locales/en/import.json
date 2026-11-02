@@ -1,17 +1,30 @@
 {
   "title": "Add your data",
   "intro": "Choose the zip file you downloaded from a platform (such as Google Takeout or TikTok), a folder, or single files. Everything is read and kept on this computer only.",
+  "titleFor": "Add your {{name}} data",
+  "introFor": "Choose the zip file or folder you downloaded from {{name}}. We only open what belongs to your {{name}} export, and everything is read and kept on this computer only.",
+  "yourData": "data",
   "chooseFiles": "Choose files",
   "chooseFolder": "Choose a folder",
   "drop": "or drop them here",
   "failed": "Something went wrong while reading this. Nothing was stored.",
   "step": {
-    "reading_one": "Reading {{count}} file…",
-    "reading_other": "Reading {{count}} files…",
-    "parsing": "Unpacking and reading…",
-    "shape": "Looking at the structure…",
+    "looking": "Looking through what you chose…",
     "encrypting": "Storing it safely, encrypted…",
     "done": "Done",
     "importers": "Looking for familiar things in it…"
+  },
+  "problem": {
+    "no-fit": "This doesn't look like a {{name}} export, so we didn't add it. Please choose the zip file or folder you downloaded from {{name}}.",
+    "too-many-files": "There are too many files here for us to look through. Please choose the {{name}} export itself: the zip file or folder you downloaded. Nothing was stored.",
+    "too-many-candidates": "We found too many files here that could be your {{name}} export. Please choose the export itself: the zip file or folder you downloaded. Nothing was stored.",
+    "too-big": "This is too large to read in your browser, so nothing was stored. If you can, make a new {{name}} export with only the data the study asks for."
+  },
+  "choose": {
+    "title": "We found more than one {{name}} export",
+    "one": "Which one should we add? Only the one you choose is read.",
+    "several": "Which ones should we add? If your export came in several parts, choose all of them. Only what you choose is read.",
+    "add": "Add",
+    "cancel": "Cancel"
   }
 }

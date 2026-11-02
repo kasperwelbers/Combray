@@ -56,7 +56,7 @@ IndexedDB is used as a key-value store for encrypted blobs. It is never queried 
 
 | Kind | What | Stored as |
 | --- | --- | --- |
-| `bytes` | **Each uploaded file's raw bytes**, as one logical blob per file. This is the source of truth, so a better importer can re-read the original later. | Slices of 4 MiB, each encrypted separately |
+| `bytes` | **The raw bytes of each file read from the upload's root**, as one logical blob per file. This is the source of truth, so a better importer can re-read the original later. Files outside the root (the rest of a picked Downloads folder) and files the project tree skips are never read, so never kept ([tree-decisions.md](tree-decisions.md#names-first-and-fixed-limits)). | Slices of 4 MiB, each encrypted separately |
 | `items` | Derived data: the parsed tree of a source and the tables importers found. This is a cache, for fast reopening. | MessagePack arrays of 5,000 items, each chunk encrypted separately |
 
 A file is one logical blob, but it is encrypted in slices because WebCrypto's AES-GCM has no streaming interface. Encrypting a 2 GB Takeout in one call would need the plaintext and ciphertext in memory at once, and some browsers (Safari in particular) handle very large single IndexedDB values badly. Slices keep peak memory small and let us move them to OPFS later without changing the encryption.
@@ -204,6 +204,7 @@ A data download package contains text that strangers wrote: video titles, channe
 - **HTML files are parsed with `htmlparser2` in the worker**, which builds our own tree and never creates DOM nodes or runs anything.
 - **Links from data go through `safeHref`**: only `http:` and `https:` URLs become links. `javascript:`, `data:`, `file:` and relative URLs are shown as plain text. React 19 also blocks `javascript:` URLs, but we do not rely on that.
 - Importer scripts run in QuickJS with no DOM or network access.
+- **Uploads are read names first.** A picked folder can be much more than an export (a Downloads folder, a whole drive). The worker lists names, opens only files whose names a project's patterns match, and reads only the root it finds, within fixed limits on files, candidates and bytes that projects cannot raise (`UPLOAD_LIMITS`, see [tree-decisions.md](tree-decisions.md#names-first-and-fixed-limits)). Zip entries are listed from the archive's directory and inflated only when read; the declared sizes count against the byte limit.
 
 ### Content Security Policy
 

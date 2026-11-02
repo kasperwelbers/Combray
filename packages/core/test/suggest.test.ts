@@ -14,7 +14,6 @@ import {
   projectTreeFromShape,
   suggestAfterMerge,
   suggestMerges,
-  uploadRoot,
 } from '../src';
 
 const fixtures = new URL('../../../importers/fixtures/', import.meta.url).pathname;
@@ -27,7 +26,8 @@ function fixtureShape(name: string) {
     name,
     files(input).map((path) => ({ path: relative(input, path), bytes: new Uint8Array(readFileSync(path)) })),
   );
-  return extractShape(normalizeTree(uploadRoot(tree, true)));
+  // The fixture's input folder as a picked folder: the folder is the nameless root.
+  return extractShape(normalizeTree({ ...tree, name: '' }));
 }
 
 describe('suggestMerges', () => {

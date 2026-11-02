@@ -10,9 +10,9 @@ import {
   deriveTables,
   extractShape,
   joinProjectTree,
-  knownKeys,
+  locateRoot,
   mergeShape,
-  prepareUpload,
+  normalizeTree,
   projectTreeFromShape,
   splitProjectTree,
   type ImporterFile,
@@ -22,17 +22,17 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { packs, packTree, PACK_IDS } from '../packs';
-import { FIXTURES, fixtureNames, loadFixture } from './load';
+import { FIXTURES, fixtureListing, fixtureNames, readFixture } from './load';
 
 const ROOT = join(import.meta.dirname, '..');
 const fixturesOf = (pack: string) => fixtureNames().filter((f) => f.startsWith(`${pack}-`));
 
 /** The union of a pack's fixtures, merged in order so the importer's aliases join languages. */
-function buildStructure(pack: string, importer: ImporterFile) {
+async function buildStructure(pack: string, importer: ImporterFile) {
   let tree: ProjectNode | undefined;
   for (const fixture of fixturesOf(pack)) {
     // The researcher's own (here: synthetic) exports, so header text may name columns.
-    const shape = extractShape(prepareUpload(loadFixture(fixture), true, { keys: () => true }));
+    const shape = extractShape(normalizeTree(await readFixture(fixture), { keys: () => true }));
     tree = tree ? mergeShape(tree, shape).tree : projectTreeFromShape(shape);
     tree = joinProjectTree(splitProjectTree(tree).structure, importer).tree;
   }
@@ -43,8 +43,8 @@ function buildStructure(pack: string, importer: ImporterFile) {
 describe.each(PACK_IDS)('pack %s', (id) => {
   const importer = JSON.parse(readFileSync(join(ROOT, id, 'importer.json'), 'utf8')) as ImporterFile;
 
-  it('has a structure built from its fixtures', () => {
-    const { structure, pending } = buildStructure(id, importer);
+  it('has a structure built from its fixtures', async () => {
+    const { structure, pending } = await buildStructure(id, importer);
     // Every setting finds its node: a typo in a path would leave it waiting forever.
     expect(pending.map((e) => e.path.join('/'))).toEqual([]);
     const path = join(ROOT, id, 'structure.json');
@@ -61,7 +61,7 @@ const MA = ['My Activity', 'Search'];
 const YT = ['YouTube and YouTube Music'];
 const HTML_ROWS = ['html', 'body', 'div.mdl-grid', 'div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell', '[*]'];
 const BODY = 'div.mdl-grid/div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1';
-const TIKTOK = ['user_data.json', 'Activity'];
+const TIKTOK = ['Activity'];
 
 /** Where each YAML importer's rows are in the pack's tree, and which column gives each field. */
 const OLD: Record<string, { rows: string[]; fields: Record<string, string> }> = {
@@ -108,13 +108,15 @@ describe.each(fixtureNames())('fixture %s through its pack', (fixture) => {
   const id = PACK_IDS.find((p) => fixture.startsWith(`${p}-`))!;
   const expected = JSON.parse(readFileSync(join(FIXTURES, fixture, 'expected.json'), 'utf8')) as Record<string, Row[]>;
 
-  it.each(Object.keys(expected))('gives the rows of %s', (old) => {
+  it.each(Object.keys(expected))('gives the rows of %s', async (old) => {
     const pack = packs.find((p) => p.id === id)!;
     const tree = packTree(pack);
-    // A participant: header text only becomes a key when the pack knows it.
-    const upload = prepareUpload(loadFixture(fixture), true, { keys: knownKeys(tree) });
+    // A participant: the root is found as on their device, and header text only becomes a key
+    // when the pack knows it.
+    const located = await locateRoot(await fixtureListing(fixture), tree);
+    if (located.status !== 'found') throw new Error(`fixture does not fit its pack: ${located.status}`);
     const tables = deriveTables(tree);
-    const rows = deriveRows(upload, tree, tables);
+    const rows = deriveRows(located.root.prepared, tree, tables);
     const { rows: path, fields } = OLD[old]!;
     const index = tables.findIndex((t) => t.rows?.join('/') === path.join('/'));
     expect(index, `no table at ${path.join('/')}`).toBeGreaterThanOrEqual(0);

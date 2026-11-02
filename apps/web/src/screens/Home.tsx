@@ -3,14 +3,14 @@ import { useTranslation } from 'react-i18next';
 
 import { localize } from '@combray/core';
 
-import { Dropzone } from '../components/Dropzone';
+import { ImportCard } from '../components/ImportCard';
 import { foldedPath } from '../format';
-import type { DatasetSummary, ImportProgress, TableSummary, Upload, UploadPoint } from '../worker/api';
-import { data, importFiles } from '../worker/client';
+import type { DatasetSummary, TableSummary, UploadPoint } from '../worker/api';
+import { data } from '../worker/client';
 
 interface Props {
   datasets: DatasetSummary[];
-  /** The project's upload points; without them, the YAML importers run. */
+  /** The project's upload points, one uploader each; without them, the YAML importers run. */
   points?: UploadPoint[];
   onChanged: () => Promise<void>;
   onOpen: (dataset: DatasetSummary) => void;
@@ -44,22 +44,7 @@ function TableButton({ table, onOpen, path }: { table: TableSummary; onOpen: (t:
 
 export function Home({ datasets, points, onChanged, onOpen, onOpenTable }: Props) {
   const { t, i18n } = useTranslation();
-  const [progress, setProgress] = useState<ImportProgress>();
-  const [error, setError] = useState(false);
-
-  async function run(files: Upload[]) {
-    if (files.length === 0) return;
-    setError(false);
-    setProgress({ step: 'reading', files: 0 });
-    try {
-      await importFiles(files, setProgress, points);
-      await onChanged();
-    } catch {
-      setError(true);
-    } finally {
-      setProgress(undefined);
-    }
-  }
+  const [busy, setBusy] = useState(false);
 
   async function remove(dataset: DatasetSummary) {
     if (!window.confirm(t('datasets.confirmDelete', { name: dataset.name }))) return;
@@ -67,28 +52,15 @@ export function Home({ datasets, points, onChanged, onOpen, onOpenTable }: Props
     await onChanged();
   }
 
-  const busy = progress !== undefined;
   const date = (iso: string) => new Date(iso).toLocaleDateString(i18n.language, { dateStyle: 'long' });
 
   return (
     <>
-      <section className="card" aria-labelledby="import-title">
-        <h2 id="import-title">{t('import.title')}</h2>
-        <p>{t('import.intro')}</p>
-        <Dropzone busy={busy} onFiles={run} />
-        <div aria-live="polite">
-          {progress && (
-            <p className="message" style={{ marginTop: '1rem' }}>
-              {t(`import.step.${progress.step}`, { count: progress.files ?? 0 })}
-            </p>
-          )}
-          {error && (
-            <p className="message error" role="alert" style={{ marginTop: '1rem' }}>
-              {t('import.failed')}
-            </p>
-          )}
-        </div>
-      </section>
+      <div className="import-cards">
+        {(points?.length ? points : [undefined]).map((point) => (
+          <ImportCard key={point?.id ?? ''} point={point} disabled={busy} onBusy={setBusy} onDone={onChanged} />
+        ))}
+      </div>
 
       <section aria-labelledby="datasets-title" style={{ marginTop: '2.5rem' }}>
         <h2 id="datasets-title">{t('home.title')}</h2>

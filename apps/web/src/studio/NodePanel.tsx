@@ -1,4 +1,6 @@
 import {
+  closedNodes,
+  findPatternProblem,
   getNode,
   isDecidable,
   isLeaf,
@@ -58,6 +60,8 @@ export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch
   const [regex, setRegex] = useState(false);
   const [aliasError, setAliasError] = useState(false);
   const [mergeTarget, setMergeTarget] = useState('');
+  const [pattern, setPattern] = useState('');
+  const [patternProblem, setPatternProblem] = useState<string>();
   if (!node) return null;
 
   const leaf = isLeaf(node);
@@ -81,6 +85,16 @@ export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch
     setAliasError(false);
     onPatch(path, { aliases: [...(node!.aliases ?? []), next] });
     setAlias('');
+  }
+
+  function addPattern(event: FormEvent) {
+    event.preventDefault();
+    const text = pattern.trim();
+    const problem = findPatternProblem(text);
+    setPatternProblem(problem);
+    if (problem) return;
+    onPatch(path, { find: [...(node!.find ?? []), text] });
+    setPattern('');
   }
 
   return (
@@ -109,7 +123,7 @@ export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch
         </p>
       )}
 
-      {isDecidable(node) ? (
+      {path.length === 0 ? null : isDecidable(node) ? (
         <div className="panel-group">
           <span className="segmented" role="group" aria-label={t('studio.decisionFor', { name: displayName(node.name, t) })}>
             {LEAF_DECISIONS.map((d, i) => (
@@ -161,8 +175,9 @@ export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch
         </div>
       )}
       <p className="meta">
-        {leaf ? t('studio.leafHelp') : formsTable(node) ? t('studio.tableHelp') : t('studio.innerHelp')}{' '}
-        {t('studio.shortcuts')}
+        {path.length === 0
+          ? t('studio.rootHelp')
+          : `${leaf ? t('studio.leafHelp') : formsTable(node) ? t('studio.tableHelp') : t('studio.innerHelp')} ${t('studio.shortcuts')}`}
       </p>
 
       <fieldset className="panel-group">
@@ -237,49 +252,134 @@ export function NodePanel({ tree, path, states, onDecide, onDecideBelow, onPatch
       {node.name === '{*}' && <p className="meta">{t('studio.keysDecisionHelp')}</p>}
 
       <fieldset className="panel-group">
-        <legend>{t('studio.aliasesTitle')}</legend>
-        <p className="meta">{t('studio.aliasesHelp')}</p>
-        {node.aliases && node.aliases.length > 0 && (
-          <ul className="alias-list">
-            {node.aliases.map((a, i) => (
-              <li key={`${aliasText(a)}:${i}`}>
-                <code>{aliasText(a)}</code>
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={() => onPatch(path, { aliases: node.aliases!.filter((_, j) => j !== i) })}
-                >
-                  {t('studio.remove')}
-                  <span className="visually-hidden"> {aliasText(a)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <legend>{t('studio.matchTitle')}</legend>
+        {path.length === 0 && (
+          <div className="panel-group">
+            <p>
+              <strong>{t('studio.findTitle')}</strong>
+            </p>
+            <p className="meta">{t('studio.findHelp')}</p>
+            {node.find && node.find.length > 0 && (
+              <ul className="alias-list">
+                {node.find.map((p, i) => (
+                  <li key={`${p}:${i}`}>
+                    <code>{p}</code>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => onPatch(path, { find: node.find!.filter((_, j) => j !== i) })}
+                    >
+                      {t('studio.remove')}
+                      <span className="visually-hidden"> {p}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form className="alias-form" onSubmit={addPattern}>
+              <label className="visually-hidden" htmlFor="pattern-input">
+                {t('studio.newPattern')}
+              </label>
+              <input
+                id="pattern-input"
+                value={pattern}
+                placeholder={t('studio.newPattern')}
+                onChange={(e) => setPattern(e.target.value)}
+              />
+              <button className="button quiet" type="submit">
+                {t('studio.add')}
+              </button>
+            </form>
+            {patternProblem && (
+              <p className="message error" role="alert">
+                {t('studio.badPattern', { problem: patternProblem })}
+              </p>
+            )}
+          </div>
         )}
-        <form className="alias-form" onSubmit={addAlias}>
-          <label className="visually-hidden" htmlFor="alias-input">
-            {t('studio.newAlias')}
-          </label>
-          <input
-            id="alias-input"
-            value={alias}
-            placeholder={t('studio.newAlias')}
-            onChange={(e) => setAlias(e.target.value)}
-          />
-          <label className="check">
-            <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
-            {t('studio.regex')}
-          </label>
-          <button className="button quiet" type="submit">
-            {t('studio.add')}
-          </button>
-        </form>
-        {aliasError && (
-          <p className="message error" role="alert">
-            {t('studio.badRegex')}
-          </p>
+        {path.length > 0 && (
+          <>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={node.required === true}
+                onChange={(e) => onPatch(path, { required: e.target.checked ? true : undefined })}
+              />
+              {t('studio.required')}
+            </label>
+            <p className="meta">{t('studio.requiredHelp')}</p>
+          </>
+        )}
+        {!leaf && (
+          <>
+            <label className="field">
+              <span>{t('studio.newChildren')}</span>
+              <select
+                value={node.newChildren ?? ''}
+                onChange={(e) =>
+                  onPatch(path, { newChildren: e.target.value === '' ? undefined : (e.target.value as 'ask' | 'skip') })
+                }
+              >
+                <option value="">
+                  {t('studio.newChildrenInherit', {
+                    state: t(`studio.newChildrenState.${parent && closedNodes(tree).has(parent) ? 'skip' : 'ask'}`),
+                  })}
+                </option>
+                <option value="ask">{t('studio.newChildrenAsk')}</option>
+                <option value="skip">{t('studio.newChildrenSkip')}</option>
+              </select>
+            </label>
+            <p className="meta">{t('studio.newChildrenHelp')}</p>
+          </>
         )}
       </fieldset>
+
+      {path.length > 0 && (
+        <fieldset className="panel-group">
+          <legend>{t('studio.aliasesTitle')}</legend>
+          <p className="meta">{t('studio.aliasesHelp')}</p>
+          {node.aliases && node.aliases.length > 0 && (
+            <ul className="alias-list">
+              {node.aliases.map((a, i) => (
+                <li key={`${aliasText(a)}:${i}`}>
+                  <code>{aliasText(a)}</code>
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => onPatch(path, { aliases: node.aliases!.filter((_, j) => j !== i) })}
+                  >
+                    {t('studio.remove')}
+                    <span className="visually-hidden"> {aliasText(a)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form className="alias-form" onSubmit={addAlias}>
+            <label className="visually-hidden" htmlFor="alias-input">
+              {t('studio.newAlias')}
+            </label>
+            <input
+              id="alias-input"
+              value={alias}
+              placeholder={t('studio.newAlias')}
+              onChange={(e) => setAlias(e.target.value)}
+            />
+            <label className="check">
+              <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
+              {t('studio.regex')}
+            </label>
+            <button className="button quiet" type="submit">
+              {t('studio.add')}
+            </button>
+          </form>
+          {aliasError && (
+            <p className="message error" role="alert">
+              {t('studio.badRegex')}
+            </p>
+          )}
+        </fieldset>
+      )}
 
       {path.length > 0 && siblings.length > 0 && (
         <fieldset className="panel-group">

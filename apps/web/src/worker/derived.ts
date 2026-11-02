@@ -1,26 +1,23 @@
 /**
- * Importing through a project tree (docs/tree-decisions.md): the upload is matched against the
- * tree of one of the project's upload points, and the tables inferred from it are what the
- * participant sees. Nested tables stay nested: their rows are kept inside the parent row.
+ * Importing through a project tree (docs/tree-decisions.md): the root found in an upload
+ * (`locateRoot`) is matched against the tree of its upload point, and the tables inferred from
+ * it are what the participant sees. Nested tables stay nested: their rows are kept inside the
+ * parent row.
  *
  * Everything here runs in the data worker, on the participant's own data. Nothing is sent.
  */
 import {
   deriveRows,
   deriveTables,
-  extractShape,
   getNode,
-  knownKeys,
-  matchChild,
   mergeShape,
-  normalizeTree,
-  uploadRoot,
   type ColumnDef,
   type DerivedRow,
   type FieldValue,
   type NodePath,
   type ProjectNode,
   type Row,
+  type Shape,
   type TableDef,
   type TreeNode,
 } from '@combray/core';
@@ -42,7 +39,7 @@ const trees = new Map<string, ProjectNode>();
  * The tree of an upload point: its pack, for now. Projects get their own trees in Phase 2.
  * Kept once joined; matching an upload works on a copy (`mergeShape`).
  */
-function pointTree(point: UploadPoint): ProjectNode | undefined {
+export function pointTree(point: UploadPoint): ProjectNode | undefined {
   const pack = packs.find((p) => p.id === point.pack);
   if (!pack) return undefined;
   if (!trees.has(pack.id)) trees.set(pack.id, packTree(pack));
@@ -113,67 +110,27 @@ function anyColumn(columns: ColumnInfo[], test: (c: ColumnInfo) => boolean): boo
   return columns.some((c) => test(c) || anyColumn(c.columns ?? [], test));
 }
 
-/** The folders (canonical paths) in which a project tree knows a file of this name and kind. */
-function placesFor(projectTree: ProjectNode, file: TreeNode): NodePath[] {
-  const out: NodePath[] = [];
-  const visit = (node: ProjectNode, path: NodePath) => {
-    if (matchChild(node, file.kind, file.name)) out.push(path);
-    for (const child of node.children ?? []) if (child.kind === 'dir') visit(child, [...path, child.name]);
-  };
-  visit(projectTree, []);
-  return out;
-}
-
-const dir = (name: string, children: TreeNode[]): TreeNode => ({ kind: 'dir', name, children });
-
-/** How many single folders below the root are also tried as the root (`takeout-…/Takeout/`). */
-const MAX_UNWRAP = 3;
-
 /**
- * The ways an upload may sit in a project tree, as nameless roots:
- * - as uploaded (an archive unwrapped from its one top folder);
- * - a folder holding just one folder, such as an unzipped Takeout (`takeout-…/Takeout/`), from
- *   that inner folder;
- * - a single file in each folder where the project knows a file by that name or an alias
- *   (`watch-history.json` in `YouTube and YouTube Music/history`).
- * File names are only compared here, in the worker; roots have no name.
+ * The tables of a root found for an upload point, `prepared` (normalised) as `locateRoot`
+ * returns it.
  */
-function roots(tree: TreeNode, archive: boolean, projectTree: ProjectNode): TreeNode[] {
-  const root = uploadRoot(tree, archive);
-  if (tree.kind !== 'dir') {
-    const placed = placesFor(projectTree, tree).map((path) =>
-      dir('', [path.reduceRight<TreeNode>((child, name) => dir(name, [child]), tree)]),
-    );
-    return [root, ...placed];
-  }
-  const out = [root];
-  let node = root;
-  for (let i = 0; i < MAX_UNWRAP && node.kind === 'dir' && node.children.length === 1; i++) {
-    const only = node.children[0]!;
-    if (only.kind !== 'dir') break;
-    out.push({ ...only, name: '' });
-    node = only;
-  }
-  return out;
-}
-
-/** Match a root against one upload point. The score is the number of rows in tables it knows. */
-function tryPoint(root: TreeNode, projectTree: ProjectNode, point: UploadPoint): { result: DerivedImport; score: number } {
-  // Header text from the participant's file only becomes a name when the project knows it.
-  const prepared = normalizeTree(root, { keys: knownKeys(projectTree) });
-  // Parts the project does not know yet are added undecided, so participants still see them.
-  const merged = mergeShape(projectTree, extractShape(prepared));
+export function deriveImport(
+  root: { prepared: TreeNode; shape: Shape },
+  projectTree: ProjectNode,
+  point: UploadPoint,
+): DerivedImport {
+  // Parts the project does not know yet are added undecided, so participants still see them,
+  // except below nodes that skip new children.
+  const merged = mergeShape(projectTree, root.shape, { skipClosed: true });
   const added = new Set(merged.added.map(pathKey));
   const defs = deriveTables(merged.tree);
-  const nested = nest(defs, deriveRows(prepared, merged.tree, defs));
-  let score = 0;
+  const nested = nest(defs, deriveRows(root.prepared, merged.tree, defs));
   const tables: DerivedImport['tables'] = [];
   defs.forEach((def, i) => {
     if (def.parent !== undefined || nested[i]!.length === 0) return;
     const rowsPath = def.rows ?? [];
     const columns = def.columns.map((c) => columnInfo(c, defs, rowsPath, merged.tree, added));
     const collection = anyColumn(columns, (c) => c.type !== 'table' && !c.undecided);
-    if (collection) score += nested[i]!.length;
     const table: DerivedTable = {
       name: def.name,
       path: rowsPath,
@@ -186,22 +143,5 @@ function tryPoint(root: TreeNode, projectTree: ProjectNode, point: UploadPoint):
     if (anyColumn(columns, (c) => c.new === true)) table.new = true;
     tables.push({ table, rows: nested[i]! });
   });
-  return { result: { point, tables }, score };
-}
-
-/**
- * Derive the tables of an upload through the upload point it fits best. Undefined when it
- * fits none, so the caller can fall back to the YAML importers.
- */
-export function deriveImport(tree: TreeNode, archive: boolean, points: UploadPoint[]): DerivedImport | undefined {
-  let best: { result: DerivedImport; score: number } | undefined;
-  for (const point of points) {
-    const projectTree = pointTree(point);
-    if (!projectTree) continue;
-    for (const root of roots(tree, archive, projectTree)) {
-      const attempt = tryPoint(root, projectTree, point);
-      if (attempt.score > (best?.score ?? 0)) best = attempt;
-    }
-  }
-  return best?.result;
+  return { point, tables };
 }

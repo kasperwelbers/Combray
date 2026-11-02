@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  closedNodes,
   compareShape,
   DecisionError,
   effectiveStates,
@@ -11,6 +12,7 @@ import {
   mergeNodes,
   mergeShape,
   projectTreeFromShape,
+  requiredPaths,
   setDecision,
   setKeysAreData,
   normalizeTree,
@@ -133,6 +135,13 @@ describe('mergeNodes', () => {
     expect(conflicts).toEqual([{ path: ['[*]', 'subtitles', '[*]', 'name'], field: 'decision' }]);
   });
 
+  it('keeps a node required if either was, so any of its names satisfies it', () => {
+    let tree = mergeShape(base(), extractShape(jsonToTree('x.json', [{ channels: [] }]))).tree;
+    getNode(tree, ['[*]', 'channels'])!.required = true;
+    tree = mergeNodes(tree, ['[*]', 'channels'], ['[*]', 'subtitles']).tree;
+    expect(getNode(tree, ['[*]', 'subtitles'])).toMatchObject({ required: true, aliases: ['channels'] });
+  });
+
   it('refuses different kinds and merging into a descendant', () => {
     expect(() => mergeNodes(base(), ['[*]', 'time'], ['[*]', 'subtitles'])).toThrow(DecisionError);
     expect(() => mergeNodes(base(), ['[*]'], ['[*]', 'subtitles'])).toThrow(DecisionError);
@@ -149,11 +158,54 @@ describe('compareShape', () => {
     expect(compareShape(tree, shape)).toEqual({
       unknown: [{ path: ['[*]', 'watched_at'], shape: { kind: 'value', name: 'watched_at', types: ['date-like'], formats: ['YYYY-MM-DD'] } }],
       missing: [['[*]', 'time']],
+      missingRequired: [],
     });
   });
 
   it('finds nothing for a shape the tree already covers', () => {
-    expect(compareShape(tree, extractShape(watchHistory))).toEqual({ unknown: [], missing: [] });
+    expect(compareShape(tree, extractShape(watchHistory))).toEqual({ unknown: [], missing: [], missingRequired: [] });
+  });
+
+  it('does not offer new positions below a node that skips new children, unless a node below asks again', () => {
+    const shape = extractShape(jsonToTree('h.json', [{ title: 'x', time: 't', watched_at: 'y', subtitles: [] }]));
+    const closed = { ...tree, newChildren: 'skip' as const };
+    expect(compareShape(closed, shape).unknown).toEqual([]);
+    const reopened = structuredClone(closed);
+    getNode(reopened, ['[*]'])!.newChildren = 'ask';
+    expect(compareShape(reopened, shape).unknown.map((u) => u.path)).toEqual([['[*]', 'watched_at']]);
+  });
+
+  it('lists required nodes that are missing, present by any of their names', () => {
+    const required = structuredClone(tree);
+    Object.assign(getNode(required, ['[*]', 'time'])!, { required: true, aliases: ['watched_at'] });
+    const renamed = extractShape(jsonToTree('h.json', [{ title: 'x', watched_at: '2024-01-01' }]));
+    expect(compareShape(required, renamed).missingRequired).toEqual([]);
+    const without = extractShape(jsonToTree('h.json', [{ title: 'x' }]));
+    expect(compareShape(required, without).missingRequired).toEqual([['[*]', 'time']]);
+    expect(requiredPaths(required)).toEqual([['[*]', 'time']]);
+  });
+});
+
+describe('new children', () => {
+  it('are passed down until a node sets its own', () => {
+    const tree: ProjectNode = {
+      kind: 'map',
+      name: '',
+      newChildren: 'skip',
+      children: [
+        { kind: 'map', name: 'a', children: [{ kind: 'map', name: 'b', newChildren: 'ask', children: [] }] },
+      ],
+    };
+    const closed = closedNodes(tree);
+    expect([tree, getNode(tree, ['a'])!].every((n) => closed.has(n))).toBe(true);
+    expect(closed.has(getNode(tree, ['a', 'b'])!)).toBe(false);
+  });
+
+  it('are left out of a merged shape on request, as on a participant\'s device', () => {
+    const tree = { ...base(), newChildren: 'skip' as const };
+    const shape = extractShape(jsonToTree('h.json', [{ title: 'x', extra: 1 }]));
+    expect(mergeShape(tree, shape, { skipClosed: true }).added).toEqual([]);
+    expect(mergeShape(tree, shape).added).toEqual([['[*]', 'extra']]);
   });
 });
 

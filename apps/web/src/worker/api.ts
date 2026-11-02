@@ -1,4 +1,16 @@
-import type { ColumnDef, DisplayHints, Localized, NodeKind, NodePath, Role, Row, Shape, ValueType } from '@combray/core';
+import type {
+  ColumnDef,
+  DisplayHints,
+  Localized,
+  NodeKind,
+  NodePath,
+  Role,
+  RootChoice,
+  Row,
+  Shape,
+  UploadProblem,
+  ValueType,
+} from '@combray/core';
 
 /** An imported archive, folder or file, stored as its tree. Encrypted; never sent anywhere. */
 export interface SourceManifest {
@@ -81,7 +93,7 @@ export interface TableManifest {
 export interface FileManifest {
   type: 'file';
   sourceId: string;
-  /** Path inside the picked folder, or the file name. */
+  /** Path inside the root that was read, or the file name. */
   path: string;
   mime: string;
   size: number;
@@ -176,13 +188,20 @@ export interface Upload {
   path: string;
 }
 
-export type ImportStep = 'reading' | 'parsing' | 'shape' | 'encrypting' | 'importers' | 'done';
+export type ImportStep = 'looking' | 'encrypting' | 'importers' | 'done';
 
 export interface ImportProgress {
   step: ImportStep;
-  /** Files read so far, during the reading step. */
-  files?: number;
 }
+
+/**
+ * How an import went. `choose`: more than one place in the upload fits; the participant picks
+ * with `chooseRoots`. The other problems have a message each (docs/tree-decisions.md).
+ */
+export type ImportResult =
+  | { status: 'done'; dataset: DatasetSummary }
+  | { status: 'choose'; choices: RootChoice[]; multiple: boolean }
+  | { status: UploadProblem };
 
 export interface StoreStatus {
   exists: boolean;
@@ -248,11 +267,19 @@ export interface DataApi {
   resetPassword(token: string, password: string): Promise<ResetResult>;
   lock(): Promise<void>;
   destroy(): Promise<void>;
+  /**
+   * Import an upload. With an upload point, its root is found for the point's project tree;
+   * without, everything is read for the YAML importers.
+   */
   importFiles(
     uploads: Upload[],
     onProgress: (progress: ImportProgress) => void,
-    points?: UploadPoint[],
-  ): Promise<DatasetSummary>;
+    point?: UploadPoint,
+  ): Promise<ImportResult>;
+  /** Continue an import that returned `choose`, with the ids of the chosen places. */
+  chooseRoots(ids: number[], onProgress: (progress: ImportProgress) => void): Promise<ImportResult>;
+  /** Forget an import that is waiting for a choice. */
+  cancelImport(): Promise<void>;
   listDatasets(): Promise<DatasetSummary[]>;
   deleteDataset(id: string): Promise<void>;
   getNode(datasetId: string, index: number): Promise<NodeDetail>;

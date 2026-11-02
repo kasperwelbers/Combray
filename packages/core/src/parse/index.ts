@@ -49,6 +49,9 @@ const TEXT_EXTENSIONS = new Set(['txt', 'md', 'log']);
 // Files that are noise in archives made on macOS or Windows.
 const IGNORED = /(^|\/)(__MACOSX|\.DS_Store|Thumbs\.db|desktop\.ini)(\/|$)/;
 
+/** True for files that are noise in archives and folders made on macOS or Windows. */
+export const isNoise = (path: string) => IGNORED.test(path);
+
 function extension(name: string): string {
   const dot = name.lastIndexOf('.');
   return dot < 0 ? '' : name.slice(dot + 1).toLowerCase();
@@ -172,18 +175,6 @@ export function parseZip(
   const files = unzipSync(bytes);
   const entries = Object.entries(files).map(([path, data]) => ({ path, bytes: data }));
   return parseEntries(name, entries, options, depth);
-}
-
-/**
- * The root of an upload as project trees see it (docs/tree-decisions.md#upload-points-and-the-nameless-root):
- * without a name, so the participant's file or folder name is never recorded. An archive whose
- * entries all sit in one folder (`Takeout/`) is replaced by that folder, so a zip and the same
- * folder picked directly give the same tree.
- */
-export function uploadRoot(tree: TreeNode, archive: boolean): TreeNode {
-  const [only] = tree.kind === 'dir' ? tree.children : [];
-  const root = archive && tree.kind === 'dir' && tree.children.length === 1 && only?.kind === 'dir' ? only : tree;
-  return root.kind === 'text' ? root : { ...root, name: '' };
 }
 
 /**

@@ -12,7 +12,7 @@ import {
 import { useMemo, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { displayName, foldChain, formsTable, isUndecided, nodeIcon, pathKey, type Shortcut } from './model';
+import { displayName, foldChain, isUndecided, nodeIcon, pathKey, type Shortcut } from './model';
 
 export type TreeView = 'tree' | 'fields';
 
@@ -145,6 +145,8 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
         <span className="decision-tags">
           {node.count && <span className="tag">× {node.count}</span>}
           {node.lifter !== undefined && <span className="tag">{t('studio.lifter')}</span>}
+          {node.required && <span className="tag">{t('studio.requiredTag')}</span>}
+          {node.newChildren === 'skip' && <span className="tag">{t('studio.skipTag')}</span>}
         </span>
         <StatePill node={node} states={states} />
       </div>

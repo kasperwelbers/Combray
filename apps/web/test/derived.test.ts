@@ -1,41 +1,48 @@
-import type { TreeNode } from '@combray/core';
+import { locateRoot, UploadListing, type UploadProblem } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
-import { loadFixture } from '../../../importers/test/load';
+import { fixtureFiles, fixtureListing, fixtureZip, uploadFiles } from '../../../importers/test/load';
 import { foldedPath } from '../src/format';
 import { uploadPoints } from '../src/projectConfig';
-import type { ColumnInfo } from '../src/worker/api';
-import { deriveImport } from '../src/worker/derived';
+import type { ColumnInfo, UploadPoint } from '../src/worker/api';
+import { deriveImport, pointTree, type DerivedImport } from '../src/worker/derived';
 import { valueAt } from '../src/worker/tables';
 
-const POINTS = [
-  { id: 'takeout', pack: 'google-takeout' },
-  { id: 'tiktok', pack: 'tiktok' },
-];
+const TAKEOUT: UploadPoint = { id: 'takeout', pack: 'google-takeout' };
+const TIKTOK: UploadPoint = { id: 'tiktok', pack: 'tiktok' };
 
 const names = (columns: ColumnInfo[]) => columns.map((c) => (typeof c.name === 'string' ? c.name : c.name.en));
+const english = (t: DerivedImport['tables'][number]) => (t.table.name as Record<string, string>).en;
 
-describe('deriveImport', () => {
-  it('picks the upload point that fits and makes collections from what the pack shows', () => {
-    const result = deriveImport(loadFixture('tiktok-2025'), true, POINTS)!;
-    expect(result.point.id).toBe('tiktok');
+/** An upload through one upload point, as the data worker does it. */
+async function through(point: UploadPoint, listing: UploadListing | Promise<UploadListing>): Promise<DerivedImport | UploadProblem | 'choose'> {
+  const tree = pointTree(point)!;
+  const located = await locateRoot(await listing, tree);
+  if (located.status === 'found') return deriveImport(located.root, tree, point);
+  return located.status;
+}
+
+async function derived(point: UploadPoint, listing: UploadListing | Promise<UploadListing>): Promise<DerivedImport> {
+  const result = await through(point, listing);
+  if (typeof result === 'string') throw new Error(result);
+  return result;
+}
+
+describe('importing through an upload point', () => {
+  it('makes collections from what the pack shows', async () => {
+    const result = await derived(TIKTOK, fixtureListing('tiktok-2025'));
     const collections = result.tables.filter((t) => t.table.collection);
-    expect(collections.map((t) => (t.table.name as Record<string, string>).en).sort()).toEqual([
-      'TikTok likes',
-      'TikTok searches',
-      'TikTok watch history',
-    ]);
-    const watch = collections.find((t) => (t.table.name as Record<string, string>).en === 'TikTok watch history')!;
+    expect(collections.map(english).sort()).toEqual(['TikTok likes', 'TikTok searches', 'TikTok watch history']);
+    const watch = collections.find((t) => english(t) === 'TikTok watch history')!;
     expect(names(watch.table.columns)).toEqual(['Time', 'Video']);
     expect(watch.table.display).toEqual({ date: 'Date', url: 'Link' });
     // Converted as the pack says: dates as ISO text.
     expect(String(watch.rows[0]!.Date)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it('keeps nested tables inside their rows, and lets views count through them', () => {
-    const result = deriveImport(loadFixture('google-takeout-en'), true, POINTS)!;
-    expect(result.point.id).toBe('takeout');
-    const watch = result.tables.find((t) => (t.table.name as Record<string, string>).en === 'YouTube watch history')!;
+  it('keeps nested tables inside their rows, and lets views count through them', async () => {
+    const result = await derived(TAKEOUT, fixtureListing('google-takeout-en'));
+    const watch = result.tables.find((t) => english(t) === 'YouTube watch history')!;
     const channel = watch.table.columns.find((c) => c.type === 'table')!;
     expect(channel.id).toBe('subtitles/[*]');
     expect(names(channel.columns!)).toEqual(['Channel', 'Channel link']);
@@ -45,55 +52,60 @@ describe('deriveImport', () => {
     expect(valueAt(watch.rows[0]!, 'subtitles/[*]/name')).toEqual([nested[0]!.name]);
   });
 
-  it('shows data the project does not know as other data, marked new', () => {
-    const tree = loadFixture('tiktok-2023');
-    const result = deriveImport(tree, true, [{ id: 'tiktok', pack: 'tiktok' }])!;
-    // The profile is in the pack's structure but undecided: other data, not new.
-    const profile = result.tables.find((t) => !t.table.collection)!;
+  it('shows new parts where the pack asks about them, marked new, and skips them elsewhere', async () => {
+    const notes = JSON.stringify([{ note: 'hi' }]);
+    const result = await derived(
+      TAKEOUT,
+      fixtureListing('google-takeout-en', {
+        'Takeout/YouTube and YouTube Music/history/notes.json': notes,
+        // The Takeout pack skips Google products it does not know.
+        'Takeout/Drive/plans.json': notes,
+      }),
+    );
+    const added = result.tables.filter((t) => t.table.new);
+    expect(added).toHaveLength(1);
+    expect(added[0]!.table.path).toEqual(['YouTube and YouTube Music', 'history', 'notes.json', '[*]']);
+    expect(added[0]!.table.collection).toBe(false);
+    expect(added[0]!.table.columns[0]).toMatchObject({ id: 'note', new: true, undecided: true });
+    // Known but undecided parts are other data, not new.
+    const tiktok = await derived(TIKTOK, fixtureListing('tiktok-2023'));
+    const profile = tiktok.tables.find((t) => !t.table.collection)!;
     expect(profile.table.record).toBe(true);
     expect(profile.table.new).toBeUndefined();
-    // A file the pack has never seen.
-    const extra = loadFixture('tiktok-2023');
-    if (extra.kind !== 'dir') throw new Error('expected a folder');
-    extra.children.push({ kind: 'list', name: 'notes.json', children: [{ kind: 'map', name: '0', children: [{ kind: 'value', name: 'note', value: 'hi', type: 'string' }] }] });
-    const withExtra = deriveImport(extra, true, [{ id: 'tiktok', pack: 'tiktok' }])!;
-    const notes = withExtra.tables.find((t) => t.table.new)!;
-    expect(notes.table.collection).toBe(false);
-    expect(notes.table.columns[0]).toMatchObject({ id: 'note', new: true, undecided: true });
   });
 
-  it('finds a single file that the pack knows inside a folder', () => {
-    const folder = loadFixture('tiktok-2023');
-    if (folder.kind !== 'dir') throw new Error('expected a folder');
-    const result = deriveImport(folder.children[0]!, false, POINTS)!;
-    expect(result.point.id).toBe('tiktok');
+  it('takes a TikTok file as it is, whatever it is called', async () => {
+    const [bytes] = Object.values(fixtureFiles('tiktok-2023'));
+    const result = await derived(TIKTOK, UploadListing.open(uploadFiles({ 'my tiktok (1).json': bytes! })));
     expect(result.tables.filter((t) => t.table.collection)).toHaveLength(3);
   });
 
-  it('places a single file where the pack knows a file by that name', () => {
-    const takeout = loadFixture('google-takeout-en');
-    const find = (node: TreeNode, name: string): TreeNode | undefined =>
-      node.name === name ? node : node.kind === 'dir' ? node.children.map((c) => find(c, name)).find(Boolean) : undefined;
-    const result = deriveImport(find(takeout, 'watch-history.json')!, false, POINTS)!;
-    expect(result.point.id).toBe('takeout');
-    const collections = result.tables.filter((t) => t.table.collection);
-    expect(collections.map((t) => (t.table.name as Record<string, string>).en)).toEqual(['YouTube watch history']);
+  it('finds the export inside a bigger folder by the pack\'s name patterns', async () => {
+    const files = {
+      'Downloads/holiday.jpg': 'jpg',
+      'Downloads/notes.json': JSON.stringify({ Activity: {} }),
+      'Downloads/takeout-20240305T000000Z-001.zip': fixtureZip('google-takeout-en'),
+      'Downloads/tiktok/user_data_tiktok.json': Object.values(fixtureFiles('tiktok-2025'))[0]!,
+    };
+    const takeout = await derived(TAKEOUT, UploadListing.open(uploadFiles(files)));
+    expect(takeout.tables.some((t) => english(t) === 'YouTube watch history')).toBe(true);
+    const tiktok = await derived(TIKTOK, UploadListing.open(uploadFiles(files)));
+    expect(tiktok.tables.filter((t) => t.table.collection)).toHaveLength(3);
   });
 
-  it('finds an unzipped Takeout inside the folder a participant picked', () => {
-    // Unzipping `takeout-….zip` gives `takeout-…/Takeout/…`; picking the outer folder strips
-    // its own name, which leaves one `Takeout` folder in the root.
-    const takeout = loadFixture('google-takeout-en');
-    const picked: TreeNode = { kind: 'dir', name: 'takeout-20240305', children: [{ kind: 'dir', name: 'extracted', children: [takeout] }] };
-    const viaZip = deriveImport(takeout, true, POINTS)!;
-    const viaFolder = deriveImport(picked, false, POINTS)!;
-    expect(viaFolder.point.id).toBe('takeout');
+  it('gives the same tables for an unzipped Takeout in a picked folder', async () => {
+    const unzipped = Object.fromEntries(
+      Object.entries(fixtureFiles('google-takeout-en')).map(([path, bytes]) => [`takeout-20240305/${path}`, bytes]),
+    );
+    const viaFolder = await derived(TAKEOUT, UploadListing.open(uploadFiles(unzipped)));
+    const viaZip = await derived(TAKEOUT, fixtureListing('google-takeout-en'));
     expect(viaFolder.tables.map((t) => t.rows.length)).toEqual(viaZip.tables.map((t) => t.rows.length));
   });
 
-  it('fits nothing when no point knows the upload', () => {
-    expect(deriveImport(loadFixture('tiktok-2023'), true, [{ id: 'takeout', pack: 'google-takeout' }])).toBeUndefined();
-    expect(deriveImport(loadFixture('tiktok-2023'), true, [{ id: 'x', pack: 'no-such-pack' }])).toBeUndefined();
+  it('does not fit an export of another platform, or a single file from inside an export', async () => {
+    expect(await through(TAKEOUT, fixtureListing('tiktok-2023'))).toBe('no-fit');
+    const watch = fixtureFiles('google-takeout-en')['Takeout/YouTube and YouTube Music/history/watch-history.json']!;
+    expect(await through(TAKEOUT, UploadListing.open(uploadFiles({ 'watch-history.json': watch })))).toBe('no-fit');
   });
 });
 

@@ -6,9 +6,19 @@
  * Settings are keyed by canonical path plus the node's kind, so the server adding new paths
  * never touches them.
  */
-import { ROLES, STRUCTURE_FIELDS, type Alias, type NodePath, type ProjectNode, type Role, type RowFilter } from './decisions';
+import {
+  ROLES,
+  STRUCTURE_FIELDS,
+  type Alias,
+  type NewChildren,
+  type NodePath,
+  type ProjectNode,
+  type Role,
+  type RowFilter,
+} from './decisions';
 import { isFormat, MAX_FORMATS } from './formats';
 import { checkTransform, FIELD_TYPES, SpecError, type FieldType, type Localized, type Transform } from './importer/spec';
+import { findPatternProblem } from './locate';
 import type { Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
@@ -35,6 +45,10 @@ export interface ImporterEntry {
   format?: string;
   role?: Role;
   filter?: RowFilter[];
+  required?: true;
+  newChildren?: NewChildren;
+  /** The root's entry only. */
+  find?: string[];
 }
 
 export interface ImporterFile {
@@ -50,7 +64,22 @@ export class ProjectFileError extends Error {
   }
 }
 
-const SETTINGS = ['decision', 'label', 'description', 'aliases', 'lifter', 'raw', 'transform', 'as', 'format', 'role', 'filter'] as const;
+const SETTINGS = [
+  'decision',
+  'label',
+  'description',
+  'aliases',
+  'lifter',
+  'raw',
+  'transform',
+  'as',
+  'format',
+  'role',
+  'filter',
+  'required',
+  'newChildren',
+  'find',
+] as const;
 
 function shapeOf(node: ProjectNode): Shape {
   const shape: Shape = { kind: node.kind, name: node.name };
@@ -223,6 +252,18 @@ export function parseImporterFile(json: unknown): ImporterFile {
     check(typeof e.kind === 'string' && KINDS.has(e.kind as NodeKind), `${at}: unknown kind`);
     if (e.decision !== undefined) check(['ignore', 'show', 'donate'].includes(e.decision as string), `${at}: unknown decision`);
     if (e.raw !== undefined) check(e.raw === true, `${at}: raw must be true`);
+    if (e.required !== undefined) check(e.required === true, `${at}: required must be true`);
+    if (e.newChildren !== undefined) {
+      check(e.newChildren === 'ask' || e.newChildren === 'skip', `${at}: newChildren must be ask or skip`);
+    }
+    if (e.find !== undefined) {
+      check((e.path as unknown[]).length === 0, `${at}: only the root has find patterns`);
+      check(Array.isArray(e.find) && e.find.length > 0, `${at}: find must be a list of name patterns`);
+      for (const pattern of e.find) {
+        const problem = typeof pattern === 'string' ? findPatternProblem(pattern) : 'not text';
+        check(problem === undefined, `${at}: find pattern ${JSON.stringify(pattern)}: ${problem}`);
+      }
+    }
     if (e.lifter !== undefined) check(typeof e.lifter === 'string', `${at}: lifter must be a string`);
     if (e.label !== undefined) checkLocalized(e.label, `${at}: label`);
     if (e.as !== undefined) check(FIELD_TYPES.has(e.as as FieldType), `${at}: unknown type in as`);

@@ -7,13 +7,21 @@
  */
 import {
   createSandbox,
+  defaultRoot,
   extractShape,
   flatten,
+  locateRoot,
   matchingImporters,
+  readSpot,
   runImporter,
+  UploadProblemError,
   type FlatNode,
+  type Located,
+  type LocateResult,
+  type ReadSpot,
   type Row,
   type TreeNode,
+  type UploadListing,
 } from '@combray/core';
 import { importers } from '@combray/importers';
 import { LocalStore, WrongKeyError } from '@combray/store';
@@ -25,19 +33,19 @@ import type {
   FileManifest,
   DatasetSummary,
   ImportProgress,
+  ImportResult,
   LocalProject,
   SourceManifest,
   StoreStatus,
   TableManifest,
   TableSummary,
-  Upload,
   UploadPoint,
 } from './api';
-import { deriveImport } from './derived';
+import { deriveImport, pointTree } from './derived';
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
-import { parseUpload } from './upload';
+import { listUpload } from './upload';
 import { rows, timeline, topItems } from './tables';
 
 const DB_PREFIX = 'combray-';
@@ -46,6 +54,8 @@ let store: LocalStore<DatasetManifest> | undefined;
 // Decrypted datasets, kept in memory while unlocked and dropped on lock.
 const cache = new Map<string, FlatNode[]>();
 const tableCache = new Map<string, { manifest: TableManifest; rows: Row[] }>();
+// An import waiting for the participant to choose where in the upload their export is.
+let pending: { listing: UploadListing; point: UploadPoint; choose: (ids: number[]) => Promise<Located> } | undefined;
 
 async function getStore(): Promise<LocalStore<DatasetManifest>> {
   if (!projectId) throw new Error('no project open');
@@ -145,20 +155,48 @@ async function runImporters(
   return tables;
 }
 
-/**
- * Derive tables through the project's upload points and store them. Returns undefined when the
- * upload fits none of them.
- */
+/** Store a root that was read: its tree, its raw files, and the tables found in it. */
+async function storeSource(
+  listing: UploadListing,
+  read: ReadSpot,
+  onProgress: (p: ImportProgress) => void,
+  findTables: (s: LocalStore<DatasetManifest>, sourceId: string, importedAt: string) => Promise<TableSummary[]>,
+): Promise<ImportResult> {
+  const s = await unlockedStore();
+  const nodes = flatten(read.tree);
+  const importedAt = new Date().toISOString().slice(0, 10);
+  const manifest: SourceManifest = {
+    type: 'source',
+    // The name of the picked file or folder: shown on this device only.
+    name: listing.name,
+    source: listing.source === 'files' ? 'folder' : listing.source,
+    importedAt,
+    nodeCount: nodes.length,
+    fileCount: countFiles(nodes),
+    shape: extractShape(read.tree),
+  };
+  onProgress({ step: 'encrypting' });
+  const id = await s.putDataset(manifest, nodes);
+  cache.set(id, nodes);
+  // Keep the raw files that were read too, one encrypted blob each, so better importers can
+  // read them later. Files outside the root, or skipped in it, are never kept.
+  for (const { path, bytes } of read.files) {
+    const fileManifest: FileManifest = { type: 'file', sourceId: id, path, mime: '', size: bytes.byteLength };
+    await s.putFile(fileManifest, new Blob([bytes as Uint8Array<ArrayBuffer>]));
+  }
+  onProgress({ step: 'importers' });
+  const tables = await findTables(s, id, importedAt);
+  onProgress({ step: 'done' });
+  return { status: 'done', dataset: sourceSummary(id, manifest, tables) };
+}
+
+/** Store the tables derived through an upload point's project tree. */
 async function storeDerived(
   s: LocalStore<DatasetManifest>,
   sourceId: string,
-  tree: TreeNode,
-  archive: boolean,
-  points: UploadPoint[],
   importedAt: string,
-): Promise<TableSummary[] | undefined> {
-  const derived = deriveImport(tree, archive, points);
-  if (!derived) return undefined;
+  derived: ReturnType<typeof deriveImport>,
+): Promise<TableSummary[]> {
   const summaries: TableSummary[] = [];
   for (const { table, rows } of derived.tables) {
     const { name, display, ...rest } = table;
@@ -180,6 +218,24 @@ async function storeDerived(
     summaries.push(tableSummary(id, manifest));
   }
   return summaries;
+}
+
+/** What to do with the result of looking for the root: store it, ask, or report a problem. */
+async function finish(
+  listing: UploadListing,
+  point: UploadPoint,
+  located: LocateResult,
+  onProgress: (p: ImportProgress) => void,
+): Promise<ImportResult> {
+  if (located.status === 'choose') {
+    pending = { listing, point, choose: located.choose };
+    return { status: 'choose', choices: located.choices, multiple: located.multiple };
+  }
+  pending = undefined;
+  if (located.status !== 'found') return { status: located.status };
+  const { root } = located;
+  const derived = deriveImport(root, pointTree(point)!, point);
+  return storeSource(listing, root, onProgress, (s, id, importedAt) => storeDerived(s, id, importedAt, derived));
 }
 
 const api: DataApi = {
@@ -271,35 +327,32 @@ const api: DataApi = {
     store = undefined;
   },
 
-  async importFiles(uploads, onProgress, points) {
-    const s = await unlockedStore();
-    const { tree, source } = await parseUpload(uploads, onProgress);
-    onProgress({ step: 'shape' });
-    const shape = extractShape(tree);
-    const nodes = flatten(tree);
-    const importedAt = new Date().toISOString().slice(0, 10);
-    const manifest: SourceManifest = {
-      type: 'source',
-      name: tree.name,
-      source,
-      importedAt,
-      nodeCount: nodes.length,
-      fileCount: countFiles(nodes),
-      shape,
-    };
-    onProgress({ step: 'encrypting' });
-    const id = await s.putDataset(manifest, nodes);
-    cache.set(id, nodes);
-    // Keep the raw files too, one encrypted blob each, so better importers can read them later.
-    for (const { file, path } of uploads) {
-      const fileManifest: FileManifest = { type: 'file', sourceId: id, path, mime: file.type, size: file.size };
-      await s.putFile(fileManifest, file);
+  async importFiles(uploads, onProgress, point) {
+    await unlockedStore();
+    pending = undefined;
+    onProgress({ step: 'looking' });
+    try {
+      const listing = await listUpload(uploads);
+      const projectTree = point && pointTree(point);
+      if (point && projectTree) return await finish(listing, point, await locateRoot(listing, projectTree), onProgress);
+      // Without a project tree: everything, named as before, for the YAML importers.
+      const read = await readSpot(listing, await defaultRoot(listing), { name: listing.name });
+      return await storeSource(listing, read, onProgress, (s, id, importedAt) => runImporters(s, id, read.tree, importedAt));
+    } catch (error) {
+      if (error instanceof UploadProblemError) return { status: error.problem };
+      throw error;
     }
-    onProgress({ step: 'importers' });
-    const derived = points?.length ? await storeDerived(s, id, tree, source === 'archive', points, importedAt) : undefined;
-    const tables = derived ?? (await runImporters(s, id, tree, importedAt));
-    onProgress({ step: 'done' });
-    return sourceSummary(id, manifest, tables);
+  },
+
+  async chooseRoots(ids, onProgress) {
+    if (!pending) throw new Error('no import is waiting for a choice');
+    const { listing, point, choose } = pending;
+    onProgress({ step: 'looking' });
+    return finish(listing, point, await choose(ids), onProgress);
+  },
+
+  async cancelImport() {
+    pending = undefined;
   },
 
   async listDatasets() {
