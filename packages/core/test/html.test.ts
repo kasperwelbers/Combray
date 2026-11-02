@@ -148,6 +148,13 @@ describe('Snapchat chat history (<table>)', () => {
     expect(records.map((r) => r.To)).toEqual([null, null, null, 'gilberte_s', 'albertine_b']);
   });
 
+  it('never takes header text that looks like a name normalisation makes', () => {
+    const html = '<table><tr><th>#text[0]</th><th>@href</th></tr><tr><td>a</td><td>b</td></tr></table>';
+    const tree = normalizeTree(parseFile('t.html', new TextEncoder().encode(html)), { keys: () => true });
+    expect(JSON.stringify(tree)).not.toContain('"name":"@href"');
+    expect(JSON.stringify(tree)).toContain('#cell[1]');
+  });
+
   it('uses only allowed header text', () => {
     const { names } = load('snapchat-chats.html', { keys: (k) => k === 'Created' }).main((t) => t.node.includes('table'));
     expect(names).toContain('Created');

@@ -173,6 +173,9 @@ describe('deriveRows', () => {
     // A filter on a column the table does not have keeps nothing, rather than everything.
     getNode(tree, ['tweets', '[*]'])!.filter = [{ column: 'nope', test: { empty: true } }];
     expect(deriveRows(tweets, tree, deriveTables(tree))[1]).toEqual([]);
+    // So does a pattern that does not compile (from a hand-edited file), instead of throwing.
+    getNode(tree, ['tweets', '[*]'])!.filter = [{ column: 'text', test: { matches: '(' } }];
+    expect(deriveRows(tweets, tree, deriveTables(tree))[1]).toEqual([]);
   });
 
   it('filters on ignored fields and on nested tables without showing them', () => {

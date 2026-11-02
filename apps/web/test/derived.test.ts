@@ -1,3 +1,4 @@
+import type { TreeNode } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
 import { loadFixture } from '../../../importers/test/load';
@@ -67,6 +68,27 @@ describe('deriveImport', () => {
     const result = deriveImport(folder.children[0]!, false, POINTS)!;
     expect(result.point.id).toBe('tiktok');
     expect(result.tables.filter((t) => t.table.collection)).toHaveLength(3);
+  });
+
+  it('places a single file where the pack knows a file by that name', () => {
+    const takeout = loadFixture('google-takeout-en');
+    const find = (node: TreeNode, name: string): TreeNode | undefined =>
+      node.name === name ? node : node.kind === 'dir' ? node.children.map((c) => find(c, name)).find(Boolean) : undefined;
+    const result = deriveImport(find(takeout, 'watch-history.json')!, false, POINTS)!;
+    expect(result.point.id).toBe('takeout');
+    const collections = result.tables.filter((t) => t.table.collection);
+    expect(collections.map((t) => (t.table.name as Record<string, string>).en)).toEqual(['YouTube watch history']);
+  });
+
+  it('finds an unzipped Takeout inside the folder a participant picked', () => {
+    // Unzipping `takeout-….zip` gives `takeout-…/Takeout/…`; picking the outer folder strips
+    // its own name, which leaves one `Takeout` folder in the root.
+    const takeout = loadFixture('google-takeout-en');
+    const picked: TreeNode = { kind: 'dir', name: 'takeout-20240305', children: [{ kind: 'dir', name: 'extracted', children: [takeout] }] };
+    const viaZip = deriveImport(takeout, true, POINTS)!;
+    const viaFolder = deriveImport(picked, false, POINTS)!;
+    expect(viaFolder.point.id).toBe('takeout');
+    expect(viaFolder.tables.map((t) => t.rows.length)).toEqual(viaZip.tables.map((t) => t.rows.length));
   });
 
   it('fits nothing when no point knows the upload', () => {

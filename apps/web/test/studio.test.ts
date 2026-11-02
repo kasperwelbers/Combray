@@ -5,6 +5,7 @@ import {
   countDecisions,
   decideBelow,
   displayName,
+  filterColumns,
   foldChain,
   fromFiles,
   nodeIcon,
@@ -23,6 +24,12 @@ const tree = () =>
   );
 
 describe('studio model', () => {
+  it('offers ignored fields to row filters', () => {
+    const t = setDecision(tree(), ['Takeout', 'YouTube', 'history', '[*]', 'time'], 'ignore');
+    const ids = filterColumns(t, ['Takeout', 'YouTube', 'history', '[*]']).map((c) => c.id);
+    expect(ids.sort()).toEqual(['time', 'title']);
+  });
+
   it('folds runs of single-child groups, but not into the rows of a table or past a label', () => {
     const t = tree();
     const youtube = t.children![0]!.children!.find((c) => c.name === 'YouTube')!;

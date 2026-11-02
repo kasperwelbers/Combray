@@ -216,7 +216,8 @@ function cell(el: ElementNode, name: string, options: Required<NormalizeOptions>
 /** A key from header or term text, if allowed and usable as a name. */
 function keyFor(text: string, options: Required<NormalizeOptions>): string | undefined {
   const key = text.trim();
-  return key !== '' && !key.includes('/') && options.keys(key) ? key : undefined;
+  // `#` and `@` start the names normalisation makes itself (`#text[0]`, `@href`).
+  return key !== '' && !key.includes('/') && !/^[#@]/.test(key) && options.keys(key) ? key : undefined;
 }
 
 /**

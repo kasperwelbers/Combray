@@ -11,8 +11,10 @@ import {
   extractShape,
   getNode,
   knownKeys,
+  matchChild,
   mergeShape,
-  prepareUpload,
+  normalizeTree,
+  uploadRoot,
   type ColumnDef,
   type DerivedRow,
   type FieldValue,
@@ -34,10 +36,17 @@ export interface DerivedImport {
 
 const pathKey = (path: NodePath) => path.join('\u0000');
 
-/** The tree of an upload point: its pack, for now. Projects get their own trees in Phase 2. */
+const trees = new Map<string, ProjectNode>();
+
+/**
+ * The tree of an upload point: its pack, for now. Projects get their own trees in Phase 2.
+ * Kept once joined; matching an upload works on a copy (`mergeShape`).
+ */
 function pointTree(point: UploadPoint): ProjectNode | undefined {
   const pack = packs.find((p) => p.id === point.pack);
-  return pack && packTree(pack);
+  if (!pack) return undefined;
+  if (!trees.has(pack.id)) trees.set(pack.id, packTree(pack));
+  return trees.get(pack.id);
 }
 
 /** Whether a node has, or something below it has, a researcher's show or donate decision. */
@@ -104,15 +113,54 @@ function anyColumn(columns: ColumnInfo[], test: (c: ColumnInfo) => boolean): boo
   return columns.some((c) => test(c) || anyColumn(c.columns ?? [], test));
 }
 
-/** Match an upload against one upload point. The score is the number of rows in tables it knows. */
-function tryPoint(
-  tree: TreeNode,
-  archive: boolean,
-  projectTree: ProjectNode,
-  point: UploadPoint,
-): { result: DerivedImport; score: number } {
+/** The folders (canonical paths) in which a project tree knows a file of this name and kind. */
+function placesFor(projectTree: ProjectNode, file: TreeNode): NodePath[] {
+  const out: NodePath[] = [];
+  const visit = (node: ProjectNode, path: NodePath) => {
+    if (matchChild(node, file.kind, file.name)) out.push(path);
+    for (const child of node.children ?? []) if (child.kind === 'dir') visit(child, [...path, child.name]);
+  };
+  visit(projectTree, []);
+  return out;
+}
+
+const dir = (name: string, children: TreeNode[]): TreeNode => ({ kind: 'dir', name, children });
+
+/** How many single folders below the root are also tried as the root (`takeout-…/Takeout/`). */
+const MAX_UNWRAP = 3;
+
+/**
+ * The ways an upload may sit in a project tree, as nameless roots:
+ * - as uploaded (an archive unwrapped from its one top folder);
+ * - a folder holding just one folder, such as an unzipped Takeout (`takeout-…/Takeout/`), from
+ *   that inner folder;
+ * - a single file in each folder where the project knows a file by that name or an alias
+ *   (`watch-history.json` in `YouTube and YouTube Music/history`).
+ * File names are only compared here, in the worker; roots have no name.
+ */
+function roots(tree: TreeNode, archive: boolean, projectTree: ProjectNode): TreeNode[] {
+  const root = uploadRoot(tree, archive);
+  if (tree.kind !== 'dir') {
+    const placed = placesFor(projectTree, tree).map((path) =>
+      dir('', [path.reduceRight<TreeNode>((child, name) => dir(name, [child]), tree)]),
+    );
+    return [root, ...placed];
+  }
+  const out = [root];
+  let node = root;
+  for (let i = 0; i < MAX_UNWRAP && node.kind === 'dir' && node.children.length === 1; i++) {
+    const only = node.children[0]!;
+    if (only.kind !== 'dir') break;
+    out.push({ ...only, name: '' });
+    node = only;
+  }
+  return out;
+}
+
+/** Match a root against one upload point. The score is the number of rows in tables it knows. */
+function tryPoint(root: TreeNode, projectTree: ProjectNode, point: UploadPoint): { result: DerivedImport; score: number } {
   // Header text from the participant's file only becomes a name when the project knows it.
-  const prepared = prepareUpload(tree, archive, { keys: knownKeys(projectTree) });
+  const prepared = normalizeTree(root, { keys: knownKeys(projectTree) });
   // Parts the project does not know yet are added undecided, so participants still see them.
   const merged = mergeShape(projectTree, extractShape(prepared));
   const added = new Set(merged.added.map(pathKey));
@@ -150,11 +198,10 @@ export function deriveImport(tree: TreeNode, archive: boolean, points: UploadPoi
   for (const point of points) {
     const projectTree = pointTree(point);
     if (!projectTree) continue;
-    const attempts = [tryPoint(tree, archive, projectTree, point)];
-    // A single file is its own root; a pack may know it as a file in a folder
-    // (`user_data.json` from a TikTok zip), so try it that way too, matched by name and aliases.
-    if (tree.kind !== 'dir') attempts.push(tryPoint({ kind: 'dir', name: '', children: [tree] }, false, projectTree, point));
-    for (const attempt of attempts) if (attempt.score > (best?.score ?? 0)) best = attempt;
+    for (const root of roots(tree, archive, projectTree)) {
+      const attempt = tryPoint(root, projectTree, point);
+      if (attempt.score > (best?.score ?? 0)) best = attempt;
+    }
   }
   return best?.result;
 }

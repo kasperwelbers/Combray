@@ -40,7 +40,7 @@ export type {
   Role,
   RowFilter,
 } from './decisions';
-export { deriveTables, deriveRows, convertValue, outline, KEY_COLUMN, VALUE_COLUMN } from './derive';
+export { deriveTables, deriveRows, outline, KEY_COLUMN, VALUE_COLUMN } from './derive';
 export type { TableDef, ColumnDef, DerivedRow, DeriveOptions, OutlineGroup } from './derive';
 export {
   splitProjectTree,
@@ -54,7 +54,7 @@ export {
 export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';
 export { normalizeTree, prepareUpload, MIN_REPEATS } from './normalize';
 export type { NormalizeOptions } from './normalize';
-export { runQuery, queryColumns, unnestPath, rootTable, datePart, test as testCell, QueryError } from './query';
+export { runQuery, queryColumns, unnestPath, rootTable, datePart, QueryError } from './query';
 export type {
   Query,
   Step,
