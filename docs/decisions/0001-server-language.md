@@ -1,6 +1,6 @@
 # ADR 0001: Server language
 
-- **Status:** proposed
+- **Status:** superseded by [ADR 0010](0010-node-server.md) (TypeScript on Node)
 - **Date:** 2026-10-29
 
 ## Context

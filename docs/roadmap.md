@@ -62,4 +62,5 @@ Goal: TikTok and YouTube data become recognisable within a minute.
 
 ## Later
 
-- Passkey-protected private-key backup on the server; S3 storage; Windows service install; Tauri wrapper if labs want a desktop app; network and map views; public importer registry; Component Model plugins.
+- Object storage for large donations (videos): browsers upload encrypted envelopes straight to S3-compatible storage with presigned URLs; the server keeps the index, tombstones and sealed keys ([ADR 0010](decisions/0010-node-server.md)).
+- Passkey-protected private-key backup on the server; Windows service install; Tauri wrapper if labs want a desktop app; network and map views; public importer registry; Component Model plugins.

@@ -98,7 +98,7 @@ The server is intentionally small, and **multi-tenant**: one installation serves
 
 Not the server's job: parsing DDPs, running importers, analysing data, and above all decrypting donations.
 
-**Storage.** The server has its own storage by default: SQLite for metadata and a data directory on disk for donation envelopes and vault blobs. That keeps a university deployment to one container and one volume. S3-compatible object storage is an optional backend (via the `object_store` crate) for institutions that prefer it, not a requirement.
+**Storage.** The server has its own storage by default: SQLite for metadata and a data directory on disk for donation envelopes and vault blobs. That keeps a university deployment to one container and one volume. S3-compatible object storage is planned for large donations (presigned uploads straight from the browser, [ADR 0010](decisions/0010-node-server.md)), not a requirement.
 
 Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language.md). The component split itself is recorded in [ADR 0002](decisions/0002-modular-components.md).
 
