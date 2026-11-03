@@ -18,7 +18,7 @@ Combray is designed with a focus on the participant experience, and the data is 
 Donating the data is only a possible outcome, not the goal.
 Example use cases are:
 
-* A participant looks at the data together with a researcher. The purpose of the data is to evoke memories and reflections (like Proust's madeleine).
+* A participant looks at the data together with a researcher. The purpose of the data is to evoke memories and reflections.
 * A participant explores their own data, in a lab or at home, and answers questions about the data and/or their own reflections.
 
 So what really sets Combray apart is not where it runs, but how it's used. Participants have sessions they can come back to (with their data encrypted on their own computer in between), and researchers can set up a study without writing a line of code. Both need a server, so Combray is built server first: one shared server per university or institute, which keeps the data safe, and which participants and researchers only ever reach through their browser.
@@ -51,8 +51,9 @@ Projects come from [deploy/examples/projects/](deploy/examples/projects/). The d
 
 1. Add yourself to an example project (any address will do; no mail is sent):
    ```sh
-   pnpm researcher example you@example.org
+   pnpm admin project add-researcher example you@example.org
    ```
+   `pnpm admin` runs the server's operator commands on the development server; on its own it lists them.
 2. **Studio:** open http://localhost:5173/studio/, enter that address, and type the 8-digit code from the newest file in `.dev/outbox/`.
 3. **Key page** (passkey, project key, opening donations): open http://keys.localhost:8080, choose "Sign in with an email code", use a code from `.dev/outbox/` again, and set up your passkey and recovery code. Then create the project key.
 4. **A donation to open:** `pnpm synthetic-donation http://localhost:8080 example` seals a synthetic donation to the project key, which the key page can then open.

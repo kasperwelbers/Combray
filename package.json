@@ -17,7 +17,7 @@
     "typecheck": "pnpm -r typecheck",
     "e2e": "pnpm build && pnpm --filter @combray/keys e2e",
     "docker": "docker build -t combray-server:dev .",
-    "researcher": "node --env-file=deploy/dev.env --disable-warning=ExperimentalWarning apps/server/src/main.ts project add-researcher",
+    "admin": "node --env-file=deploy/dev.env --disable-warning=ExperimentalWarning apps/server/src/cli.ts",
     "synthetic-donation": "node apps/keys/scripts/run.mjs synthetic-donation"
   },
   "devDependencies": {

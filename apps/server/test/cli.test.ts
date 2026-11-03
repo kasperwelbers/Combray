@@ -76,12 +76,14 @@ describe('project add-researcher', () => {
     const s = await startServer();
     const r = await s.cli('project', 'add-researcher', 'willow', ADA);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain(`${ADA} is a member of willow`);
+    expect(r.stdout).toContain(`${ADA} is now a member of willow`);
     const login = await requestCode(s.keys, ADA);
     const code = await mailedCode(s, ADA);
     expect((await verifyCode(s.keys, login, code)).status).toBe(200);
-    // A second time is an error.
-    expect((await s.cli('project', 'add-researcher', 'willow', ADA)).code).toBe(1);
+    // A second time is harmless, and says so.
+    const again = await s.cli('project', 'add-researcher', 'willow', ADA);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain(`${ADA} is already a member of willow`);
   });
 
   it('refuses unknown projects and invalid project ids', async () => {
@@ -101,7 +103,7 @@ describe('the command line', () => {
     for (const args of [['nonsense'], ['researcher'], ['researcher', 'add'], ['project', 'add-researcher', 'willow']]) {
       const r = await s.cli(...args);
       expect(r.code, args.join(' ')).toBe(2);
-      expect(r.stderr).toContain('usage: combray-server');
+      expect(r.stderr).toContain('combray-server project add-researcher <project> <email>');
     }
   });
 

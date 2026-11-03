@@ -36,7 +36,8 @@ pnpm test          # all tests; pnpm test:client (web client, key page, packages
 pnpm typecheck     # type checks
 pnpm e2e           # key page end to end in Chromium with a virtual passkey
 pnpm docker        # build the server image
-pnpm researcher example you@example.org   # add a researcher to a project on the dev server
+pnpm admin         # the server's operator commands on the dev server, e.g.
+                   # pnpm admin project add-researcher example you@example.org
 ```
 
 The development server's settings are in `deploy/dev.env` (and `deploy/dev-hot.env` for `pnpm dev`); its databases, store master key and sign-in mails go to `.dev/`, which is not committed.
