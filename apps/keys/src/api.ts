@@ -12,8 +12,8 @@ export class ApiError extends Error {
 
 function describe(status: number, code: string): string {
   switch (code) {
-    case 'invalid_link':
-      return 'This sign-in link has been used or has expired. Ask for a new one.';
+    case 'invalid_code':
+      return 'That code is not right, or it has expired. Check it and try again, or ask for a new code.';
     case 'too_many_attempts':
       return 'Too many attempts. Please wait a while and try again.';
     case 'wrong_recovery_code':
@@ -60,6 +60,8 @@ export interface Site {
   researchers: boolean;
   public_url: string;
   keys_url: string;
+  /** A development server writes mails to a folder instead of sending them. */
+  mail_outbox?: boolean;
 }
 
 export interface Passkey {

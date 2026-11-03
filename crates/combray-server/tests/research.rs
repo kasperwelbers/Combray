@@ -105,7 +105,13 @@ impl Fixture {
             request = request.header(header::ORIGIN, origin);
         }
         if let Some(cookie) = r.cookie {
-            request = request.header(header::COOKIE, format!("combray={cookie}"));
+            // A bare value is the session cookie; `name=value` is sent as it is.
+            let cookie = if cookie.contains('=') {
+                cookie.to_owned()
+            } else {
+                format!("combray={cookie}")
+            };
+            request = request.header(header::COOKIE, cookie);
         }
         if let Some(site) = r.fetch_site {
             request = request.header("sec-fetch-site", site);
@@ -200,9 +206,9 @@ fn b64(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// Sign in through the email link, then with the recovery secret. Returns the key page cookie.
-async fn sign_in(f: &Fixture, email: &str, secret: &[u8]) -> String {
-    let (status, _, _) = f
+/// Ask for an email sign-in code. Returns the cookie that ties it to this "browser".
+async fn request_code(f: &Fixture, email: &str) -> String {
+    let (status, headers, _) = f
         .json(
             Method::POST,
             KEYS,
@@ -212,16 +218,31 @@ async fn sign_in(f: &Fixture, email: &str, secret: &[u8]) -> String {
         )
         .await;
     assert_eq!(status, StatusCode::ACCEPTED);
-    let token = wait_for_link(f, email).await;
-    let (status, headers, body) = f
-        .json(
-            Method::POST,
-            KEYS,
-            "/api/v1/auth/email/verify",
-            None,
-            Some(json!({ "token": token })),
-        )
-        .await;
+    set_cookie(&headers)
+}
+
+/// Send a sign-in code, from the browser holding `login` (or from one without the cookie).
+async fn verify_code(
+    f: &Fixture,
+    login: Option<&str>,
+    code: &str,
+) -> (StatusCode, HeaderMap, Value) {
+    let cookie = login.map(|l| format!("combray-login={l}"));
+    f.json(
+        Method::POST,
+        KEYS,
+        "/api/v1/auth/email/verify",
+        cookie.as_deref(),
+        Some(json!({ "code": code })),
+    )
+    .await
+}
+
+/// Sign in with an emailed code, then with the recovery secret. Returns the key page cookie.
+async fn sign_in(f: &Fixture, email: &str, secret: &[u8]) -> String {
+    let login = request_code(f, email).await;
+    let code = wait_for_code(f, email).await;
+    let (status, headers, body) = verify_code(f, Some(&login), &code).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let email_cookie = set_cookie(&headers);
     let (status, headers, _) = f
@@ -242,22 +263,25 @@ async fn sign_in(f: &Fixture, email: &str, secret: &[u8]) -> String {
     full
 }
 
-async fn wait_for_link(f: &Fixture, email: &str) -> String {
+/// The code from the newest sign-in mail to `email`, as it is written there ("1234 5678").
+async fn wait_for_code(f: &Fixture, email: &str) -> String {
     for _ in 0..100 {
         if let Some(mail) = f
             .outbox()
             .into_iter()
             .rev()
-            .find(|m| m.starts_with(&format!("To: {email}\n")) && m.contains("#login="))
+            .find(|m| m.starts_with(&format!("To: {email}\n")) && m.contains("sign-in code is:"))
         {
-            let token = mail
-                .split("#login=")
+            let code = mail
+                .split("sign-in code is:")
                 .nth(1)
                 .unwrap()
-                .split_whitespace()
-                .next()
+                .lines()
+                .map(str::trim)
+                .find(|l| !l.is_empty())
                 .unwrap()
                 .to_owned();
+            assert!(!mail.contains("http"), "the mail holds no link");
             // Use each mail once.
             for entry in std::fs::read_dir(f.dir.path().join("outbox")).unwrap() {
                 let path = entry.unwrap().path();
@@ -265,7 +289,7 @@ async fn wait_for_link(f: &Fixture, email: &str) -> String {
                     std::fs::remove_file(path).unwrap();
                 }
             }
-            return token;
+            return code;
         }
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
@@ -409,66 +433,42 @@ async fn the_key_page_is_served_only_on_its_own_host() {
 }
 
 #[tokio::test]
-async fn email_links_go_only_to_known_researchers_and_work_once() {
+async fn email_codes_go_only_to_known_researchers_and_work_once_in_the_same_browser() {
     let f = Fixture::new();
     f.accounts().add_researcher("ada@uni.nl").unwrap();
 
-    let (status, _, _) = f
-        .json(
-            Method::POST,
-            KEYS,
-            "/api/v1/auth/email",
-            None,
-            Some(json!({ "email": "nobody@uni.nl" })),
-        )
-        .await;
-    assert_eq!(
-        status,
-        StatusCode::ACCEPTED,
-        "the same answer for unknown emails"
-    );
-
-    let (status, _, _) = f
-        .json(
-            Method::POST,
-            KEYS,
-            "/api/v1/auth/email",
-            None,
-            Some(json!({ "email": "Ada@Uni.nl" })),
-        )
-        .await;
-    assert_eq!(status, StatusCode::ACCEPTED);
-    let token = wait_for_link(&f, "ada@uni.nl").await;
+    // The same answer, cookie included, for unknown emails.
+    let other_browser = request_code(&f, "nobody@uni.nl").await;
+    let login = request_code(&f, "Ada@Uni.nl").await;
+    let code = wait_for_code(&f, "ada@uni.nl").await;
     assert!(f.outbox().iter().all(|m| !m.contains("nobody@uni.nl")));
 
-    let (status, headers, body) = f
-        .json(
-            Method::POST,
-            KEYS,
-            "/api/v1/auth/email/verify",
-            None,
-            Some(json!({ "token": token })),
-        )
-        .await;
+    // The code is useless without this browser's cookie.
+    let (status, _, body) = verify_code(&f, None, &code).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "invalid_code");
+    let (status, _, _) = verify_code(&f, Some(&other_browser), &code).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, headers, body) = verify_code(&f, Some(&login), &code).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         body,
         json!({ "email": "ada@uni.nl", "has_passkey": false, "has_key": false })
     );
     let cookie = set_cookie(&headers);
+    assert!(
+        headers
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .any(|c| c.to_str().unwrap().starts_with("combray-login=;")),
+        "the pending sign-in cookie is cleared"
+    );
 
-    let (status, _, _) = f
-        .json(
-            Method::POST,
-            KEYS,
-            "/api/v1/auth/email/verify",
-            None,
-            Some(json!({ "token": token })),
-        )
-        .await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "a link works once");
+    let (status, _, _) = verify_code(&f, Some(&login), &code).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "a code works once");
 
-    // The email link alone is not a sign-in.
+    // The email code alone is not a sign-in.
     let (_, _, me) = f
         .json(Method::GET, KEYS, "/api/v1/me", Some(&cookie), None)
         .await;
@@ -592,26 +592,9 @@ async fn requests_from_other_origins_are_refused() {
 async fn recovery_sign_in_needs_the_right_secret() {
     let f = Fixture::new();
     researcher(&f, "ada@uni.nl", &[1u8; 32]);
-    let (status, _, _) = f
-        .json(
-            Method::POST,
-            KEYS,
-            "/api/v1/auth/email",
-            None,
-            Some(json!({ "email": "ada@uni.nl" })),
-        )
-        .await;
-    assert_eq!(status, StatusCode::ACCEPTED);
-    let token = wait_for_link(&f, "ada@uni.nl").await;
-    let (_, headers, _) = f
-        .json(
-            Method::POST,
-            KEYS,
-            "/api/v1/auth/email/verify",
-            None,
-            Some(json!({ "token": token })),
-        )
-        .await;
+    let login = request_code(&f, "ada@uni.nl").await;
+    let code = wait_for_code(&f, "ada@uni.nl").await;
+    let (_, headers, _) = verify_code(&f, Some(&login), &code).await;
     let cookie = set_cookie(&headers);
     let (status, _, _) = f
         .json(

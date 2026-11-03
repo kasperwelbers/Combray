@@ -51,13 +51,13 @@ and compare with the release. The page shows its version in the footer. The rele
 
 The server operator adds researchers and puts them on projects with a server command (`combray-server researcher add <email>`, `combray-server project add-researcher <project> <email>`). Members can then add colleagues on the key page; the server emails them an invitation.
 
-1. **Email link.** The researcher enters their address; the server mails a link to `https://keys…/#login=<token>`. The token is in the fragment, so it never reaches a server log. It works once, for 15 minutes. Requests are rate limited per address and per IP, and the answer is the same whether or not the address is known.
-2. **Passkey.** The link gives a short email-level session (15 minutes) that can only register or use a passkey, or use the recovery code. Using the passkey upgrades it to a full session (2 hours on the key site). The session id is rotated on every upgrade.
-3. **No passwords.** There is nothing to reuse, phish or reset by email alone: the email link is never enough on its own.
+1. **Email code.** The researcher enters their address on the key page; the server mails an 8-digit code, which they type on the same page. The code only works in the browser that asked for it: the request sets an `HttpOnly` cookie holding a random 256-bit secret, and the server stores the code hashed together with that secret. It works once, for 10 minutes, and stops working after 5 wrong tries. Requests are rate limited per address and per IP, and the answer (cookie included) is the same whether or not the address is known. A code instead of a link, because university mail filters open links to scan them, which would use up a sign-in link before the researcher clicks it; a mail without a link also looks less like phishing.
+2. **Passkey.** The code gives a short email-level session (15 minutes) that can only register or use a passkey, or use the recovery code. Using the passkey upgrades it to a full session (2 hours on the key site). The session id is rotated on every upgrade.
+3. **No passwords.** There is nothing to reuse, phish or reset by email alone: the email code is never enough on its own.
 
 Sessions are `HttpOnly`, `SameSite=Strict`, host-only cookies (`__Host-` on https). Every request that changes something must carry an `Origin` header for the site it is sent to, and `Sec-Fetch-Site` must be `same-origin` or `none`.
 
-Sign-in is a module of its own (`accounts.rs`, `research.rs`), so an institutional login (SURFconext, OIDC) can later replace the email link without touching keys.
+Sign-in is a module of its own (`accounts.rs`, `research.rs`), so an institutional login (SURFconext, OIDC) can later replace the email code without touching keys.
 
 ### The studio
 

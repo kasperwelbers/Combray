@@ -27,7 +27,7 @@ Goal: import a Google Takeout and a TikTok export, explore them, entirely in the
 
 Goal: a researcher with no programming experience creates a project, registers it on a shared server, runs sessions, and decrypts donations locally.
 
-- [x] Researcher sign-in (email link and passkey) and the key page: personal keys under passkey PRF with a recovery code, project keys, grants after comparing key codes, opening donations to CSV ([ADR 0007](decisions/0007-browser-key-page.md), [researcher-keys.md](researcher-keys.md)). Replaces the local key tool. [ ] Signed project configs.
+- [x] Researcher sign-in (email code and passkey) and the key page: personal keys under passkey PRF with a recovery code, project keys, grants after comparing key codes, opening donations to CSV ([ADR 0007](decisions/0007-browser-key-page.md), [researcher-keys.md](researcher-keys.md)). Replaces the local key tool. [ ] Signed project configs.
 - Researcher UI in the browser: create a project, configure from platform packs, register on a server, create participant codes, download encrypted donations.
 - Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, donation storage on its own disk.
 - [x] `packages/seal`: HPKE with X-Wing, envelope format, personal and project keys. No Rust crypto is needed for now.

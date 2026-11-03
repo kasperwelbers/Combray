@@ -41,7 +41,7 @@ function signInScreen(note?: string) {
     {},
     h('label', { for: 'email' }, 'Your email address'),
     email,
-    h('button', { type: 'submit' }, 'Email me a sign-in link'),
+    h('button', { type: 'submit' }, 'Email me a sign-in code'),
     status,
   );
   form.addEventListener('submit', async (e) => {
@@ -49,11 +49,7 @@ function signInScreen(note?: string) {
     status.textContent = '';
     try {
       await api.post('/auth/email', { email: email.value });
-      show(
-        h('h1', {}, 'Check your email'),
-        h('p', {}, 'If there is a researcher account for ', h('strong', {}, email.value), ', a sign-in link is on its way. It works once, for 15 minutes.'),
-        h('p', { class: 'meta' }, 'You can close this tab: the link opens the key page again.'),
-      );
+      codeScreen(email.value);
     } catch (err) {
       status.textContent = message(err);
     }
@@ -61,21 +57,52 @@ function signInScreen(note?: string) {
   show(
     h('h1', {}, 'Sign in to Combray'),
     note && h('p', { class: 'notice' }, note),
-    h('p', {}, 'This page holds the keys to your projects. You sign in with a link by email and then with your passkey.'),
+    h('p', {}, 'This page holds the keys to your projects. You sign in with a code by email and then with your passkey.'),
     form,
     h('p', { class: 'meta' }, 'Researcher accounts are created by your server operator or by a colleague on a project.'),
   );
 }
 
-async function afterEmailLink(token: string) {
-  try {
-    await api.post('/auth/email/verify', { token });
-  } catch (e) {
-    return signInScreen(message(e));
-  }
-  const me = await api.get<Me>('/me');
-  if (me.passkeys.length === 0) createPasskeyScreen(me);
-  else secondStepScreen(me);
+/** The emailed code only works in this browser: the server tied it to a cookie set just now. */
+function codeScreen(address: string) {
+  const code = h('input', {
+    id: 'code',
+    inputmode: 'numeric',
+    autocomplete: 'one-time-code',
+    maxlength: '10',
+    required: true,
+  });
+  const status = h('p', { role: 'status' });
+  const form = h(
+    'form',
+    {},
+    h('label', { for: 'code' }, 'Sign-in code'),
+    code,
+    h('button', { type: 'submit' }, 'Sign in'),
+    status,
+  );
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    status.textContent = '';
+    try {
+      await api.post('/auth/email/verify', { code: code.value });
+    } catch (err) {
+      status.textContent = message(err);
+      return;
+    }
+    const me = await api.get<Me>('/me');
+    if (me.passkeys.length === 0) createPasskeyScreen(me);
+    else secondStepScreen(me);
+  });
+  show(
+    h('h1', {}, 'Check your email'),
+    h('p', {}, 'If there is a researcher account for ', h('strong', {}, address), ', a code is on its way. Type it here, in this tab. It works for 10 minutes.'),
+    site.mail_outbox &&
+      h('p', { class: 'notice' }, 'This is a development server: it does not send mail, but writes it to a folder (target/dev/outbox with pnpm serve).'),
+    form,
+    h('p', { class: 'meta' }, h('button', { type: 'button', class: 'quiet', onclick: () => signInScreen() }, 'Use another address or send a new code')),
+  );
+  code.focus();
 }
 
 function noPasskeys() {
@@ -524,19 +551,6 @@ async function start() {
   } catch {
     // The page still works for sign-in; links to the studio need the site info.
   }
-  // The sign-in link carries its token in the fragment, which never reaches the server's logs.
-  // It may also arrive in a tab that already has the page open.
-  const takeLogin = () => {
-    const login = new URLSearchParams(location.hash.slice(1)).get('login');
-    if (location.hash) history.replaceState(null, '', location.pathname);
-    return login;
-  };
-  addEventListener('hashchange', () => {
-    const login = takeLogin();
-    if (login) void afterEmailLink(login).catch(failed);
-  });
-  const login = takeLogin();
-  if (login) return afterEmailLink(login);
   let me: Me;
   try {
     me = await api.get<Me>('/me');

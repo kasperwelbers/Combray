@@ -450,8 +450,8 @@ pub fn app(config: Config) -> std::io::Result<Router> {
     let keys_api = Router::new()
         .route("/health", get(health))
         .route("/site", get(research::site_info))
-        .route("/auth/email", post(research::request_email_link))
-        .route("/auth/email/verify", post(research::verify_email_link))
+        .route("/auth/email", post(research::request_email_code))
+        .route("/auth/email/verify", post(research::verify_email_code))
         .route(
             "/auth/passkey/register/start",
             post(research::start_registration),

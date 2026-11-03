@@ -15,7 +15,7 @@ Combray has three parts (see [architecture.md](architecture.md)): the **web clie
 For a first, small study on one VM. Each step is explained below.
 
 1. **Two host names** pointing at the VM, for example `combray.uni.nl` and `keys.combray.uni.nl`. The key page must have its own name: passkeys are bound to it, and it keeps keys away from the larger participant app ([researcher-keys.md](researcher-keys.md#two-addresses)).
-2. **An SMTP account** that may send from an address at the university, for researcher sign-in links.
+2. **An SMTP account** that may send from an address at the university, for researcher sign-in codes.
 3. **Docker** with compose on the VM, ports 80 and 443 open.
 4. In `deploy/`: create `secrets/store-master.key`, the data folders and `.env` ([below](#docker-compose)).
 5. `docker compose up -d`, then check `https://combray.uni.nl/api/v1/health` and `https://keys.combray.uni.nl/`.
@@ -125,7 +125,7 @@ It prints a one-time link (valid for 72 hours) that the participant opens on the
 
 ## Development
 
-`pnpm serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Sign-in links are written to `target/dev/outbox/`. Add yourself with `pnpm researcher you@example.org example`, and send a synthetic donation with `pnpm synthetic-donation http://localhost:8080 example`. `pnpm e2e` runs the key page end to end with a virtual passkey. For hot reload while working on the participant app, use `pnpm dev`: the web client on http://localhost:5173 next to the same server, without building first.
+`pnpm serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Sign-in mails (with the code) are written to `target/dev/outbox/`, and the key page says so. Add yourself first with `pnpm researcher you@example.org example`, and send a synthetic donation with `pnpm synthetic-donation http://localhost:8080 example`. `pnpm e2e` runs the key page end to end with a virtual passkey. For hot reload while working on the participant app, use `pnpm dev`: the web client on http://localhost:5173 next to the same server, without building first.
 
 ## Lab laptop
 
@@ -135,7 +135,7 @@ The server runs on a laptop as one binary (`cargo build --release -p combray-ser
 
 - The server binary embeds the web client and key page, so a deployment runs exactly a released version.
 - A multi-arch image on GHCR with each release.
-- Institutional sign-in (SURFconext, OIDC) in place of the email link.
+- Institutional sign-in (SURFconext, OIDC) in place of the email code.
 - Health metrics (counts and timings only).
 - Database migrations with a refusal to start when one would lose data.
 

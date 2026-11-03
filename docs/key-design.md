@@ -20,7 +20,7 @@ The participant's data is encrypted in their browser with a **data key**. The da
 | **Sealed donation key** | The donation key, sealed with HPKE (X-Wing) to the project key | On the server, in a key database separate from the donations | A member with access, on the key page, who may fetch it from the server |
 | **Project key** | X-Wing (X25519 + ML-KEM-768) key pair for the project | Public key and fingerprint in the project config; the private key only sealed to each member's personal key | Members with access, on the key page, in memory |
 | **Personal key** | X-Wing key pair per researcher, from a master secret | Public key on the server; master secret on the server only locked under the researcher's passkey (PRF), and as their recovery code | One researcher, after a passkey or the recovery code |
-| **Researcher session** | Email link plus passkey | `HttpOnly` cookie on the key site; a separate studio session without key access | One researcher |
+| **Researcher session** | Email code plus passkey | `HttpOnly` cookie on the key site; a separate studio session without key access | One researcher |
 | **Withdrawal token** | Random secret from the donation receipt | Kept by the participant (device, package, or printed receipt); server stores a hash | The participant |
 
 Two things never meet in one place by design: the locked box and its key (device and server), and the sealed donation keys and an open project key (server, and a researcher's key page while it is unlocked).
@@ -110,7 +110,7 @@ What we give up is that data is tied to one browser. The protection stays the sa
 | Server operator | Box keys, password hashes, envelopes, sealed keys, sealed project keys, locked personal keys | Only with the participant's device too | No (needs a researcher's passkey or recovery code), unless they serve a malicious key page ([limits](researcher-keys.md#limits)) |
 | Someone who stole the server database | Same as operator, without the store master key if kept apart | No | No |
 | Researcher | Passkey, recovery code, a session | No (never gets the data key) | Yes, while the donation is not withdrawn and they are a member |
-| Someone with a researcher's email | Sign-in links | No | No: the link alone cannot use the passkey or recovery code |
+| Someone with a researcher's email | Sign-in codes | No | No: the code alone cannot use the passkey or recovery code |
 | Someone with a researcher's unlocked phone or laptop | Their passkey | No | Yes, as that researcher. Remove the passkey and the member if a device is lost |
 | Future quantum computer | Recorded envelopes and sealed keys | No | No, as long as ML-KEM holds |
 

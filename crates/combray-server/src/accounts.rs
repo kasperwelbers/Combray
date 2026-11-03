@@ -10,8 +10,10 @@
 //! - per project, the **project public key**, and the project private key **sealed to each
 //!   member's personal public key**.
 //!
-//! Secrets that grant access (email sign-in tokens, session ids, handoff codes) are random 256-bit
-//! values; the database keeps only their SHA-256. Nothing here is logged.
+//! Secrets that grant access (session ids, handoff codes, the browser's pending email sign-in)
+//! are random 256-bit values; the database keeps only their SHA-256. Emailed sign-in codes are
+//! short, so they only work together with the pending sign-in of the browser that asked for them,
+//! and only a few times. Nothing here is logged.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -26,9 +28,11 @@ use webauthn_rs::prelude::{Passkey, Uuid};
 
 use crate::util::{now_secs, random_token};
 
-/// How long an emailed sign-in link works.
-pub const LOGIN_TOKEN_TTL_SECS: i64 = 15 * 60;
-/// After the email link, the second step (passkey or recovery code) must follow within this time.
+/// How long an emailed sign-in code works.
+pub const LOGIN_CODE_TTL_SECS: i64 = 10 * 60;
+/// Wrong guesses before a sign-in code stops working.
+pub const LOGIN_CODE_TRIES: i64 = 5;
+/// After the email code, the second step (passkey or recovery code) must follow within this time.
 pub const EMAIL_SESSION_TTL_SECS: i64 = 15 * 60;
 /// A signed-in session on the key page. Short, because it can fetch sealed keys.
 pub const KEYS_SESSION_TTL_SECS: i64 = 2 * 3600;
@@ -81,7 +85,7 @@ impl Site {
 /// How far sign-in has got.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
-    /// The email link was used; the passkey or recovery code is still needed.
+    /// The email code was used; the passkey or recovery code is still needed.
     Email,
     /// Fully signed in.
     Full,
@@ -146,6 +150,23 @@ fn hash(token: &[u8]) -> Vec<u8> {
     Sha256::digest(token).to_vec()
 }
 
+/// Sign-in codes have 8 digits: with the tries and rate limits, guessing one is out of reach.
+fn new_login_code() -> Result<String, AccountError> {
+    let bytes = crate::util::random::<8>().map_err(|_| AccountError::Internal("random"))?;
+    // The bias of reducing a 64-bit number modulo 10^8 is below 10^-10.
+    Ok(format!("{:08}", u64::from_le_bytes(bytes) % 100_000_000))
+}
+
+/// A code is stored hashed with its browser's secret, so the database alone does not give it away
+/// (8 digits would be quick to find from a plain hash).
+fn code_hash(request: &[u8], code: &str) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"combray/login-code/v1/");
+    hasher.update(request);
+    hasher.update(code.as_bytes());
+    hasher.finalize().to_vec()
+}
+
 fn decode(token: &str) -> Result<Vec<u8>, AccountError> {
     URL_SAFE_NO_PAD
         .decode(token)
@@ -156,7 +177,7 @@ pub fn b64(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// Emails are compared in lower case, trimmed. A light check only: the email link is the proof.
+/// Emails are compared in lower case, trimmed. A light check only: the email code is the proof.
 pub fn normalize_email(email: &str) -> Option<String> {
     let email = email.trim().to_lowercase();
     let (local, domain) = email.split_once('@')?;
@@ -197,9 +218,12 @@ impl Accounts {
                  created        INTEGER NOT NULL,
                  last_used      INTEGER
              );
-             CREATE TABLE IF NOT EXISTS login_tokens (
-                 token_hash    BLOB PRIMARY KEY,
-                 researcher_id TEXT NOT NULL REFERENCES researchers(id) ON DELETE CASCADE,
+             DROP TABLE IF EXISTS login_tokens;
+             CREATE TABLE IF NOT EXISTS login_codes (
+                 request_hash  BLOB PRIMARY KEY,
+                 researcher_id TEXT REFERENCES researchers(id) ON DELETE CASCADE,
+                 code_hash     BLOB NOT NULL,
+                 tries         INTEGER NOT NULL DEFAULT 0,
                  expires       INTEGER NOT NULL
              );
              CREATE TABLE IF NOT EXISTS sessions (
@@ -400,52 +424,90 @@ impl Accounts {
 
     // Email sign-in.
 
-    /// A one-time sign-in token for the researcher with this email, if there is one.
-    pub fn create_login_token(&self, email: &str) -> Result<Option<String>, AccountError> {
-        let Some(email) = normalize_email(email) else {
-            return Ok(None);
-        };
+    /// Start an email sign-in for the browser holding `request` (a random secret in its cookie).
+    /// Returns the code to mail, if there is a researcher with this email. For an unknown email,
+    /// a pending sign-in is stored all the same, with a code nobody receives, so both cases look
+    /// and behave alike.
+    pub fn create_login_code(
+        &self,
+        request: &[u8; 32],
+        email: &str,
+    ) -> Result<Option<String>, AccountError> {
         let db = self.db()?;
         db.execute(
-            "DELETE FROM login_tokens WHERE expires <= ?1",
+            "DELETE FROM login_codes WHERE expires <= ?1",
             params![now_secs()],
         )?;
-        let Some(id) = db
-            .query_row(
-                "SELECT id FROM researchers WHERE email = ?1",
-                params![email],
-                |r| r.get::<_, String>(0),
-            )
-            .optional()?
-        else {
-            return Ok(None);
+        let researcher: Option<String> = match normalize_email(email) {
+            Some(email) => db
+                .query_row(
+                    "SELECT id FROM researchers WHERE email = ?1",
+                    params![email],
+                    |r| r.get(0),
+                )
+                .optional()?,
+            None => None,
         };
-        let token = random_token().map_err(|_| AccountError::Internal("random"))?;
+        let code = new_login_code()?;
         db.execute(
-            "INSERT INTO login_tokens (token_hash, researcher_id, expires) VALUES (?1, ?2, ?3)",
-            params![hash(&token), id, now_secs() + LOGIN_TOKEN_TTL_SECS],
+            "INSERT OR REPLACE INTO login_codes (request_hash, researcher_id, code_hash, expires)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                hash(request),
+                researcher,
+                code_hash(request, &code),
+                now_secs() + LOGIN_CODE_TTL_SECS
+            ],
         )?;
-        Ok(Some(b64(&token)))
+        Ok(researcher.map(|_| code))
     }
 
-    /// Use up a sign-in token; returns the researcher it was for.
-    pub fn use_login_token(&self, token: &str) -> Result<String, AccountError> {
-        let token = decode(token)?;
+    /// Check a sign-in code against the pending sign-in of the browser holding `request`. Returns
+    /// the researcher on success. Each pending sign-in works once and allows a few wrong guesses.
+    pub fn use_login_code(&self, request: &[u8], code: &str) -> Result<String, AccountError> {
+        let code: String = code
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != '-')
+            .collect();
         let mut db = self.db()?;
         let tx = db.transaction()?;
-        let id: Option<String> = tx
+        let row: Option<(Option<String>, Blob, i64)> = tx
             .query_row(
-                "SELECT researcher_id FROM login_tokens WHERE token_hash = ?1 AND expires > ?2",
-                params![hash(&token), now_secs()],
-                |r| r.get(0),
+                "SELECT researcher_id, code_hash, tries FROM login_codes
+                 WHERE request_hash = ?1 AND expires > ?2",
+                params![hash(request), now_secs()],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
-        tx.execute(
-            "DELETE FROM login_tokens WHERE token_hash = ?1",
-            params![hash(&token)],
-        )?;
+        let Some((researcher, expected, tries)) = row else {
+            return Err(AccountError::Forbidden);
+        };
+        let right = bool::from(code_hash(request, &code).as_slice().ct_eq(&expected));
+        let result = match researcher {
+            Some(id) if right => {
+                tx.execute(
+                    "DELETE FROM login_codes WHERE request_hash = ?1",
+                    params![hash(request)],
+                )?;
+                Ok(id)
+            }
+            _ if tries + 1 >= LOGIN_CODE_TRIES => {
+                tx.execute(
+                    "DELETE FROM login_codes WHERE request_hash = ?1",
+                    params![hash(request)],
+                )?;
+                Err(AccountError::Forbidden)
+            }
+            _ => {
+                tx.execute(
+                    "UPDATE login_codes SET tries = tries + 1 WHERE request_hash = ?1",
+                    params![hash(request)],
+                )?;
+                Err(AccountError::Forbidden)
+            }
+        };
         tx.commit()?;
-        id.ok_or(AccountError::Forbidden)
+        result
     }
 
     // Sessions.
@@ -910,14 +972,53 @@ mod tests {
     }
 
     #[test]
-    fn login_tokens_work_once_and_only_for_known_emails() {
+    fn login_codes_work_once_only_in_the_browser_that_asked() {
         let (_dir, a) = accounts();
         let id = a.add_researcher("ada@uni.nl").unwrap();
         assert_eq!(a.add_researcher("ADA@uni.nl").unwrap(), id);
-        assert_eq!(a.create_login_token("nobody@uni.nl").unwrap(), None);
-        let token = a.create_login_token("ada@uni.nl").unwrap().unwrap();
-        assert_eq!(a.use_login_token(&token).unwrap(), id);
-        assert_eq!(a.use_login_token(&token), Err(AccountError::Forbidden));
+
+        let unknown = [1u8; 32];
+        assert_eq!(a.create_login_code(&unknown, "nobody@uni.nl").unwrap(), None);
+        assert_eq!(
+            a.use_login_code(&unknown, "00000000"),
+            Err(AccountError::Forbidden)
+        );
+
+        let browser = [2u8; 32];
+        let code = a.create_login_code(&browser, "Ada@uni.nl").unwrap().unwrap();
+        assert_eq!(code.len(), 8);
+        assert!(code.bytes().all(|b| b.is_ascii_digit()));
+        // Another browser cannot use the code.
+        assert_eq!(
+            a.use_login_code(&[3u8; 32], &code),
+            Err(AccountError::Forbidden)
+        );
+        // Spaces and dashes are fine; it works once.
+        let typed = format!("{} {}", &code[..4], &code[4..]);
+        assert_eq!(a.use_login_code(&browser, &typed).unwrap(), id);
+        assert_eq!(
+            a.use_login_code(&browser, &code),
+            Err(AccountError::Forbidden)
+        );
+    }
+
+    #[test]
+    fn login_codes_stop_working_after_a_few_wrong_tries() {
+        let (_dir, a) = accounts();
+        a.add_researcher("ada@uni.nl").unwrap();
+        let browser = [2u8; 32];
+        let code = a.create_login_code(&browser, "ada@uni.nl").unwrap().unwrap();
+        let wrong = if code == "00000000" { "11111111" } else { "00000000" };
+        for _ in 0..LOGIN_CODE_TRIES {
+            assert_eq!(
+                a.use_login_code(&browser, wrong),
+                Err(AccountError::Forbidden)
+            );
+        }
+        assert_eq!(
+            a.use_login_code(&browser, &code),
+            Err(AccountError::Forbidden)
+        );
     }
 
     #[test]

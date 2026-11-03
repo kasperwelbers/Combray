@@ -38,7 +38,7 @@ The participant's data download package, and everything derived from it, stays o
 | A researcher of the project | Wants to read a participant's local data | A password reset needs the participant's device too, and only works for participants with an id in that project. The server never has the data. |
 | A malicious importer script | A shared importer tries to exfiltrate | A QuickJS sandbox with no network or DOM (see [plugins.md](plugins.md)). |
 | Someone with the server's databases | Reads donations and keys | Envelopes and donation keys are sealed to the project key, which the server holds only sealed to researchers' personal keys, which it holds only locked under their passkeys. |
-| Someone with a researcher's email | Requests a sign-in link | The link only allows using a passkey or the recovery code. It cannot open keys or reach donations. |
+| Someone with a researcher's email | Requests a sign-in code | The code only works in the browser that asked for it, and only allows using a passkey or the recovery code. It cannot open keys or reach donations. |
 | A bug or XSS in the participant app or studio | Tries to reach researcher keys | Keys exist only on the key page, on another origin. The studio session gets no key material, and the main site has no key routes. |
 
 **Out of scope**, stated honestly:
@@ -284,14 +284,15 @@ The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participan
 
 | | Email level | Full |
 | --- | --- | --- |
-| How | Email link (`#login=` token, 15 minutes, single use) | Passkey, or recovery code, after the email level |
+| How | Emailed 8-digit code, typed in the browser that asked for it (10 minutes, single use, 5 tries) | Passkey, or recovery code, after the email level |
 | Lasts | 15 minutes | 2 hours on the key site; 12 hours for a studio session |
 | Can | Register or use a passkey, use the recovery code | Everything the researcher may do on that site |
 
 - Cookies: `__Host-combray` on https (plain `combray` on http for development), `HttpOnly`, `Secure` on https, `SameSite=Strict`, `Path=/`, no `Domain`. Sessions are bound to their site: a key-site session does not work on the main site or the other way round.
 - The server stores SHA-256 hashes of session ids, login tokens and handoff codes, never the values. Session ids are 256-bit random and rotated when a session is upgraded.
 - **CSRF**: every request that is not `GET` or `HEAD` must carry an `Origin` equal to its site's origin, and `Sec-Fetch-Site`, when present, must be `same-origin` or `none`. Bodies are JSON or bytes, never forms.
-- **Rate limits**: email links 20 per IP per 10 minutes and 3 per address per 15 minutes; recovery codes 5 per researcher per hour; donations 60 per IP per 10 minutes. The email answer is the same for known and unknown addresses.
+- **Email codes are tied to one browser.** Asking for a code sets an `HttpOnly`, `SameSite=Strict` cookie on the key site with a random 256-bit secret; the server keeps its SHA-256, and the code only as SHA-256 over the secret and the code, so the database alone does not reveal a code. Checking a code needs the cookie, so a code read from the mail on another device is useless. Each code allows 5 wrong tries, then the pending sign-in is deleted. With the rate limit of 3 codes per address per 15 minutes, someone guessing around the clock gets 1,440 tries a day at 100 million codes: about 1 in 70,000 per address per day. Success only reaches the email level, which still needs the passkey or recovery code, except on an account that has no passkey yet (where it allows registering the first one). For an unknown address the server stores a pending sign-in all the same, with a code it never sends, so both cases behave alike.
+- **Rate limits**: email codes 20 per IP per 10 minutes and 3 per address per 15 minutes; recovery codes 5 per researcher per hour; donations 60 per IP per 10 minutes. The email answer is the same for known and unknown addresses.
 - **Studio handoff**: a one-time code (two minutes) created by a full key-site session, sent in the fragment to `/studio/`, and traded for a main-site session. Studio sessions cannot create handoffs.
 - **Email** goes through SMTP with TLS (`lettre`). The SMTP URL never appears in logs or `Debug` output.
 
@@ -406,7 +407,7 @@ The researcher workspace (`/studio/`) works on the researcher's own exports. The
 | Reproducible builds and published hashes | "Signed code only" | No browser standard enforces signed code for a normal website |
 | Researcher keys on a browser key page, locked under passkey PRF | Local key tool; keys held by the server; keys by email | Nothing to install or lose for low-tech researchers, while the server still cannot open donations ([ADR 0007](decisions/0007-browser-key-page.md)) |
 | Key page on its own origin, one hash-pinned file | Key handling inside the studio | A bug in the large apps cannot reach keys; the page can be read and checked against a release hash |
-| Email link plus passkey, no passwords | Passwords with TOTP; institutional login now | Nothing to reuse or phish; institutional login can replace the email step later |
+| Email code plus passkey, no passwords | Passwords with TOTP; institutional login now | Nothing to reuse or phish; institutional login can replace the email step later |
 | One project key with sealed member copies, granted after comparing key codes | Seal each donation to every researcher | Colleagues can be added without touching donations; the code comparison stops a server-substituted key |
 | Recovery code (the master secret) as the only fallback | Server-side recovery; a second passkey only | The server must not be able to recover keys; a printed code survives losing every device |
 | `#k=` key fingerprint in the participant link | Signed configs now | Pins the key, which is what confidentiality needs, without a signing key to manage in the pilot |

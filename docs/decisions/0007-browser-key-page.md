@@ -13,7 +13,7 @@ The WebAuthn PRF extension now works on the main platforms, including a phone us
 ## Decision
 
 1. **A key page replaces the local key tool.** It is a single, dependency-free HTML file on its own origin (`COMBRAY_KEYS_URL`), with its script and style pinned by hash in a strict CSP, published with its SHA-256 in each release. The participant app and the studio never handle keys.
-2. **Researchers sign in with an email link and a passkey.** No passwords. Sign-in is pluggable, so an institutional login can replace the email step.
+2. **Researchers sign in with an email code and a passkey.** No passwords. (Amended 2026-11-03: first an email link, now an 8-digit code typed in the browser that asked for it, because mail filters that open links would use them up; see [researcher-keys.md](../researcher-keys.md#accounts-and-sign-in).) Sign-in is pluggable, so an institutional login can replace the email step.
 3. **Each researcher has a personal X-Wing key**, made in the browser. The server stores the public key, and the private key only locked under the passkey's PRF output. A recovery code (the master secret) is downloaded or printed once.
 4. **Each project has one project key.** Donations are sealed to it. Each member with access has a copy sealed to their personal key. An existing member grants access in their own browser after both compare a key code.
 5. **Researcher access is a session, not a token.** The API checks project membership; sealed keys and envelopes are served on the key site only.

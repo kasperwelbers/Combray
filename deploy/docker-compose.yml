@@ -27,7 +27,7 @@ services:
       # sign-in and donations are on when both are set.
       COMBRAY_PUBLIC_URL: https://${COMBRAY_DOMAIN:-localhost}
       COMBRAY_KEYS_URL: https://keys.${COMBRAY_DOMAIN:-localhost}
-      # Sign-in links go out by SMTP, e.g. smtps://user:password@smtp.uni.nl:465 (see .env).
+      # Sign-in codes go out by SMTP, e.g. smtps://user:password@smtp.uni.nl:465 (see .env).
       COMBRAY_SMTP_URL: ${COMBRAY_SMTP_URL:-}
       COMBRAY_MAIL_FROM: ${COMBRAY_MAIL_FROM:-}
       # Sealed donation keys on their own volume, so they can be backed up differently.

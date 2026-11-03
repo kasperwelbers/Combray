@@ -62,15 +62,15 @@ async function waitForServer() {
   throw new Error('server did not start');
 }
 
-/** The newest sign-in link mailed to this address. */
-async function loginLink(email: string): Promise<string> {
+/** The code from the newest sign-in mail to this address, as written there ("1234 5678"). */
+async function loginCode(email: string): Promise<string> {
   for (let i = 0; i < 100; i++) {
     const mails = readdirSync(join(dir, 'outbox'), { withFileTypes: true })
       .map((e) => ({ path: join(dir, 'outbox', e.name), text: readFileSync(join(dir, 'outbox', e.name), 'utf8') }))
-      .filter((m) => m.text.startsWith(`To: ${email}\n`) && m.text.includes('#login='));
+      .filter((m) => m.text.startsWith(`To: ${email}\n`) && m.text.includes('sign-in code is:'));
     if (mails.length > 0) {
       for (const m of mails) rmSync(m.path);
-      return mails.at(-1)!.text.match(/(http\S+#login=\S+)/)![1]!;
+      return mails.at(-1)!.text.match(/sign-in code is:\s+(\d{4} \d{4})/)![1]!;
     }
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -105,9 +105,10 @@ async function researcherBrowser(): Promise<{ context: BrowserContext; page: Pag
 async function signInByEmail(page: Page, email: string) {
   await page.goto(KEYS);
   await page.getByLabel('Your email address').fill(email);
-  await page.getByRole('button', { name: 'Email me a sign-in link' }).click();
+  await page.getByRole('button', { name: 'Email me a sign-in code' }).click();
   await page.getByRole('heading', { name: 'Check your email' }).waitFor();
-  await page.goto(await loginLink(email));
+  await page.getByLabel('Sign-in code').fill(await loginCode(email));
+  await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
 /** First sign-in: passkey, key, recovery code. Returns the recovery code. */

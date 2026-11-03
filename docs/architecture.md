@@ -14,7 +14,7 @@ A shared **core** library (`packages/core`, TypeScript) implements the tree mode
 
 > **Update ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)):** the researcher tool is reduced to a small local tool that creates the key pair, signs project configs and decrypts donations. The rest of what this document calls Studio (configuring projects, participants, importers) can be a browser UI, because it never handles the private key.
 
-> **Update ([ADR 0007](decisions/0007-browser-key-page.md)):** there is no local tool any more. Researchers sign in with an email link and a passkey, and keys are handled on a **key page**: a small, dependency-free page that the server serves on its own origin, with keys locked under the researcher's passkey. The studio (`/studio/`) is the browser researcher UI and never handles keys. See [researcher-keys.md](researcher-keys.md). Sections below that describe a local Studio are kept as history.
+> **Update ([ADR 0007](decisions/0007-browser-key-page.md)):** there is no local tool any more. Researchers sign in with an email code and a passkey, and keys are handled on a **key page**: a small, dependency-free page that the server serves on its own origin, with keys locked under the researcher's passkey. The studio (`/studio/`) is the browser researcher UI and never handles keys. See [researcher-keys.md](researcher-keys.md). Sections below that describe a local Studio are kept as history.
 
 ```
   researcher's computer                 university VM                     participant's browser
@@ -94,7 +94,7 @@ The server is intentionally small, and **multi-tenant**: one installation serves
 4. **Enrichment.** Accept batches of sanitised URLs, fetch public metadata quickly and politely, cache it without linking it to participants, stream results back (see [enrichment.md](enrichment.md)).
 5. **Donation storage** (built). Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers, and delete them on request. The sealed donation keys go into a separate key database with its own short backup retention, so deleting them withdraws every copy of a donation ([key-design.md](key-design.md)).
 6. **Optional AI proxy.** Forward helper requests (metadata only, see [ai-helper.md](ai-helper.md)) to a configured model, so API keys never reach the browser.
-7. **Researcher accounts and keys** (built): email link and passkey sign-in, personal keys locked under the passkey, project keys sealed to members, and the key page on its own host name ([researcher-keys.md](researcher-keys.md)).
+7. **Researcher accounts and keys** (built): email code and passkey sign-in, personal keys locked under the passkey, project keys sealed to members, and the key page on its own host name ([researcher-keys.md](researcher-keys.md)).
 
 Not the server's job: parsing DDPs, running importers, analysing data, and above all decrypting donations.
 
@@ -128,7 +128,7 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 
 **Projects in the web client.** Participants open `/p/{project}/` ([ADR 0008](decisions/0008-project-paths.md)), with an optional participant id in the fragment (`#id=…`). Each project has its own encrypted store on the device, and `/` lists the projects with data on this computer ([ADR 0005](decisions/0005-projects-scope-stores.md)).
 
-**Accounts and roles.** Server admins (university IT) manage researcher accounts and quotas; researchers own projects and can add collaborators; participants have only session tokens bound to one project. Researchers sign in with an email link and a passkey (built for the pilot, [researcher-keys.md](researcher-keys.md)); SSO via OIDC or SAML (e.g. SURFconext) can replace the email step later. For now the server operator adds researchers with a server command, and members add colleagues on the key page.
+**Accounts and roles.** Server admins (university IT) manage researcher accounts and quotas; researchers own projects and can add collaborators; participants have only session tokens bound to one project. Researchers sign in with an email code and a passkey (built for the pilot, [researcher-keys.md](researcher-keys.md)); SSO via OIDC or SAML (e.g. SURFconext) can replace the email step later. For now the server operator adds researchers with a server command, and members add colleagues on the key page.
 
 ## Monorepo layout
 

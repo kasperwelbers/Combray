@@ -41,13 +41,13 @@ use webauthn_rs::prelude::{
 use webauthn_rs::{Webauthn, WebauthnBuilder};
 
 use crate::accounts::{
-    AccountError, Accounts, EMAIL_SESSION_TTL_SECS, KEYS_SESSION_TTL_SECS, LOGIN_TOKEN_TTL_SECS,
+    AccountError, Accounts, EMAIL_SESSION_TTL_SECS, KEYS_SESSION_TTL_SECS, LOGIN_CODE_TTL_SECS,
     Level, STUDIO_SESSION_TTL_SECS, Session, Site, b64, normalize_email,
 };
 use crate::donations::{DonationError, Donations, NewDonation, read_header};
 use crate::limits::RateLimit;
 use crate::mail::Mailer;
-use crate::util::valid_random_id;
+use crate::util::{random_token, valid_random_id};
 use crate::{AppState, client_ip, no_store, projects};
 
 /// How long a passkey ceremony may take between its start and finish.
@@ -223,6 +223,37 @@ impl Research {
         }
     }
 
+    /// The cookie that ties an emailed sign-in code to the browser that asked for it.
+    fn login_cookie_name(&self) -> &'static str {
+        if self.secure(Site::Keys) {
+            "__Host-combray-login"
+        } else {
+            "combray-login"
+        }
+    }
+
+    /// Add a `Set-Cookie` for the pending email sign-in (or, with an empty value, clear it).
+    fn with_login_cookie(&self, value: &str, mut response: Response) -> Response {
+        let max_age = if value.is_empty() {
+            0
+        } else {
+            LOGIN_CODE_TTL_SECS
+        };
+        let secure = if self.secure(Site::Keys) {
+            "; Secure"
+        } else {
+            ""
+        };
+        let cookie = format!(
+            "{}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure}",
+            self.login_cookie_name()
+        );
+        if let Ok(cookie) = HeaderValue::from_str(&cookie) {
+            response.headers_mut().append(header::SET_COOKIE, cookie);
+        }
+        no_store(response)
+    }
+
     /// A response that sets (or, with an empty value, clears) the session cookie.
     fn with_cookie(&self, site: Site, value: &str, level: Level, response: Response) -> Response {
         let max_age = match (value.is_empty(), site, level) {
@@ -339,7 +370,7 @@ impl FromRequestParts<AppState> for Caller {
     }
 }
 
-/// A researcher who used the email link; the passkey or recovery code may still be missing.
+/// A researcher who used the email code; the passkey or recovery code may still be missing.
 pub struct Started {
     caller: Caller,
     session: Session,
@@ -413,6 +444,8 @@ pub async fn site_info(State(state): State<AppState>) -> Response {
             "researchers": true,
             "public_url": base(&r.public_url),
             "keys_url": base(&r.keys_url),
+            // Development servers write mails to a folder; the key page says where to look.
+            "mail_outbox": r.mailer.is_outbox(),
         }))
         .into_response(),
         None => Json(json!({ "researchers": false })).into_response(),
@@ -426,10 +459,11 @@ pub struct EmailBody {
     email: String,
 }
 
-/// Send a sign-in link, if there is an account for this email. The answer is the same either
-/// way, and the mail goes out in the background, so the response does not reveal who has an
-/// account.
-pub async fn request_email_link(
+/// Mail a sign-in code, if there is an account for this email. The code only works in this
+/// browser: the answer sets a cookie with a random secret that the code is tied to. The answer is
+/// the same either way, and the mail goes out in the background, so the response does not reveal
+/// who has an account.
+pub async fn request_email_code(
     State(state): State<AppState>,
     caller: Caller,
     headers: HeaderMap,
@@ -449,24 +483,27 @@ pub async fn request_email_link(
     r.email_per_address
         .hit(Sha256::digest(&address).to_vec())
         .map_err(too_many)?;
+    let request = random_token().map_err(|_| internal("random"))?;
+    let response = r.with_login_cookie(&b64(&request), StatusCode::ACCEPTED.into_response());
     tokio::spawn(async move {
-        let Ok(Some(token)) = r.accounts.create_login_token(&address) else {
+        let Ok(Some(code)) = r.accounts.create_login_code(&request, &address) else {
             return;
         };
         let body = format!(
-            "Hello,\n\nUse this link to sign in to Combray. It works once, for {} minutes:\n\n\
-             {}/#login={token}\n\n\
-             You will be asked for your passkey next. If you did not ask to sign in, you can \
-             ignore this email.\n",
-            LOGIN_TOKEN_TTL_SECS / 60,
-            base(&r.keys_url),
+            "Hello,\n\nYour Combray sign-in code is:\n\n    {} {}\n\n\
+             Type it on the key page where you asked for it. It works for {} minutes, only in \
+             that browser.\n\n\
+             If you did not ask to sign in, you can ignore this email.\n",
+            &code[..4],
+            &code[4..],
+            LOGIN_CODE_TTL_SECS / 60,
         );
         let _ = r
             .mailer
-            .send(&address, "Your Combray sign-in link", body)
+            .send(&address, "Your Combray sign-in code", body)
             .await;
     });
-    Ok(StatusCode::ACCEPTED.into_response())
+    Ok(response)
 }
 
 #[derive(Deserialize)]
@@ -474,17 +511,29 @@ pub struct TokenBody {
     token: String,
 }
 
-/// Use the emailed token: starts a session that still needs the passkey or recovery code.
-pub async fn verify_email_link(caller: Caller, Json(body): Json<TokenBody>) -> ApiResult {
+#[derive(Deserialize)]
+pub struct LoginCodeBody {
+    code: String,
+}
+
+/// Check the emailed code, in the browser that asked for it: starts a session that still needs
+/// the passkey or recovery code.
+pub async fn verify_email_code(
+    caller: Caller,
+    headers: HeaderMap,
+    Json(body): Json<LoginCodeBody>,
+) -> ApiResult {
     caller.keys_only()?;
     let r = &caller.r;
+    let wrong = || fail(StatusCode::FORBIDDEN, "invalid_code");
+    let request = cookie(&headers, r.login_cookie_name())
+        .and_then(|value| URL_SAFE_NO_PAD.decode(value).ok())
+        .ok_or_else(wrong)?;
     let researcher = r
         .accounts
-        .use_login_token(&body.token)
+        .use_login_code(&request, &body.code)
         .map_err(|e| match e {
-            AccountError::Forbidden | AccountError::Invalid => {
-                fail(StatusCode::FORBIDDEN, "invalid_link")
-            }
+            AccountError::Forbidden | AccountError::Invalid => wrong(),
             e => e.into(),
         })?;
     let token = r
@@ -497,7 +546,8 @@ pub async fn verify_email_link(caller: Caller, Json(body): Json<TokenBody>) -> A
         "has_key": me.public_key.is_some(),
     }))
     .into_response();
-    Ok(r.with_cookie(caller.site, &token, Level::Email, response))
+    let response = r.with_cookie(caller.site, &token, Level::Email, response);
+    Ok(r.with_login_cookie("", response))
 }
 
 // Passkeys.
@@ -507,7 +557,7 @@ pub async fn start_registration(who: Started) -> ApiResult {
     let r = &who.caller.r;
     let id = &who.session.researcher_id;
     let existing = r.accounts.passkeys(id)?;
-    // With only the email link, a passkey can be added only to an account that has none yet.
+    // With only the email code, a passkey can be added only to an account that has none yet.
     if who.session.level == Level::Email && !existing.is_empty() {
         return Err(fail(StatusCode::FORBIDDEN, "passkey_required"));
     }

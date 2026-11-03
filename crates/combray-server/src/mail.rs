@@ -14,7 +14,7 @@ pub struct Smtp {
 
 pub enum Mailer {
     Smtp(Box<Smtp>),
-    /// Write each mail as a file (development only; the files contain sign-in links).
+    /// Write each mail as a file (development only; the files contain sign-in codes).
     Outbox(PathBuf),
     Disabled,
 }
@@ -26,7 +26,7 @@ pub enum MailConfig {
     /// `COMBRAY_SMTP_URL` (e.g. `smtps://user:password@smtp.uni.nl:465`) with `COMBRAY_MAIL_FROM`.
     Smtp { url: String, from: String },
     /// `COMBRAY_MAIL_OUTBOX`: a directory to write each mail to (development only; the files
-    /// contain sign-in links).
+    /// contain sign-in codes).
     Outbox(PathBuf),
     /// Without either, researchers cannot sign in.
     #[default]
@@ -87,6 +87,11 @@ impl Mailer {
 
     pub fn enabled(&self) -> bool {
         !matches!(self, Mailer::Disabled)
+    }
+
+    /// Whether mails go to a folder instead of being sent (development).
+    pub fn is_outbox(&self) -> bool {
+        matches!(self, Mailer::Outbox(_))
     }
 
     pub async fn send(&self, to: &str, subject: &str, body: String) -> Result<(), MailError> {
