@@ -91,7 +91,10 @@ export const sessions = sqliteTable('sessions', {
   researcherId: researcherId(),
   site: text('site', { enum: ['keys', 'main'] }).notNull(),
   level: text('level', { enum: ['email', 'full'] }).notNull(),
+  /** The hard limit: the session ends then, however active. */
   expires: integer('expires').notNull(),
+  /** When it was last used, for the studio's idle limit. */
+  lastSeen: integer('last_seen').notNull().default(0),
 });
 
 /** One-time codes from the key page that sign the researcher in to the studio. */

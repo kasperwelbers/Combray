@@ -18,6 +18,9 @@ export interface ResearchConfig {
   maxDonationBytes: number;
   /** How long backups of the donation key database are kept; withdrawals are complete after it. */
   keyBackupRetentionDays: number;
+  /** Studio sessions: ended after this long without activity, and at most this long in all. */
+  studioIdleSecs: number;
+  studioMaxSecs: number;
 }
 
 export type MailConfig =
@@ -97,6 +100,8 @@ export function configFromEnv(): Config {
           mail: mailFromEnv(),
           maxDonationBytes: int('COMBRAY_MAX_DONATION_MB', 64) * 1024 * 1024,
           keyBackupRetentionDays: int('COMBRAY_KEY_BACKUP_RETENTION_DAYS', 30),
+          studioIdleSecs: int('COMBRAY_STUDIO_IDLE_SECS', 3600) || 3600,
+          studioMaxSecs: int('COMBRAY_STUDIO_MAX_SECS', 12 * 3600) || 12 * 3600,
         }
       : undefined;
   return {

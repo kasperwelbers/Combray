@@ -107,14 +107,14 @@ describe('site information', () => {
     expect((await s.main.get('/api/v1/site')).json).toEqual({ researchers: false });
     for (const [method, path] of [
       ['GET', '/api/v1/me'],
-      ['POST', '/api/v1/auth/email'],
       ['GET', '/api/v1/projects'],
+      ['POST', '/api/v1/auth/handoff/redeem'],
     ] as const) {
       const r = await s.request({
         method,
         host: s.mainHost,
         path,
-        body: method === 'POST' ? { email: 'ada@uni.example' } : undefined,
+        body: method === 'POST' ? { code: 'x' } : undefined,
         headers: { origin: s.main.origin, 'sec-fetch-site': 'same-origin' },
       });
       expect(r.status, path).toBe(404);
@@ -127,10 +127,8 @@ describe('sign-in without mail settings', () => {
   it('is unavailable', async () => {
     const s = await startServer({ mail: false });
     await s.cliOk('researcher', 'add', 'ada@uni.example');
-    for (const site of [s.keys, s.main]) {
-      const r = await site.post('/api/v1/auth/email', { email: 'ada@uni.example' });
-      expect(r.status).toBe(503);
-      expect(r.json).toEqual({ error: 'mail_disabled' });
-    }
+    const r = await s.keys.post('/api/v1/auth/email', { email: 'ada@uni.example' });
+    expect(r.status).toBe(503);
+    expect(r.json).toEqual({ error: 'mail_disabled' });
   });
 });

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { startServer, type TestServer } from './harness';
-import { emailSignIn, setUpResearcher } from './research';
+import { createProjectKey, setUpResearcher, studioSignIn } from './research';
 
 const ADA = 'ada@uni.example';
 const EVE = 'eve@uni.example';
@@ -14,10 +14,9 @@ const EVE = 'eve@uni.example';
 const STRUCTURE = { format: 'combray-structure/1', root: { kind: 'object', children: {} } };
 const IMPORTER = { format: 'combray-importer/1', nodes: [] };
 
-/** A researcher signed in to the studio (an email code alone). */
+/** A researcher signed in to the studio: passkey on the key page, then the handoff. */
 async function studio(s: TestServer, email: string): Promise<string> {
-  await s.cliOk('researcher', 'add', email);
-  return emailSignIn(s, s.main, email);
+  return studioSignIn(s, await setUpResearcher(s, email));
 }
 
 describe('creating a project', () => {
@@ -127,12 +126,15 @@ describe('publishing', () => {
   it('happens on the key page only, and is what participants get', async () => {
     const s = await startServer();
     const ada = await setUpResearcher(s, ADA);
-    const studioSession = await emailSignIn(s, s.main, ADA);
+    const studioSession = await studioSignIn(s, ada);
     await s.main.post('/api/v1/projects', { id: 'birch', name: 'Birch study' }, studioSession);
     await s.main.put('/api/v1/projects/birch/draft/details', { name: 'Birch study', participants: { mode: 'required', pattern: 'B-[0-9]{3}' } }, studioSession);
     await s.main.put('/api/v1/projects/birch/draft/platforms/tiktok', { name: 'TikTok', pack: 'tiktok', structure: STRUCTURE, importer: IMPORTER }, studioSession);
+    // Publishing needs access to the project's encryption key, which Ada creates first.
+    expect((await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session)).status).toBe(403);
+    expect((await createProjectKey(s, ada.session, 'birch')).status).toBe(201);
 
-    // A studio session (an email code alone) cannot publish.
+    // The studio cannot publish: only the key page, with the passkey.
     expect((await s.main.post('/api/v1/projects/birch/publish', {}, studioSession)).status).toBe(404);
 
     const published = await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session);
@@ -141,7 +143,9 @@ describe('publishing', () => {
 
     const config = await s.main.get('/api/v1/p/birch/config');
     expect(config.status).toBe(200);
-    expect(config.json).toEqual({
+    const { donation_key: donationKey, ...served } = config.json;
+    expect(donationKey).toEqual(expect.objectContaining({ fingerprint: 'fp' }));
+    expect(served).toEqual({
       id: 'birch',
       name: 'Birch study',
       participants: { mode: 'required' },
@@ -156,9 +160,10 @@ describe('publishing', () => {
   it('copies the draft: later edits reach participants only after publishing again', async () => {
     const s = await startServer();
     const ada = await setUpResearcher(s, ADA);
-    const studioSession = await emailSignIn(s, s.main, ADA);
+    const studioSession = await studioSignIn(s, ada);
     await s.main.post('/api/v1/projects', { id: 'birch', name: 'Birch study' }, studioSession);
-    await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session);
+    await createProjectKey(s, ada.session, 'birch');
+    expect((await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session)).status).toBe(200);
 
     const store = (participant?: string) =>
       s.main.post('/api/v1/stores', { project: 'birch', password: 'madeleine in tea', ...(participant ? { participant_id: participant } : {}) });
@@ -176,11 +181,16 @@ describe('publishing', () => {
     expect((await store('P1')).status).toBe(201);
   });
 
-  it('is only for members', async () => {
+  it('is only for members with access to the encryption key', async () => {
     const s = await startServer();
     await setUpResearcher(s, ADA, { project: 'willow' });
     const eve = await setUpResearcher(s, EVE);
     expect((await s.keys.post('/api/v1/projects/willow/publish', {}, eve.session)).status).toBe(404);
+    // A member without access yet (nobody has created the project's key): not allowed to publish.
+    const bob = await setUpResearcher(s, 'bob@uni.example', { project: 'willow' });
+    const refused = await s.keys.post('/api/v1/projects/willow/publish', {}, bob.session);
+    expect(refused.status).toBe(403);
+    expect(refused.json).toEqual({ error: 'no_key_access' });
   });
 });
 

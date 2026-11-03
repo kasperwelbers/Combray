@@ -39,7 +39,7 @@ describe('the studio', () => {
     const redeemed = await s.main.post('/api/v1/auth/handoff/redeem', { code });
     expect(redeemed.status).toBe(204);
     const studio = cookie(redeemed, SESSION_COOKIE);
-    expect(studio.header).toContain(`Max-Age=${30 * 24 * 3600}`);
+    expect(studio.header).toContain(`Max-Age=${12 * 3600}`);
     const again = await s.main.post('/api/v1/auth/handoff/redeem', { code });
     expect(again.status, 'a handoff code works once').toBe(403);
     expect(again.json).toEqual({ error: 'invalid_code' });

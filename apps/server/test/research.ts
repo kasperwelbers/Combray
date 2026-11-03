@@ -191,3 +191,15 @@ export function donate(s: TestServer, body: Buffer, project = 'willow', ip?: str
 export function withdraw(s: TestServer, id: string, token: string): Promise<Response> {
   return s.main.post(`/api/v1/donations/${id}/withdraw`, { token });
 }
+
+/**
+ * A studio session, as researchers get one: signed in on the key page (with the passkey), then
+ * sent to the studio with a one-time handoff code. Returns the studio session cookie pair.
+ */
+export async function studioSignIn(s: TestServer, researcher: Researcher): Promise<string> {
+  const handoff = await s.keys.post('/api/v1/auth/handoff', undefined, researcher.session);
+  expect(handoff.status, handoff.text).toBe(200);
+  const redeemed = await s.main.post('/api/v1/auth/handoff/redeem', { code: handoff.json.code });
+  expect(redeemed.status, redeemed.text).toBe(204);
+  return cookie(redeemed, SESSION_COOKIE).pair;
+}

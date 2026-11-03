@@ -27,8 +27,15 @@ export const LOGIN_CODE_TRIES = 5;
 export const EMAIL_SESSION_TTL_SECS = 15 * 60;
 /** A signed-in session on the key page. Short, because it can fetch sealed keys. */
 export const KEYS_SESSION_TTL_SECS = 2 * 3600;
-/** A studio session, which cannot fetch any key material. Long, so researchers rarely need a code. */
-export const STUDIO_SESSION_TTL_SECS = 30 * 24 * 3600;
+/**
+ * A studio session, started with a passkey on the key page (the handoff). It ends after an hour
+ * without activity, and at most twelve hours after the passkey was used. Operators can change
+ * both (`COMBRAY_STUDIO_IDLE_SECS`, `COMBRAY_STUDIO_MAX_SECS`).
+ */
+export const STUDIO_IDLE_SECS = 3600;
+export const STUDIO_SESSION_TTL_SECS = 12 * 3600;
+/** Activity is written at most this often, not on every request. */
+const SEEN_GRANULARITY_SECS = 60;
 /** A handoff code from the key page to the studio is used within seconds. */
 export const HANDOFF_TTL_SECS = 120;
 /** Personal and project public keys are X-Wing keys. */
@@ -171,10 +178,12 @@ export class SoleAccess extends Error {
   }
 }
 
-const SESSION_TTL: Record<Site, Record<Level, number>> = {
-  keys: { email: EMAIL_SESSION_TTL_SECS, full: KEYS_SESSION_TTL_SECS },
-  main: { email: EMAIL_SESSION_TTL_SECS, full: STUDIO_SESSION_TTL_SECS },
-};
+export interface SessionLimits {
+  studioIdleSecs: number;
+  studioMaxSecs: number;
+}
+
+export const DEFAULT_LIMITS: SessionLimits = { studioIdleSecs: STUDIO_IDLE_SECS, studioMaxSecs: STUDIO_SESSION_TTL_SECS };
 
 const toStored = (p: typeof passkeys.$inferSelect): StoredPasskey => ({
   id: p.id,
@@ -187,9 +196,16 @@ const hasAccess = sql<number>`${members.sealedCt} IS NOT NULL`;
 
 export class Accounts {
   private readonly db: Db;
+  readonly limits: SessionLimits;
 
-  constructor(db: Db) {
+  constructor(db: Db, limits: SessionLimits = DEFAULT_LIMITS) {
     this.db = db;
+    this.limits = limits;
+  }
+
+  private ttl(site: Site, level: Level): number {
+    if (level === 'email') return EMAIL_SESSION_TTL_SECS;
+    return site === 'keys' ? KEYS_SESSION_TTL_SECS : this.limits.studioMaxSecs;
   }
 
   // Researchers.
@@ -324,7 +340,8 @@ export class Accounts {
   createSession(researcherId: string, site: Site, level: Level): string {
     const token = randomToken();
     this.db.delete(sessions).where(lte(sessions.expires, nowSecs())).run();
-    this.db.insert(sessions).values({ tokenHash: sha256(token), researcherId, site, level, expires: nowSecs() + SESSION_TTL[site][level] }).run();
+    const now = nowSecs();
+    this.db.insert(sessions).values({ tokenHash: sha256(token), researcherId, site, level, expires: now + this.ttl(site, level), lastSeen: now }).run();
     return b64(token);
   }
 
@@ -332,12 +349,24 @@ export class Accounts {
     const raw = fromB64(token);
     if (!raw) return undefined;
     const key = sha256(raw);
+    const now = nowSecs();
     const row = this.db
-      .select({ researcherId: sessions.researcherId, level: sessions.level })
+      .select({ researcherId: sessions.researcherId, level: sessions.level, lastSeen: sessions.lastSeen })
       .from(sessions)
-      .where(and(eq(sessions.tokenHash, key), eq(sessions.site, site), gt(sessions.expires, nowSecs())))
+      .where(and(eq(sessions.tokenHash, key), eq(sessions.site, site), gt(sessions.expires, now)))
       .get();
-    return row ? { researcherId: row.researcherId, site, level: row.level, key } : undefined;
+    if (!row) return undefined;
+    // Studio sessions also end after a while without activity; every use pushes that forward.
+    if (site === 'main') {
+      if (now - row.lastSeen >= this.limits.studioIdleSecs) {
+        this.db.delete(sessions).where(eq(sessions.tokenHash, key)).run();
+        return undefined;
+      }
+      // Written at most once a minute (more often when the idle limit is short).
+      const every = Math.min(SEEN_GRANULARITY_SECS, Math.floor(this.limits.studioIdleSecs / 3));
+      if (now - row.lastSeen >= every) this.db.update(sessions).set({ lastSeen: now }).where(eq(sessions.tokenHash, key)).run();
+    }
+    return { researcherId: row.researcherId, site, level: row.level, key };
   }
 
   /** Replace a session with a fully signed-in one (a new id, so a token seen before is worthless). */

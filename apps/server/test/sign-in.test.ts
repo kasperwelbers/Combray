@@ -10,12 +10,13 @@ import { describe, expect, it } from 'vitest';
 
 import { b64, cookie, setCookies, startServer } from './harness';
 import {
-  LOGIN_COOKIE,
-  SESSION_COOKIE,
   emailSignIn,
+  LOGIN_COOKIE,
   mailedCode,
   requestCode,
+  SESSION_COOKIE,
   setUpResearcher,
+  studioSignIn,
   verifyCode,
 } from './research';
 
@@ -155,8 +156,6 @@ describe('email sign-in codes', () => {
     expect(limited.status).toBe(429);
     expect(limited.json).toEqual({ error: 'too_many_attempts' });
     expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
-    // Across both sites.
-    expect((await s.main.post('/api/v1/auth/email', { email: ADA })).status).toBe(429);
   });
 
   it('are rate limited per client IP', async () => {
@@ -178,41 +177,39 @@ describe('email sign-in codes', () => {
 });
 
 describe('the studio', () => {
-  it('signs in with an email code, for a long session without keys', async () => {
-    const s = await startServer();
-    await setUpResearcher(s, ADA);
-
-    let login = await requestCode(s.main, ADA);
-    let code = await mailedCode(s, ADA);
-    // A studio code does not work on the key page, even with the same browser secret.
-    expect((await verifyCode(s.keys, login, code)).status).toBe(403);
-
-    login = await requestCode(s.main, ADA);
-    code = await mailedCode(s, ADA);
-    const ok = await verifyCode(s.main, login, code);
-    expect(ok.status).toBe(200);
-    expect(ok.json).toEqual({ email: ADA, has_passkey: true, has_key: true });
-    const session = cookie(ok, SESSION_COOKIE);
-    expect(session.header).toBe(`${session.pair}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 24 * 3600}`);
-
-    const me = await s.main.get('/api/v1/me', session.pair);
-    expect(me.json.signed_in).toBe(true);
-    expect(me.json.email).toBe(ADA);
-    expect((await s.main.get('/api/v1/projects', session.pair)).status).toBe(200);
-
-    // The studio session is no key page session.
-    for (const path of ['/api/v1/projects', '/api/v1/me']) {
-      expect((await s.keys.get(path, session.pair)).status, path).toBe(401);
-    }
-  });
-
-  it('does not accept a code asked for on the key page', async () => {
+  it('has no sign-in of its own: email codes are only for the key page', async () => {
     const s = await startServer();
     await s.cliOk('researcher', 'add', ADA);
-    const login = await requestCode(s.keys, ADA);
-    const code = await mailedCode(s, ADA);
-    expect((await verifyCode(s.main, login, code)).status).toBe(403);
+    expect((await s.main.post('/api/v1/auth/email', { email: ADA })).status).toBe(404);
+    expect((await s.main.post('/api/v1/auth/email/verify', { code: '12345678' })).status).toBe(404);
+    // An email code alone gives no studio session either: a handoff needs a passkey sign-in.
+    const emailSession = await emailSignIn(s, s.keys, ADA);
+    expect((await s.keys.post('/api/v1/auth/handoff', undefined, emailSession)).status).toBe(401);
   });
+
+  it('ends a session after a while without activity, and at most after the maximum', async () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const idle = await startServer({ env: { COMBRAY_STUDIO_IDLE_SECS: '3' } });
+    const ada = await setUpResearcher(idle, ADA);
+    let session = await studioSignIn(idle, ada);
+    // Activity keeps it open, past the idle limit in total.
+    for (let i = 0; i < 3; i++) {
+      await sleep(1500);
+      expect((await idle.main.get('/api/v1/me', session)).status, `after ${(i + 1) * 1.5}s of activity`).toBe(200);
+    }
+    await sleep(3500);
+    expect((await idle.main.get('/api/v1/me', session)).status, 'after 3.5s without activity').toBe(401);
+
+    const short = await startServer({ env: { COMBRAY_STUDIO_MAX_SECS: '2' } });
+    const bob = await setUpResearcher(short, 'bob@uni.example');
+    session = await studioSignIn(short, bob);
+    const max = (await short.keys.post('/api/v1/auth/handoff', undefined, bob.session)).json.code;
+    expect(cookie(await short.main.post('/api/v1/auth/handoff/redeem', { code: max }), SESSION_COOKIE).header).toMatch(/Max-Age=2(;|$)/);
+    await sleep(1000);
+    expect((await short.main.get('/api/v1/me', session)).status).toBe(200);
+    await sleep(2200);
+    expect((await short.main.get('/api/v1/me', session)).status, 'past the maximum, however active').toBe(401);
+  }, 30_000);
 });
 
 describe('recovery sign-in', () => {

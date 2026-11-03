@@ -31,7 +31,6 @@ import {
   type Session,
   type Site,
   SoleAccess,
-  STUDIO_SESSION_TTL_SECS,
   type StoredPasskey,
 } from './accounts.ts';
 import { base, type Config, hostOf, originOf, type ResearchConfig } from './config.ts';
@@ -128,7 +127,7 @@ export class Research {
   constructor(config: Config, research: ResearchConfig, main: Db, keys: Db, projects: Projects) {
     this.config = research;
     this.projects = projects;
-    this.accounts = new Accounts(main);
+    this.accounts = new Accounts(main, { studioIdleSecs: research.studioIdleSecs, studioMaxSecs: research.studioMaxSecs });
     this.donations = new Donations(main, keys, config.dataDir);
     this.mailer = new Mailer(research.mail);
     this.rpId = research.keysUrl.hostname;
@@ -158,7 +157,7 @@ export class Research {
 
   /** A reply that sets (or, with an empty value, clears) the session cookie. */
   withCookie(site: Site, value: string, level: Level, reply: Reply): Reply {
-    const maxAge = !value ? 0 : level === 'email' ? EMAIL_SESSION_TTL_SECS : site === 'keys' ? KEYS_SESSION_TTL_SECS : STUDIO_SESSION_TTL_SECS;
+    const maxAge = !value ? 0 : level === 'email' ? EMAIL_SESSION_TTL_SECS : site === 'keys' ? KEYS_SESSION_TTL_SECS : this.accounts.limits.studioMaxSecs;
     return setCookie(reply, this.cookieValue(this.cookieName(site), value, maxAge, site), false);
   }
 
@@ -276,13 +275,14 @@ export class Research {
         }),
 
       /**
-       * Mail a sign-in code, if there is an account for this email. Works on both sites: on the key
-       * page it is the first step before the passkey, in the studio the whole sign-in. The code only
-       * works in this browser, on this site: the answer sets a cookie with a random secret the code
-       * is tied to. The answer is the same either way, and the mail goes out in the background.
+       * Mail a sign-in code, if there is an account for this email: the first step on the key page,
+       * before the passkey or recovery code. The code only works in this browser: the answer sets a
+       * cookie with a random secret the code is tied to. The answer is the same either way, and the
+       * mail goes out in the background.
        */
       requestEmailCode: (req: Request, site: Site): Reply => {
         caller(req, site);
+        keysOnly(site);
         const body = jsonBody(req);
         if (!r.mailer.enabled) throw fail(503, 'mail_disabled');
         const ipWait = r.emailPerIp.hit(req.ip);
@@ -309,12 +309,12 @@ export class Research {
       },
 
       /**
-       * Check the emailed code, in the browser that asked for it. On the key page this starts a session
-       * that still needs the passkey or recovery code; in the studio it signs in (studio sessions
-       * never receive key material).
+       * Check the emailed code, in the browser that asked for it: starts a key page session that still
+       * needs the passkey or recovery code.
        */
       verifyEmailCode: (req: Request, site: Site): Reply => {
         caller(req, site);
+        keysOnly(site);
         const body = jsonBody(req);
         const code = str(body, 'code');
         const request = fromB64(cookie(req.headers, r.loginCookieName(site)) ?? '');
@@ -326,7 +326,9 @@ export class Research {
           if (e instanceof AccountFailure && (e.error === 'forbidden' || e.error === 'invalid')) throw fail(403, 'invalid_code');
           throw e;
         }
-        const level: Level = site === 'keys' ? 'email' : 'full';
+        // Only on the key page: the email code is the first step, before the passkey or recovery
+        // code. The studio signs in through the key page (a handoff after the passkey).
+        const level: Level = 'email';
         const token = call(() => r.accounts.createSession(researcher, site, level));
         const me = call(() => r.accounts.me(researcher));
         const reply = r.withCookie(site, token, level, json({ email: me.email, has_passkey: me.passkeys.length > 0, has_key: me.public_key !== null }));
@@ -360,6 +362,23 @@ export class Research {
         const session = token ? call(() => r.accounts.session(token, site)) : undefined;
         if (session) call(() => r.accounts.endSession(session));
         return r.withCookie(site, '', 'email', empty(204));
+      },
+
+      /**
+       * The researchers on each of your projects, for someone who has only used the email code on
+       * the key page (lost passkey and recovery code): who to ask for access again.
+       */
+      contacts: (req: Request, site: Site): Reply => {
+        const who = started(req, site);
+        keysOnly(site);
+        const projects = call(() => r.accounts.projectsOf(who.researcherId)).map(({ project }) => ({
+          id: project,
+          name: r.projects.name(project),
+          members: call(() => r.accounts.members(project))
+            .filter((m) => m.researcher_id !== who.researcherId)
+            .map((m) => ({ email: m.email, has_access: m.has_access })),
+        }));
+        return noStore(json({ projects }));
       },
 
       me: (req: Request, site: Site): Reply => {
@@ -614,7 +633,9 @@ export class Research {
       publish: (req: Request, site: Site): Reply => {
         const who = signedIn(req, site);
         keysOnly(site);
-        memberOf(who, req.params.id);
+        // Publishing changes what participants see and are asked to donate: only for members with
+        // access to the project's encryption key, who can also open the donations.
+        if (!memberOf(who, req.params.id)) throw fail(403, 'no_key_access');
         const version = call(() => r.projects.publish(req.params.id!));
         log.info({ event: 'project_published', version }, 'a project was published');
         return noStore(json({ version }));
