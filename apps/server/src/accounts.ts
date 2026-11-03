@@ -137,7 +137,7 @@ const codeHash = (site: Site, request: Uint8Array, code: string): Buffer =>
 const decode = (token: unknown): Buffer => fromB64(token) ?? fail('invalid');
 
 /**
- * Read a stored passkey. Records written by the earlier Rust server (webauthn-rs) hold the public
+ * Read a stored passkey. Records written by the earlier server (in webauthn-rs's format) hold the public
  * key as coordinates; they are turned into the COSE key that `@simplewebauthn/server` checks.
  */
 export function parsePasskey(json: string): StoredPasskey | undefined {

@@ -118,7 +118,7 @@ function codeScreen(address: string) {
     h('h1', {}, 'Check your email'),
     h('p', {}, 'If there is a researcher account for ', h('strong', {}, address), ', a code is on its way. Type it here, in this tab. It works for 10 minutes.'),
     site.mail_outbox &&
-      h('p', { class: 'notice' }, 'This is a development server: it does not send mail, but writes it to a folder (target/dev/outbox with pnpm serve).'),
+      h('p', { class: 'notice' }, 'This is a development server: it does not send mail, but writes it to a folder (.dev/outbox).'),
     form,
     h('p', { class: 'meta' }, h('button', { type: 'button', class: 'quiet', onclick: () => emailScreen() }, 'Use another address or send a new code')),
   );

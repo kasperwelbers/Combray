@@ -88,7 +88,7 @@ Donations use **HPKE** (RFC 9180, base mode) with:
 
 HPKE seals a fresh random per-donation key to the **project key**. The sealed key is stored on the server apart from the envelope, so withdrawing a donation only has to delete it ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The HPKE `info` binds the project id and donation id, and the envelope header hash is its additional data. The payload is encrypted in chunks with the donation key, STREAM-style (counter nonces and a last-chunk flag), so reordering, dropping or truncating chunks is detected.
 
-Libraries: `@hpke/core` with `@hpke/hybridkem-x-wing` in `packages/seal`, used by both the participant client and the key page. There is no Rust implementation; the server never opens anything. WebCrypto provides AES-GCM, HKDF and SHA-256.
+Libraries: `@hpke/core` with `@hpke/hybridkem-x-wing` in `packages/seal`, used by both the participant client and the key page. The server never opens anything. WebCrypto provides AES-GCM, HKDF and SHA-256.
 
 ### Envelope format
 

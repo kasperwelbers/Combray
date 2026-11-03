@@ -1,12 +1,10 @@
 /**
  * A black-box harness for the Combray server: starts a fresh server process in a temporary
  * directory on a free port, talks to it over HTTP, runs its command line, and reads the files it
- * writes. Nothing here knows how the server is built, so the same tests run against the Rust
- * server and the Node server.
+ * writes. Nothing here knows how the server is built: the tests describe behaviour, not an
+ * implementation (they passed against the earlier server too, ADR 0010).
  *
- * The server runs from its TypeScript sources (`apps/server/src/main.ts`). These tests were first
- * written against the earlier Rust server and passed against both (ADR 0010), so they describe
- * behaviour, not an implementation.
+ * The server runs from its TypeScript sources (`apps/server/src/main.ts`).
  *
  * All data here is synthetic.
  */

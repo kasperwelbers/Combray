@@ -247,7 +247,7 @@
   "sendCode": "Email me a sign-in code",
   "accountsBy": "Researcher accounts are created by your server operator or by a colleague on a project.",
   "codeSent": "If there is a researcher account for {{email}}, a code is on its way. Type it here, in this browser. It works for 10 minutes.",
-  "devOutbox": "This is a development server: it does not send mail, but writes it to a folder (target/dev/outbox).",
+  "devOutbox": "This is a development server: it does not send mail, but writes it to a folder (.dev/outbox).",
   "codeLabel": "Sign-in code",
   "signIn": "Sign in",
   "anotherCode": "Use another address or send a new code",

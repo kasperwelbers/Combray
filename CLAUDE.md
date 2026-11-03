@@ -31,15 +31,15 @@ pnpm install
 pnpm dev           # web client on http://localhost:5173 (researcher workspace at /studio/) and
                    # the server on :8080, side by side; Vite passes /api to it
 pnpm serve         # build the web client and key page, run the server on http://localhost:8080
-                   # (key page on http://keys.localhost:8080, sign-in mails in target/dev/outbox)
+                   # (key page on http://keys.localhost:8080, sign-in mails in .dev/outbox)
 pnpm test          # all tests; pnpm test:client (web client, key page, packages) or pnpm test:server
-pnpm check         # type checks
+pnpm typecheck     # type checks
 pnpm e2e           # key page end to end in Chromium with a virtual passkey
 pnpm docker        # build the server image
-pnpm researcher you@example.org example   # add a researcher to the dev server and a project
+pnpm researcher example you@example.org   # add a researcher to a project on the dev server
 ```
 
-These scripts run recipes from the `justfile`, with the [just](https://github.com/casey/just) that `pnpm install` provides (`rust-just`). The development server settings live there. When adding a recipe, add a script for it to the root `package.json`.
+The development server's settings are in `deploy/dev.env` (and `deploy/dev-hot.env` for `pnpm dev`); its databases, store master key and sign-in mails go to `.dev/`, which is not committed.
 
 ## Non-negotiable privacy rules
 

@@ -131,7 +131,7 @@ Researcher endpoints need a signed-in member of the project; the key page's rout
 
 ## Researcher tools, sketched
 
-The key page opens donations today. For R and Python, decryption would come from `packages/seal` (run in a small embedded JavaScript runtime) or a Rust port with shared test vectors. How these packages get the personal key without a passkey is open ([researcher-keys.md](researcher-keys.md#limits)); a device key added from the key page is the likely answer, and the sketch below assumes it.
+The key page opens donations today. For R and Python, decryption would come from `packages/seal` (run in a small embedded JavaScript runtime) or a port with shared test vectors. How these packages get the personal key without a passkey is open ([researcher-keys.md](researcher-keys.md#limits)); a device key added from the key page is the likely answer, and the sketch below assumes it.
 
 A first sketch of the R package:
 

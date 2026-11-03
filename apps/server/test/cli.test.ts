@@ -1,5 +1,5 @@
 /**
- * The operator's command line (src/main.rs): researcher accounts and first project members.
+ * The operator's command line (src/main.ts): researcher accounts and first project members.
  * The CLI runs with the same environment as the server, next to the running server.
  * `reset-link` is tested with the store service (stores.test.ts).
  */

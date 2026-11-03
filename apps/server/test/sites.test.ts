@@ -1,7 +1,6 @@
 /**
- * The two host names: the main site (participant app and studio) and the key page. Ported from
- * `the_key_page_is_served_only_on_its_own_host` in the Rust server's tests/ (removed in ADR 0010): research.rs, plus
- * the behaviour of src/lib.rs (key page headers, site info, disabled features).
+ * The two host names: the main site (participant app and studio) and the key page: routing by
+ * host, the key page's headers, site info, and the researcher features switched off.
  */
 import { describe, expect, it } from 'vitest';
 

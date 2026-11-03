@@ -34,7 +34,7 @@ The query engine in `combray-core` then **unfolds** the tree automatically:
 
 The participant never sees this. The researcher sees the resulting grain in the Studio ("one row per channel per video watched") so the meaning of counts is clear.
 
-Hot paths (unfolding, grouping, time bucketing over millions of nodes) are implemented in Rust compiled to WASM and run in the query worker. Results are small, so they are cheap to send to the main thread for rendering.
+Hot paths (unfolding, grouping, time bucketing over millions of nodes) run in the query worker, in WebAssembly where measurements call for it. Results are small, so they are cheap to send to the main thread for rendering.
 
 ## View library
 

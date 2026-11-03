@@ -4,7 +4,7 @@ This document records every security choice in Combray that exists in code today
 
 Changing anything in the local store, the store key service, `packages/seal`, researcher sign-in, the key page, the Content Security Policy or the server's handling of requests means updating this document in the same change. Decisions that are hard to reverse also get an ADR. The store key design is [ADR 0004](decisions/0004-server-held-store-keys.md); researcher keys are [ADR 0007](decisions/0007-browser-key-page.md).
 
-> Nothing here has had an external review yet. The constructions are standard ones from vetted libraries (WebCrypto and `@hpke/core` with `@hpke/hybridkem-x-wing` in the browser; RustCrypto's `argon2`, `hkdf` and `sha2`, and `webauthn-rs`, on the server), and no primitives are home-made.
+> Nothing here has had an external review yet. The constructions are standard ones from vetted libraries (WebCrypto and `@hpke/core` with `@hpke/hybridkem-x-wing` in the browser; `node:crypto`, `@node-rs/argon2` and `@simplewebauthn/server` on the server), and no primitives are home-made.
 
 ## Contents
 
@@ -300,7 +300,7 @@ The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participan
 
 ### Passkeys
 
-`@simplewebauthn/server` checks registrations and assertions (user verification required, at most ten per researcher). Passkeys are stored as their COSE public key and counter; records from the earlier Rust server (webauthn-rs) are converted when read. The page asks for discoverable credentials (`residentKey: "preferred"`), so a passkey alone can sign in: that flow has no session before it: the server reads the researcher id from the credential's user handle, looks up that researcher's passkey by credential id, and has `@simplewebauthn/server` verify the assertion against it; an unknown user or credential is rejected like a bad signature. Starting such a sign-in is unauthenticated, so it is rate limited (60 per IP per 10 minutes) and the server holds at most 10,000 ceremonies at once. Ceremony state is kept in server memory for five minutes and used once; a passkey-only sign-in has its own random ceremony id instead of a session. The page asks for the PRF extension on every ceremony with the salt `SHA-256("combray/prf-salt/v1")`. The JSON sent to the server is built by hand, with `extensions: {}`: the PRF output is never serialised. (`PublicKeyCredential.toJSON()` would include client extension results, so the page does not use it.)
+`@simplewebauthn/server` checks registrations and assertions (user verification required, at most ten per researcher). Passkeys are stored as their COSE public key and counter; records written by the earlier server (in webauthn-rs's format) are converted when read. The page asks for discoverable credentials (`residentKey: "preferred"`), so a passkey alone can sign in: that flow has no session before it: the server reads the researcher id from the credential's user handle, looks up that researcher's passkey by credential id, and has `@simplewebauthn/server` verify the assertion against it; an unknown user or credential is rejected like a bad signature. Starting such a sign-in is unauthenticated, so it is rate limited (60 per IP per 10 minutes) and the server holds at most 10,000 ceremonies at once. Ceremony state is kept in server memory for five minutes and used once; a passkey-only sign-in has its own random ceremony id instead of a session. The page asks for the PRF extension on every ceremony with the salt `SHA-256("combray/prf-salt/v1")`. The JSON sent to the server is built by hand, with `extensions: {}`: the PRF output is never serialised. (`PublicKeyCredential.toJSON()` would include client extension results, so the page does not use it.)
 
 ### Constructions
 
@@ -347,7 +347,7 @@ header = { v: 1, project, donation, key, chunkBytes, chunks, created }
 - **No local key tool.** Replaced by the key page with passkeys, because installing a tool and keeping a key file was the bigger risk for the researchers Combray is for. The cost is trusting the server not to serve a malicious key page; see [researcher-keys.md](researcher-keys.md#limits).
 - **One project key with member copies**, instead of sealing each donation to every researcher. Adding a colleague then needs no change to existing donations, and removing one deletes their copy.
 - **No signed configs.** The `#k=` fingerprint in the participant link pins the project key instead.
-- **No Rust crypto.** Nothing on the server opens anything; one TypeScript implementation is used by the participant client and the key page.
+- **One crypto implementation.** Nothing on the server opens anything; one TypeScript implementation is used by the participant client and the key page.
 
 ## Server
 

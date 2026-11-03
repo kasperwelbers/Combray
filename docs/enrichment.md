@@ -58,8 +58,8 @@ For studies with stricter requirements, the server can run in **no-cache mode** 
 Most of the speed comes from not doing more than needed.
 
 1. **Use structured endpoints first.** Many platforms offer **oEmbed** (YouTube, TikTok, Vimeo, SoundCloud, Spotify and others): one small JSON request that returns title, author and thumbnail. Enrichers prefer oEmbed or similar public JSON over HTML.
-2. **Read only the head.** For HTML pages, fetch with a byte limit and parse Open Graph, Twitter Card and `<title>` tags with a streaming parser (`lol_html` in Rust) that stops at `</head>`. Most pages give everything needed in the first 30 to 100 KB.
-3. **High concurrency, polite per host.** An async fetcher (tokio + reqwest, HTTP/2, connection pooling) can run hundreds of requests in parallel overall, while a per-host token bucket keeps each platform at a configured rate. Backoff on 429 and 5xx; respect `Retry-After`.
+2. **Read only the head.** For HTML pages, fetch with a byte limit and parse Open Graph, Twitter Card and `<title>` tags with a streaming HTML parser that stops at `</head>`. Most pages give everything needed in the first 30 to 100 KB.
+3. **High concurrency, polite per host.** An async fetcher (Node's `fetch` with connection pooling) can run hundreds of requests in parallel overall, while a per-host token bucket keeps each platform at a configured rate. Backoff on 429 and 5xx; respect `Retry-After`.
 4. **Cache aggressively.** Shared cache as above, plus thumbnail caching so the browser does not have to contact the platform itself (which would leak the participant's IP and viewing interest to the platform).
 5. **Stream results.** Results return through server-sent events as soon as each one is ready, so the UI updates progressively. The client can reprioritise: items currently on screen are fetched first.
 6. **Optional headless browser.** Some pages only render with JavaScript. A separate, optional container (Chromium via Playwright) can handle a small set of enrichers that need it. It is slow and heavy, so it is off by default.

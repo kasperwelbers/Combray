@@ -1,7 +1,7 @@
 node_modules/
 dist/
 # Development databases, store master key and sign-in mails (pnpm dev / pnpm serve)
-target/
+.dev/
 coverage/
 *.log
 .DS_Store

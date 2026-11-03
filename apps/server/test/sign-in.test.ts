@@ -1,7 +1,6 @@
 /**
- * Researcher sign-in with an emailed code, the recovery code, sessions and origin checks.
- * Ported from the Rust server's tests/ (removed in ADR 0010): research.rs, plus the unit tests of the Rust src/accounts.rs
- * that are observable over HTTP (codes work once, only in the browser and on the site that asked,
+ * Researcher sign-in with an emailed code, the recovery code, sessions and origin checks (codes
+ * work once, only in the browser and on the site that asked,
  * five wrong tries; sessions belong to one site and get a new id when sign-in completes).
  *
  * Sign-in mails are limited to 3 per address per 15 minutes and 20 per IP per 10 minutes; every

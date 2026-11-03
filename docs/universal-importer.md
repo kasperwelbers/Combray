@@ -156,7 +156,7 @@ Shapes are hashed into **fingerprints** so importers can declare which variants 
 ## Open questions
 
 - ~~YAML or JSON for importer specs?~~ Decided: project trees are JSON (`structure.json` and `importer.json`, see [tree-decisions.md](tree-decisions.md#storage)); the YAML specs stay as the fallback runner.
-- How should importers handle very large HTML exports (e.g. old Google Takeout `MyActivity.html`)? A streaming HTML tokenizer in Rust may be needed instead of `DOMParser`.
+- How should importers handle very large HTML exports (e.g. old Google Takeout `MyActivity.html`)? A streaming HTML tokenizer (possibly in WASM) may be needed instead of `DOMParser`.
 - Should we keep the "cookbook" concept (groups of recipes per platform) as a "platform pack" with instructions, importers, default views and enrichers together? Recommendation: yes.
 - Should there be a public importer registry that deployments can pull from, and how are importers reviewed before inclusion?
 - Exact thresholds for dictionary detection need tuning on real-world shapes from consenting team members.

@@ -1,10 +1,9 @@
 /**
- * Projects, members, project keys, the studio handoff and the researcher's own key. Ported from
- * the Rust server's tests/ (removed in ADR 0010): research.rs, plus the unit tests of the Rust src/accounts.rs that are
- * observable over HTTP (the personal key is set once; project keys are created once and granted
+ * Projects, members, project keys, the studio handoff and the researcher's own key (the personal
+ * key is set once; project keys are created once and granted
  * by members with access; the last member with access cannot be removed).
  *
- * Where the Rust tests wrote to the database, these set up state as researchers do: the operator's
+ * State is set up as researchers do, never by writing the database: the operator's
  * CLI for accounts and first members, the key page's API for everything else.
  */
 import { describe, expect, it } from 'vitest';

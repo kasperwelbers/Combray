@@ -4,8 +4,8 @@ Cross-cutting decisions that still need an answer, with the current recommendati
 
 | # | Question | Options | Recommendation | Blocking |
 | --- | --- | --- | --- | --- |
-| 1 | Server language | Rust, Go, split, Node | **Decided:** first Rust ([ADR 0001](decisions/0001-server-language.md)), now TypeScript on Node ([ADR 0010](decisions/0010-node-server.md)) | Done |
-| 2 | Core implementation language | Rust from the start, or TypeScript first and port later | **Decided:** TypeScript; Rust/WASM only for measured bottlenecks ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)) | Done |
+| 1 | Server language | Rust, Go, Node | **Decided:** TypeScript on Node ([ADR 0010](decisions/0010-node-server.md), replacing [ADR 0001](decisions/0001-server-language.md)) | Done |
+| 2 | Core implementation language | A compiled language from the start, or TypeScript first | **Decided:** TypeScript; WASM only for measured bottlenecks ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)) | Done |
 | 3 | Client framework | React, Svelte, Solid | **Decided:** React SPA with Vite | Done |
 | 4 | Local store unlock | Server secret only, device key + server secret, passphrase | **Decided:** server-held KEK released for the participant's password; no passphrase mode, no device key ([ADR 0004](decisions/0004-server-held-store-keys.md)) | Done |
 | 4b | How participants are identified | Researcher-issued participant ids, email or phone, none | **Decided:** per project anonymous, optional or required participant ids; email/phone not for now ([ADR 0005](decisions/0005-projects-scope-stores.md)) | Done |

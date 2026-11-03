@@ -7,21 +7,20 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "dev": "just dev",
-    "serve": "just serve",
-    "test": "just test",
-    "test:client": "just test-client",
-    "test:server": "just test-server",
+    "dev": "concurrently --kill-others --names web,server --prefix-colors auto \"pnpm --filter @combray/web dev\" \"pnpm run dev:server\"",
+    "dev:server": "node --env-file=deploy/dev.env --env-file=deploy/dev-hot.env --disable-warning=ExperimentalWarning apps/server/src/main.ts",
+    "serve": "pnpm build && node --env-file=deploy/dev.env --disable-warning=ExperimentalWarning apps/server/src/main.ts",
+    "build": "pnpm --filter @combray/web build && pnpm --filter @combray/keys build",
+    "test": "pnpm run test:client && pnpm run test:server",
+    "test:client": "pnpm -r --filter '!@combray/server' test",
+    "test:server": "pnpm --filter @combray/server test",
     "typecheck": "pnpm -r typecheck",
-    "check": "just check",
-    "e2e": "just e2e",
-    "build": "just build",
-    "docker": "just docker",
-    "researcher": "just researcher",
-    "synthetic-donation": "just synthetic-donation"
+    "e2e": "pnpm build && pnpm --filter @combray/keys e2e",
+    "docker": "docker build -t combray-server:dev .",
+    "researcher": "node --env-file=deploy/dev.env --disable-warning=ExperimentalWarning apps/server/src/main.ts project add-researcher",
+    "synthetic-donation": "node apps/keys/scripts/run.mjs synthetic-donation"
   },
   "devDependencies": {
-    "concurrently": "^10.0.6",
-    "rust-just": "1.59.0"
+    "concurrently": "^10.0.6"
   }
 }

@@ -10,7 +10,7 @@ Combray is built from three separately deployable parts, so that a university ca
 | **Web client** | Participants (with lab staff) | Any modern browser | Import, store encrypted, explore, reflect, enrich with consent, donate encrypted |
 | **Combray server** | A university, a lab, or one researcher | A VM, a lab laptop, or a container host | Host projects and the web client, hold the symmetric keys for participants' local stores, enrich URLs, store encrypted donations |
 
-A shared **core** library (`packages/core`, TypeScript) implements the tree model, parsers, path language and shape extraction, and runs in a web worker in the browser. A Rust/WASM layer is only added for hot paths once measurements show it is needed ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
+A shared **core** library (`packages/core`, TypeScript) implements the tree model, parsers, path language and shape extraction, and runs in a web worker in the browser. A WASM layer is only added for hot paths once measurements show it is needed ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
 
 > **Update ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)):** the researcher tool is reduced to a small local tool that creates the key pair, signs project configs and decrypts donations. The rest of what this document calls Studio (configuring projects, participants, importers) can be a browser UI, because it never handles the private key.
 
@@ -47,7 +47,7 @@ Studio is for researchers with no programming experience. It runs locally so the
 5. **Collect.** Download encrypted donations and decrypt them locally. Export to CSV, JSON or Parquet, with a codebook. Inspect donated structure metadata to see format variants.
 6. **Maintain.** Update importers in Importer Studio (see [universal-importer.md](universal-importer.md#importer-studio)), publish a new config version, rotate keys, close the project and request deletion on the server.
 
-**Form factor.** Studio is a small native binary (the same Rust workspace) that serves its React UI on `127.0.0.1` only and opens it in the default browser. No Electron, no Node, no runtime to install. One download per platform, double-click to run.
+**Form factor.** Studio is a small native binary that serves its React UI on `127.0.0.1` only and opens it in the default browser. No Electron, no Node, no runtime to install. One download per platform, double-click to run.
 
 | Option | For | Against |
 | --- | --- | --- |
@@ -76,11 +76,11 @@ Recommendation: **React SPA with Vite**, installable as a PWA so a lab laptop ke
 **Workers.** All parsing, querying and aggregation run in web workers, accessed with Comlink. The main thread only renders.
 
 - *import worker*: unzips (streaming), detects file types, parses into the tree, extracts the shape, runs importers.
-- *query worker*: unfolds trees into the columns a view needs, filters, groups and aggregates. Hot paths in Rust/WASM.
+- *query worker*: unfolds trees into the columns a view needs, filters, groups and aggregates. Hot paths in WASM if measurements call for it.
 - *sandbox worker*: runs QuickJS importer scripts and WASM plugins with no network and bounded resources (see [plugins.md](plugins.md)).
 - *crypto worker*: bulk encryption and decryption, HPKE for donations.
 
-**TypeScript first, Rust/WASM where measured.** The core is TypeScript in a worker ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)). Parsing a 2 GB Takeout and aggregating millions of nodes is where JavaScript may struggle; if measurements show that, the hot path moves to Rust compiled to WASM, tested against the same cases. DuckDB-WASM is an alternative for tabular aggregation; powerful but several megabytes and table-centric, so better as an optional plugin than as the foundation.
+**TypeScript first, WASM where measured.** The core is TypeScript in a worker ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)). Parsing a 2 GB Takeout and aggregating millions of nodes is where JavaScript may struggle; if measurements show that, the hot path moves to WebAssembly, tested against the same cases. DuckDB-WASM is an alternative for tabular aggregation; powerful but several megabytes and table-centric, so better as an optional plugin than as the foundation.
 
 **Internationalisation.** i18next, as in DigitalFootprintsLab. Everything participants see is in English and Dutch from day one; researcher tools and documents are English only. Importers carry language variants of file and key names. How to translate is in [translation.md](translation.md).
 
@@ -100,7 +100,7 @@ Not the server's job: parsing DDPs, running importers, analysing data, and above
 
 **Storage.** The server has its own storage by default: SQLite for metadata and a data directory on disk for donation envelopes and vault blobs. That keeps a university deployment to one container and one volume. S3-compatible object storage is planned for large donations (presigned uploads straight from the browser, [ADR 0010](decisions/0010-node-server.md)), not a requirement.
 
-Language: **TypeScript on Node**, without a framework, see [ADR 0010](decisions/0010-node-server.md) (which replaced Rust, ADR 0001). The component split itself is recorded in [ADR 0002](decisions/0002-modular-components.md).
+Language: **TypeScript on Node**, without a framework, see [ADR 0010](decisions/0010-node-server.md). The component split itself is recorded in [ADR 0002](decisions/0002-modular-components.md).
 
 **API sketch** (JSON over HTTPS, versioned under `/api/v1`):
 
@@ -152,7 +152,7 @@ combray/
 └── docs/
 ```
 
-Tooling: pnpm workspaces, and root `package.json` scripts for common tasks (`pnpm dev`, `pnpm test`, `pnpm check`, `pnpm build`, `pnpm docker`), which run recipes from a `justfile`. CI runs type checks, tests (including the server's HTTP tests and the key page end to end) and a Docker build; releases publish the key page with its SHA-256; later also the server image.
+Tooling: pnpm workspaces, and root `package.json` scripts for common tasks (`pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm build`, `pnpm docker`). CI runs type checks, tests (including the server's HTTP tests and the key page end to end) and a Docker build; releases publish the key page with its SHA-256; later also the server image.
 
 ## Deployment shapes
 
@@ -165,7 +165,7 @@ See [deployment.md](deployment.md).
 
 ## Open questions
 
-- ~~Start the core in TypeScript and port to Rust, or start in Rust?~~ Decided: TypeScript first ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
+- ~~Start the core in TypeScript, or in a compiled language?~~ Decided: TypeScript first ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
 - ~~Studio as localhost binary first, Tauri later, or Tauri from the start?~~ Decided: no local tool; researcher UI and key page in the browser ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md), [ADR 0007](decisions/0007-browser-key-page.md)).
 - Can several servers federate (a project registered on two servers), or is a project always bound to one server? Recommendation: one server per project.
 - Facilitator view: same app on a second device, synced through the server? That would mean the server relays encrypted UI state, which needs its own design.

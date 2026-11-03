@@ -11,7 +11,7 @@ A phased plan. Each phase ends with something usable, so the design can be teste
 
 Goal: import a Google Takeout and a TikTok export, explore them, entirely in the browser.
 
-- [x] Monorepo skeleton: pnpm workspaces, CI, `justfile` behind `pnpm` scripts.
+- [x] Monorepo skeleton: pnpm workspaces, CI, `pnpm` scripts.
 - [x] `packages/core` (TypeScript, [ADR 0003](decisions/0003-typescript-core-and-key-tool.md)): tree model, parsers (JSON, JSON Lines, CSV, HTML, XML, text, zip), path language, shape extraction.
 - [x] Unfolding and aggregation for views (`query.ts`: unnesting while aggregating, filters, summaries, used by the studio's chart builder).
 - [x] Importer spec format and runner ([reference](importer-spec.md)); QuickJS sandbox; converter for old data-donation-importers recipes; first platform packs (Google Takeout: YouTube, search, browsing; TikTok) with synthetic fixtures.
@@ -21,7 +21,7 @@ Goal: import a Google Takeout and a TikTok export, explore them, entirely in the
 - [x] XSS hardening: Trusted Types, safe links, banned HTML sinks ([security.md](security.md)).
 - [x] Tree browser, structure view, memory lane, timeline and top items (linked: choosing a bar or an item filters memory lane).
 - [x] Design system v0: palette, madeleine placeholder, town placeholder. [ ] Self-hosted fonts.
-- [x] Minimal server (web client, health, read-only project configs), Docker image and compose file, pulled forward from Phase 2. First in Rust, now TypeScript on Node ([ADR 0010](decisions/0010-node-server.md)).
+- [x] Minimal server (web client, health, read-only project configs), Docker image and compose file, pulled forward from Phase 2. TypeScript on Node ([ADR 0010](decisions/0010-node-server.md)).
 
 ## Phase 2: researcher tools, server and donation
 
@@ -30,7 +30,7 @@ Goal: a researcher with no programming experience creates a project, registers i
 - [x] Researcher sign-in (email code and passkey) and the key page: personal keys under passkey PRF with a recovery code, project keys, grants after comparing key codes, opening donations to CSV ([ADR 0007](decisions/0007-browser-key-page.md), [researcher-keys.md](researcher-keys.md)). Replaces the local key tool. [ ] Signed project configs.
 - Researcher UI in the browser: create a project, configure from platform packs, register on a server, create participant codes, download encrypted donations.
 - Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, donation storage on its own disk.
-- [x] `packages/seal`: HPKE with X-Wing, envelope format, personal and project keys. No Rust crypto is needed for now.
+- [x] `packages/seal`: HPKE with X-Wing, envelope format, personal and project keys.
 - [x] Revocable donation keys ([ADR 0006](decisions/0006-revocable-donation-keys.md)): sealed keys in a separate key database, fetch on use, withdrawal with tombstones re-applied on start.
 - Combray package: export the encrypted store as one file and restore it on any device with the password ([key-design.md](key-design.md#8-planned-the-combray-package-export-and-restore)).
 - R package for analysis (fetch keys, decrypt in memory, never store); Python later. Needs a way to hold a personal key without a passkey (a device key from the key page).
