@@ -18,7 +18,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const enabled = process.env.COMBRAY_E2E === '1';
 const repo = join(__dirname, '../../..');
-const binary = join(repo, 'target/debug/combray-server');
+/** The server under test: the Node server, or the Rust binary while both exist (COMBRAY_TEST_SERVER=rust). */
+const [command, commandArgs] =
+  process.env.COMBRAY_TEST_SERVER === 'rust'
+    ? [join(repo, 'target/debug/combray-server'), []]
+    : [process.execPath, ['--disable-warning=ExperimentalWarning', join(repo, 'apps/server/src/main.ts')]];
 const port = 18_000 + Math.floor(Math.random() * 1000);
 const MAIN = `http://localhost:${port}`;
 const KEYS = `http://keys.localhost:${port}`;
@@ -47,7 +51,7 @@ function env() {
 }
 
 function cli(...args: string[]) {
-  execFileSync(binary, args, { env: env(), stdio: 'pipe' });
+  execFileSync(command, [...commandArgs, ...args], { env: env(), stdio: 'pipe' });
 }
 
 async function waitForServer() {
@@ -136,7 +140,7 @@ describe.skipIf(!enabled)('key page', () => {
     writeFileSync(join(dir, 'data/projects/willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' } }));
     cli('researcher', 'add', 'ada@uni.example');
     cli('project', 'add-researcher', 'willow', 'ada@uni.example');
-    server = spawn(binary, [], { env: env(), stdio: 'inherit' });
+    server = spawn(command, commandArgs, { env: env(), stdio: 'inherit' });
     await waitForServer();
     browser = await chromium.launch();
   }, 60_000);
