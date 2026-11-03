@@ -31,24 +31,63 @@ import * as vault from './vault';
 
 let site: Site = { researchers: true, public_url: '', keys_url: location.origin };
 
+// Coming from the studio: after signing in here, the researcher goes straight back, signed in.
+
+const RETURN_KEY = 'combray:return';
+
+/** The studio page that sent the researcher here (`#studio=/studio/p/…/`), kept for this tab. */
+function pendingReturn(): string | undefined {
+  try {
+    return sessionStorage.getItem(RETURN_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function takeReturn(): void {
+  const path = new URLSearchParams(location.hash.slice(1)).get('studio');
+  // Only paths in the studio, so this page can never be made to send anyone elsewhere.
+  if (path && /^\/studio\/[a-z0-9/-]*$/.test(path)) {
+    try {
+      sessionStorage.setItem(RETURN_KEY, path);
+    } catch {
+      // Without session storage, the researcher opens the studio from the key page instead.
+    }
+  }
+}
+
 // Screens before sign-in.
 
 function signInScreen(note?: string) {
-  show(
-    h('h1', {}, 'Sign in to your keys'),
-    note && h('p', { class: 'notice' }, note),
-    h('p', {}, 'This page holds the keys to your projects’ donations. Sign in with your passkey.'),
+  const fromStudio = pendingReturn() !== undefined;
+  const withPasskey = h(
+    'section',
+    { class: 'card' },
+    h('h2', {}, 'Already set up a passkey?'),
     !passkeysAvailable() && noPasskeys(),
-    action('Sign in with your passkey', async () => {
+    action('Use your passkey', async () => {
       const used = await signInWithPasskey();
       await unlockWith(await api.get<Me>('/me'), used);
     }),
+  );
+  const withEmail = h(
+    'section',
+    { class: 'card' },
+    h('h2', {}, 'New here, or no passkey on this device?'),
+    h('p', {}, 'We email you a code. Then you set up your passkey, or use your recovery code if you lost it.'),
+    h('button', { type: 'button', onclick: () => emailScreen() }, 'Sign in with an email code'),
+  );
+  show(
+    h('h1', {}, fromStudio ? 'Confirm it’s you' : 'The key page'),
+    note && h('p', { class: 'notice' }, note),
     h(
       'p',
-      { class: 'meta' },
-      'First time here, no passkey on this device, or lost it? ',
-      h('button', { type: 'button', class: 'link', onclick: () => emailScreen() }, 'Sign in with an email code'),
+      {},
+      fromStudio
+        ? 'To work on your projects, confirm it’s you with your passkey. The researcher workspace sends you here because passkeys only work on this page: a small page that holds the encryption keys of your projects, kept apart from the rest of the site so nothing else can reach them. You go straight back afterwards.'
+        : 'This is where Combray keeps the encryption keys of your projects: a small page, kept apart from the rest of the site so nothing else can reach them. You sign in here with your passkey, and go on to the researcher workspace from here.',
     ),
+    ...(fromStudio ? [withPasskey, withEmail] : [withEmail, withPasskey]),
     h('p', { class: 'meta' }, 'Researcher accounts are created by your server operator or by a colleague on a project.'),
   );
 }
@@ -136,26 +175,29 @@ function noPasskeys() {
 function createPasskeyScreen(me: Me) {
   const name = h('input', { id: 'passkey-name', value: 'My passkey', maxlength: '60' });
   show(
-    h('h1', {}, 'Create your passkey'),
-    h('p', {}, `Welcome, ${me.email}. A passkey replaces a password: you unlock it with your fingerprint, face or device PIN.`),
-    h('h2', {}, 'Your passkey holds the key to your projects’ donations'),
-    h(
-      'p',
-      {},
-      'Your passkey does two things: it signs you in, and it unlocks the key that opens the donations in your projects. ',
-      'Only researchers on a project can read its donations. Not the server, and not whoever runs it. Your data stays safe even if the server is broken into.',
-    ),
-    h('p', {}, 'This also means the server cannot get your key back for you. To make sure you never lose access:'),
+    h('h1', {}, 'Set up your passkey'),
+    h('p', {}, `Welcome, ${me.email}. As a researcher on Combray you need a passkey: your fingerprint, face or device PIN, instead of a password. For two reasons:`),
     h(
       'ul',
       {},
-      h('li', {}, h('strong', {}, 'Keep your recovery code safe. '), 'You get it in the next step. With it you can set up a new passkey and keep everything.'),
       h(
         'li',
         {},
-        h('strong', {}, 'Add a colleague to each project. '),
-        'Once they have set up their own passkey and you have given them access, they can give you access again if you ever lose both your passkey and your recovery code.',
+        h('strong', {}, 'Extra protection. '),
+        'Your email code gets you this far. To work on your projects, open donations or publish, you also need your passkey. So even if someone gets into your email, they cannot reach your projects.',
       ),
+      h(
+        'li',
+        {},
+        h('strong', {}, 'It unlocks your encryption keys. '),
+        'Donations in a project are locked with that project’s encryption key, and your passkey unlocks your copy of it. Only researchers on the project can open the donations: not the server, and not whoever runs it.',
+      ),
+    ),
+    h('h2', {}, 'If you lose your passkey'),
+    h(
+      'p',
+      {},
+      'Your recovery code gets you back in, with everything intact: you get it in the next step, so keep it safe. Without it you can start over, but you lose access to your projects until a colleague on each project gives it back. So add a trusted backup researcher to each project too.',
     ),
     h('h2', {}, 'Which passkey'),
     h(
@@ -305,8 +347,30 @@ function recoveryScreen(me: Me, signIn: boolean) {
 }
 
 /** Lost both passkey and recovery code: start over with a new key, if colleagues can give access again. */
+/** The researchers on each of your projects: who can give you access again. */
+async function contactsBlock(): Promise<HTMLElement> {
+  type Contacts = { projects: { id: string; name: unknown; members: { email: string; has_access: boolean }[] }[] };
+  try {
+    const { projects } = await api.get<Contacts>('/me/contacts');
+    if (projects.length === 0) return h('p', { class: 'meta' }, 'You are not on any project yet.');
+    return h(
+      'div',
+      {},
+      h('h2', {}, 'Who can give you access again'),
+      ...projects.map((p) => {
+        const helpers = p.members.filter((m) => m.has_access).map((m) => m.email);
+        return h('p', {}, h('strong', {}, projectName(p.name, p.id)), ': ', helpers.length > 0 ? helpers.join(', ') : 'nobody else has access yet');
+      }),
+    );
+  } catch {
+    return h('p', { class: 'meta' }, '');
+  }
+}
+
 function resetScreen() {
   const result = h('div', {});
+  const contacts = h('div', {});
+  void contactsBlock().then((block) => contacts.replaceWith(block));
   show(
     h('h1', {}, 'Start over with a new key'),
     h('p', {}, 'If you have lost both your passkey and your recovery code, you can set up a new key. This is what happens:'),
@@ -318,6 +382,7 @@ function resetScreen() {
       h('li', {}, 'A colleague on each of your projects gives you access again, after you compare a short code with them.'),
     ),
     h('p', {}, 'This only works if another researcher on each of your projects has access. We check that first, so nothing is lost.'),
+    contacts,
     action('Start over with a new key', async () => {
       result.replaceChildren();
       try {
@@ -381,6 +446,8 @@ async function addPasskey(me: Me, name: string) {
 async function home() {
   const me = await api.get<Me>('/me');
   if (!vault.isUnlocked()) return secondStepScreen(me);
+  const back = pendingReturn();
+  if (back) return openStudio(back);
   const code = await keyCode(vault.personal().publicKey);
   const { projects } = await api.get<{ projects: ProjectSummary[] }>('/projects');
   const sections = await Promise.all(projects.map((p) => projectSection(p.id)));
@@ -392,7 +459,7 @@ async function home() {
       h(
         'div',
         { class: 'row' },
-        action('Open the studio', openStudio, { class: 'quiet' }),
+        action('Open the studio', () => openStudio(), { class: 'quiet' }),
         h('button', { type: 'button', class: 'quiet', onclick: () => vault.lock() }, 'Lock'),
         action('Sign out', signOut, { class: 'quiet' }),
       ),
@@ -411,9 +478,15 @@ async function home() {
   );
 }
 
-async function openStudio() {
+/** Go to the studio, signed in there too: a one-time handoff code in the fragment. */
+async function openStudio(path = '/studio/') {
+  try {
+    sessionStorage.removeItem(RETURN_KEY);
+  } catch {
+    // Nothing to forget.
+  }
   const { code } = await api.post<{ code: string }>('/auth/handoff');
-  location.assign(`${site.public_url}/studio/#handoff=${code}`);
+  location.assign(`${site.public_url}${path}#handoff=${code}`);
 }
 
 async function signOut() {
@@ -458,8 +531,12 @@ async function projectSection(id: string): Promise<HTMLElement> {
 
   if (!project.key) {
     body.push(
-      h('p', {}, 'This project has no key yet. Create it once: participants’ donations are sealed to it, and you can then give colleagues access.'),
-      action('Create the project key', async () => {
+      h(
+        'p',
+        {},
+        'This project has no encryption key yet. Create it once: participants’ donations are locked with it, and only researchers with access to it can open them. Participants cannot donate until it exists. After that, you give colleagues access.',
+      ),
+      action('Create the encryption key', async () => {
         const key = await newProjectKey();
         const me = vault.personal();
         const sealed = await sealProjectKey(key.seed, me.publicKey, id, me.researcherId);
@@ -474,7 +551,7 @@ async function projectSection(id: string): Promise<HTMLElement> {
     );
   } else if (!project.has_access) {
     body.push(
-      h('p', {}, 'A colleague on this project needs to give you access. When they ask, read them your key code (at the top of this page).'),
+      h('p', {}, 'A colleague on this project needs to give you access to its encryption key. When they ask, read them your key code (at the top of this page).'),
     );
   } else {
     try {
@@ -519,7 +596,7 @@ function membersBlock(project: Project, refresh: () => Promise<void>): HTMLEleme
         action(
           'Remove',
           async () => {
-            if (!confirm(`Remove ${m.email} from this project? Their copy of the project key is deleted.`)) return;
+            if (!confirm(`Remove ${m.email} from this project? Their copy of the encryption key is deleted.`)) return;
             await api.delete(`/projects/${project.id}/members/${m.researcher_id}`);
             await refresh();
           },
@@ -660,6 +737,8 @@ async function start() {
   } catch {
     // The page still works for sign-in; links to the studio need the site info.
   }
+  takeReturn();
+  if (location.hash) history.replaceState(null, '', location.pathname);
   let me: Me;
   try {
     me = await api.get<Me>('/me');
@@ -667,6 +746,9 @@ async function start() {
     if (e instanceof ApiError && e.status === 401) return signInScreen();
     throw e;
   }
+  // Signed in already (a passkey in the last hours): straight back to the studio if it sent us.
+  const back = pendingReturn();
+  if (me.signed_in && back) return openStudio(back);
   if (me.passkeys.length === 0 && !me.signed_in) return createPasskeyScreen(me);
   return secondStepScreen(me);
 }

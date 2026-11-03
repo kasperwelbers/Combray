@@ -157,7 +157,7 @@ describe.skipIf(!enabled)('key page', () => {
     adaRecovery = await setUp(ada.page, 'ada@uni.example');
     expect(adaRecovery).toMatch(/^([0-9A-Z]{6}-){8}[0-9A-Z]{6}$/);
 
-    await ada.page.getByRole('button', { name: 'Create the project key' }).click();
+    await ada.page.getByRole('button', { name: 'Create the encryption key' }).click();
     const link = ada.page.locator('code.wrap');
     await link.waitFor();
     expect(await link.textContent()).toMatch(new RegExp(`^${MAIN}/p/willow/#k=[A-Za-z0-9_-]{22}$`));
@@ -167,7 +167,7 @@ describe.skipIf(!enabled)('key page', () => {
 
   it('signs in again with the passkey alone', async () => {
     await ada.page.getByRole('button', { name: 'Sign out' }).click();
-    await ada.page.getByRole('button', { name: 'Sign in with your passkey' }).click();
+    await ada.page.getByRole('button', { name: 'Use your passkey' }).click();
     await ada.page.getByRole('heading', { name: 'Your keys' }).waitFor();
   }, 30_000);
 
@@ -213,6 +213,24 @@ describe.skipIf(!enabled)('key page', () => {
     // Leaving the key page locked the keys: unlock again for the next steps.
     await page.goto(KEYS);
     await page.getByRole('button', { name: 'Use passkey' }).click();
+    await page.getByRole('heading', { name: 'Your keys' }).waitFor();
+  }, 60_000);
+
+  it.skipIf(!hasWeb)('takes a researcher from the studio to the key page and straight back, signed in', async () => {
+    const page = ada.page;
+    // Ada's key page session is still fresh: arriving from the studio goes straight back.
+    await page.goto(`${MAIN}/`);
+    await page.goto(`${KEYS}/#studio=/studio/p/willow/data/`);
+    await page.waitForURL(`${MAIN}/studio/p/willow/data/`);
+    await page.getByRole('heading', { name: 'Willow study' }).waitFor();
+    // Only paths in the studio: anything else is ignored, and the key page stays.
+    await page.goto(`${MAIN}/`);
+    await page.goto(`${KEYS}/#studio=https://elsewhere.example/`);
+    await page.getByRole('heading', { name: 'Use your passkey' }).or(page.getByRole('heading', { name: 'Your keys' })).waitFor();
+    expect(page.url().startsWith(KEYS)).toBe(true);
+    await page.goto(KEYS);
+    await page.getByRole('button', { name: 'Use passkey' }).or(page.getByRole('heading', { name: 'Your keys' })).first().waitFor();
+    if (await page.getByRole('button', { name: 'Use passkey' }).isVisible()) await page.getByRole('button', { name: 'Use passkey' }).click();
     await page.getByRole('heading', { name: 'Your keys' }).waitFor();
   }, 60_000);
 
@@ -263,17 +281,19 @@ describe.skipIf(!enabled)('key page', () => {
     };
     // Bob also has access to willow, so Ada can start over; Bob can give her access again.
     const ada2 = await startOver('ada@uni.example');
-    await ada2.page.getByRole('heading', { name: 'Create your passkey' }).waitFor();
+    await ada2.page.getByRole('heading', { name: 'Set up your passkey' }).waitFor();
     await ada2.context.close();
     // Her first browser still holds her old passkey, which the server no longer knows: the page
     // says so, instead of a bare refusal.
     await ada.page.goto(KEYS);
-    await ada.page.getByRole('button', { name: 'Sign in with your passkey' }).click();
+    await ada.page.getByRole('button', { name: 'Use your passkey' }).click();
     await ada.page.getByText('This passkey is not linked to an account on this server').waitFor();
     // Now Bob is the only one with access: starting over would lose willow's donations.
     const bob2 = await startOver('bob@uni.example');
     await bob2.page.getByText('You are the only researcher with access to these projects').waitFor();
-    await bob2.page.getByText('Willow study').waitFor();
+    await bob2.page.getByText('Willow study').first().waitFor();
+    // And who could give access again (nobody else has it now).
+    await bob2.page.getByRole('heading', { name: 'Who can give you access again' }).waitFor();
     await bob2.context.close();
   }, 90_000);
 
