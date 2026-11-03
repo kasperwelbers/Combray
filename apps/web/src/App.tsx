@@ -20,7 +20,7 @@ import { data } from './worker/client';
 const IDLE_MINUTES = 15;
 
 // The researcher workspace and its worker load only on /studio/.
-const Studio = lazy(() => import('./studio/Studio').then((m) => ({ default: m.Studio })));
+const StudioApp = lazy(() => import('./studio/StudioApp').then((m) => ({ default: m.StudioApp })));
 
 export function App() {
   const [route] = useState(() => {
@@ -62,9 +62,9 @@ export function App() {
 
   if (route.kind === 'studio') {
     return (
-      <Shell wide languages={false}>
+      <Shell wide studio>
         <Suspense fallback={null}>
-          <Studio />
+          <StudioApp projectId={route.projectId} />
         </Suspense>
       </Shell>
     );
@@ -98,23 +98,23 @@ interface ShellProps {
   project?: ProjectInfo;
   actions?: ReactNode;
   wide?: boolean;
-  /** Show the language menu (not in the English-only researcher workspace). */
-  languages?: boolean;
+  /** The researcher workspace: English only, so no language menu, and no participant footer. */
+  studio?: boolean;
   children: ReactNode;
 }
 
-function Shell({ project, actions, wide, languages = true, children }: ShellProps) {
+function Shell({ project, actions, wide, studio = false, children }: ShellProps) {
   const { t, i18n } = useTranslation();
   return (
     <div className="shell">
       <header className="topbar">
-        <a className="brand" href="/">
+        <a className="brand" href={studio ? '/studio/' : '/'}>
           <Madeleine />
           Combray
           {project?.name && <span className="brand-project">{localize(project.name, i18n.language)}</span>}
         </a>
         <div className="topbar-actions">
-          {languages && (
+          {!studio && (
             <label>
               <span className="visually-hidden">{t('app.language')}</span>
               <select value={i18n.resolvedLanguage} onChange={(e) => void i18n.changeLanguage(e.target.value)}>
@@ -132,7 +132,7 @@ function Shell({ project, actions, wide, languages = true, children }: ShellProp
       <main className={wide ? 'wide' : undefined}>{children}</main>
       <footer>
         <Skyline />
-        <div className="footer">{t('app.local')}</div>
+        {!studio && <div className="footer">{t('app.local')}</div>}
       </footer>
     </div>
   );

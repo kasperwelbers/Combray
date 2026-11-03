@@ -22,11 +22,10 @@ import {
   type Shape,
   type StructureFile,
 } from '@combray/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Dropzone } from '../components/Dropzone';
-import { Account } from './Account';
 import type { ImportProgress, Upload } from '../worker/api';
 import type { PreviewTable, StudioExport } from './api';
 import { addExport, studio } from './client';
@@ -60,13 +59,14 @@ const samePair = (a: Pick<MergeSuggestion, 'from' | 'into'>, b: Pick<MergeSugges
 const ancestorsOf = (path: NodePath) => path.slice(0, -1).map((_, i) => pathKey(path.slice(0, i + 1)));
 
 /**
- * The researcher workspace: load your own exports, decide per node what happens to it, and
+ * The workspace for one project: load your own exports, decide per node what happens to it, and
  * see the result as participants would. Exports stay in the studio worker's memory; only the
- * project tree (structure and settings) is kept as a draft in this browser.
+ * project tree (structure and settings) is kept as a draft in this browser, per project.
+ * `StudioApp` decides who gets here.
  */
-export function Studio() {
+export function Studio({ projectId, title, header }: { projectId?: string; title?: string; header?: ReactNode }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const [initial] = useState(loadDraft);
+  const [initial] = useState(() => loadDraft(projectId));
   const [tree, setTree] = useState<ProjectNode | undefined>(initial.tree);
   const [pending, setPending] = useState<ImporterEntry[]>(initial.pending);
   const [exports, setExports] = useState<StudioExport[]>([]);
@@ -82,7 +82,7 @@ export function Studio() {
   const [suggestions, setSuggestions] = useState<MergeSuggestion[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => saveDraft(tree, pending), [tree, pending]);
+  useEffect(() => saveDraft(projectId, tree, pending), [projectId, tree, pending]);
   useEffect(() => {
     try {
       localStorage.setItem(VIEW_KEY, JSON.stringify({ view, hideIgnored }));
@@ -286,9 +286,9 @@ export function Studio() {
 
   return (
     <div className="studio">
-      <h1>{t('studio.title')}</h1>
+      <h1>{title ?? t('studio.title')}</h1>
+      {header}
       <p>{t('studio.intro')}</p>
-      <Account />
 
       <div className="studio-top">
         <section className="card" aria-labelledby="studio-exports">

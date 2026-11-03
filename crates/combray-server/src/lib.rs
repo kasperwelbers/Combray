@@ -417,6 +417,8 @@ pub fn app(config: Config) -> std::io::Result<Router> {
         .as_ref()
         .map_or(0, |r| r.max_donation_bytes + 16 * 1024);
     let main_research = Router::new()
+        .route("/auth/email", post(research::request_email_code))
+        .route("/auth/email/verify", post(research::verify_email_code))
         .route("/auth/handoff/redeem", post(research::redeem_handoff))
         .route("/auth/logout", post(research::sign_out))
         .route("/me", get(research::me))

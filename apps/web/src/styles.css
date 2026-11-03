@@ -1396,3 +1396,33 @@ main.wide {
 .nested-title {
   font-size: 1.1rem;
 }
+
+/* Researcher workspace: sign-in and the project list. */
+.studio-sign-in form {
+  max-width: 32rem;
+}
+
+.studio-account {
+  margin-top: -0.5rem;
+}
+
+.studio-projects {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.studio-projects li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  padding: 1rem 1.5rem;
+}
+
+.studio-projects a {
+  font-weight: 600;
+  font-size: 1.1rem;
+}

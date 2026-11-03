@@ -22,7 +22,7 @@ The server answers on two host names, set with `COMBRAY_PUBLIC_URL` and `COMBRAY
 | --- | --- | --- |
 | Serves | Participant app, studio | The key page only |
 | Passkeys | Blocked (`Permissions-Policy`) | Their RP ID is the key host |
-| Sessions | Participant stores; studio session from a handoff | Researcher sign-in |
+| Sessions | Participant stores; studio sessions (email code, or a handoff from the key page) | Key page sign-in |
 | Key material | Never | Sealed project keys, sealed donation keys, envelopes, wrapped personal keys |
 
 Browsers keep origins apart, so a bug in the large participant app or the studio (React, charts, parsers) cannot read the key page's memory or use its passkeys. Key routes do not exist on the main site at all; asking for them there gives `404`.
@@ -61,7 +61,9 @@ Sign-in is a module of its own (`accounts.rs`, `research.rs`), so an institution
 
 ### The studio
 
-The studio, on the main site, gets its own session through a one-time handoff: "Open the studio" on the key page asks the server for a code (valid two minutes, used once) and opens `https://combray…/studio/#handoff=<code>`. The studio trades it for a studio session (12 hours) that can list projects and donation counts. It never gets key material, and cannot make more handoffs.
+The studio, on the main site, has its own sign-in: the same emailed code, asked for and typed in the studio, gives a studio session that lasts **30 days**, so researchers do not need a code every time they open it. A studio session can list the researcher's projects and donation counts and open the workspace per project (`/studio/p/{project}/`, with a draft per project in the browser). It never gets key material, and cannot make handoffs. Opening donations, and later publishing project changes, need the passkey on the key page. The studio shows nothing but the sign-in until the researcher is signed in; only on a server without researcher accounts does the workspace open without one.
+
+"Open the studio" on the key page also signs in to the studio: it asks the server for a one-time code (valid two minutes, used once) and opens `https://combray…/studio/#handoff=<code>`, which the studio trades for a studio session.
 
 ## The personal key
 

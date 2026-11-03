@@ -15,6 +15,9 @@ import type { TreeView } from './DecisionTree';
 import { fromFiles, toFiles } from './model';
 
 const DRAFT_KEY = 'combray:studio:draft';
+
+/** Each project keeps its own draft; the workspace without accounts keeps one. */
+const draftKey = (projectId?: string) => (projectId ? `${DRAFT_KEY}:${projectId}` : DRAFT_KEY);
 export const VIEW_KEY = 'combray:studio:view';
 
 export function loadView(): { view: TreeView; hideIgnored: boolean } {
@@ -32,9 +35,9 @@ interface Draft {
 }
 
 /** The draft holds structure and settings only, never values from the exports. */
-export function loadDraft(): { tree?: ProjectNode; pending: ImporterEntry[] } {
+export function loadDraft(projectId?: string): { tree?: ProjectNode; pending: ImporterEntry[] } {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(draftKey(projectId));
     if (!raw) return { pending: [] };
     const draft = JSON.parse(raw) as Draft;
     return fromFiles(parseStructureFile(draft.structure), parseImporterFile(draft.importer));
@@ -43,10 +46,10 @@ export function loadDraft(): { tree?: ProjectNode; pending: ImporterEntry[] } {
   }
 }
 
-export function saveDraft(tree: ProjectNode | undefined, pending: ImporterEntry[]): void {
+export function saveDraft(projectId: string | undefined, tree: ProjectNode | undefined, pending: ImporterEntry[]): void {
   try {
-    if (!tree) localStorage.removeItem(DRAFT_KEY);
-    else localStorage.setItem(DRAFT_KEY, JSON.stringify(toFiles(tree, pending)));
+    if (!tree) localStorage.removeItem(draftKey(projectId));
+    else localStorage.setItem(draftKey(projectId), JSON.stringify(toFiles(tree, pending)));
   } catch {
     // Without local storage the draft lives as long as the tab.
   }

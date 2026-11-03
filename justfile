@@ -10,7 +10,7 @@ install:
 
 # Run the web client with hot reload (http://localhost:5173) and the server it talks to (:8080)
 dev:
-    concurrently --kill-others --names web,server --prefix-colors auto "pnpm --filter @combray/web dev" "just server"
+    concurrently --kill-others --names web,server --prefix-colors auto "pnpm --filter @combray/web dev" "just server http://localhost:5173"
 
 # Development settings for the server: the example projects, with every database, the store
 # master key and sign-in mails under target/dev, which is not committed.
@@ -19,9 +19,10 @@ dev_env := "COMBRAY_WEB_DIR=apps/web/dist COMBRAY_DATA_DIR=deploy/examples COMBR
 # Serves whatever is in apps/web/dist and apps/keys/dist: participant app and studio on
 # http://localhost:8080, the key page on http://keys.localhost:8080. Sign-in links are written to
 # target/dev/outbox instead of mailed. Donations go to deploy/examples/donations (ignored by git).
-# Run the server without building first (`pnpm dev` runs it next to the web client)
-server:
-    {{dev_env}} cargo run -p combray-server
+# Run the server without building first (`pnpm dev` runs it next to the web client, as the main
+# site's address, so studio sign-in and the key page's links work there)
+server public_url="http://localhost:8080":
+    {{dev_env}} COMBRAY_PUBLIC_URL={{public_url}} cargo run -p combray-server
 
 # Build the web client and key page, then run the server (http://localhost:8080)
 serve: build-web build-keys server

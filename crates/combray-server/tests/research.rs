@@ -206,12 +206,17 @@ fn b64(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// Ask for an email sign-in code. Returns the cookie that ties it to this "browser".
+/// Ask for an email sign-in code on the key page. Returns the cookie that ties it to this
+/// "browser".
 async fn request_code(f: &Fixture, email: &str) -> String {
+    request_code_on(f, KEYS, email).await
+}
+
+async fn request_code_on(f: &Fixture, host: &str, email: &str) -> String {
     let (status, headers, _) = f
         .json(
             Method::POST,
-            KEYS,
+            host,
             "/api/v1/auth/email",
             None,
             Some(json!({ "email": email })),
@@ -227,10 +232,19 @@ async fn verify_code(
     login: Option<&str>,
     code: &str,
 ) -> (StatusCode, HeaderMap, Value) {
+    verify_code_on(f, KEYS, login, code).await
+}
+
+async fn verify_code_on(
+    f: &Fixture,
+    host: &str,
+    login: Option<&str>,
+    code: &str,
+) -> (StatusCode, HeaderMap, Value) {
     let cookie = login.map(|l| format!("combray-login={l}"));
     f.json(
         Method::POST,
-        KEYS,
+        host,
         "/api/v1/auth/email/verify",
         cookie.as_deref(),
         Some(json!({ "code": code })),
@@ -408,7 +422,7 @@ async fn the_key_page_is_served_only_on_its_own_host() {
         assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
     }
 
-    // The main site cannot use passkeys, and has no sign-in or key routes.
+    // The main site cannot use passkeys, and has no passkey or key routes.
     let (status, headers, _) = f
         .json(Method::GET, MAIN, "/api/v1/health", None, None)
         .await;
@@ -420,7 +434,6 @@ async fn the_key_page_is_served_only_on_its_own_host() {
             .contains("publickey-credentials-get=()")
     );
     for uri in [
-        "/api/v1/auth/email",
         "/api/v1/auth/passkey/start",
         "/api/v1/projects/willow/donation-keys",
     ] {
@@ -510,6 +523,43 @@ async fn email_codes_go_only_to_known_researchers_and_work_once_in_the_same_brow
         .json(Method::GET, MAIN, "/api/v1/me", Some(&cookie), None)
         .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn the_studio_signs_in_with_an_email_code_for_a_long_session_without_keys() {
+    let f = Fixture::new();
+    let secret = [9u8; 32];
+    researcher(&f, "ada@uni.nl", &secret);
+
+    let login = request_code_on(&f, MAIN, "ada@uni.nl").await;
+    let code = wait_for_code(&f, "ada@uni.nl").await;
+    // A studio code does not work on the key page, even with the same browser secret.
+    let (status, _, _) = verify_code_on(&f, KEYS, Some(&login), &code).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let login = request_code_on(&f, MAIN, "ada@uni.nl").await;
+    let code = wait_for_code(&f, "ada@uni.nl").await;
+    let (status, headers, _) = verify_code_on(&f, MAIN, Some(&login), &code).await;
+    assert_eq!(status, StatusCode::OK);
+    let session = headers[header::SET_COOKIE].to_str().unwrap();
+    assert!(session.contains(&format!("Max-Age={}", 30 * 24 * 3600)), "{session}");
+    let cookie = set_cookie(&headers);
+
+    let (_, _, me) = f
+        .json(Method::GET, MAIN, "/api/v1/me", Some(&cookie), None)
+        .await;
+    assert_eq!(me["signed_in"], true);
+    assert_eq!(me["email"], "ada@uni.nl");
+    let (status, _, _) = f
+        .json(Method::GET, MAIN, "/api/v1/projects", Some(&cookie), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // The studio session is no key page session.
+    for uri in ["/api/v1/projects", "/api/v1/me"] {
+        let (status, _, body) = f.json(Method::GET, KEYS, uri, Some(&cookie), None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri} {body}");
+    }
 }
 
 #[tokio::test]

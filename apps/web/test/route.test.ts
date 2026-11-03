@@ -32,6 +32,9 @@ describe('parseRoute', () => {
   it('finds the researcher workspace', () => {
     expect(parseRoute('/studio/', '')).toEqual({ kind: 'studio' });
     expect(parseRoute('/studio', '#id=P1')).toEqual({ kind: 'studio' });
+    expect(parseRoute('/studio/p/willow/', '')).toEqual({ kind: 'studio', projectId: 'willow' });
+    expect(parseRoute('/studio/p/Willow/', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/studio/p/willow/extra', '')).toEqual({ kind: 'home' });
   });
 
   it('ignores malformed paths, ids and tokens', () => {

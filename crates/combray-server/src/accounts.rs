@@ -36,8 +36,9 @@ pub const LOGIN_CODE_TRIES: i64 = 5;
 pub const EMAIL_SESSION_TTL_SECS: i64 = 15 * 60;
 /// A signed-in session on the key page. Short, because it can fetch sealed keys.
 pub const KEYS_SESSION_TTL_SECS: i64 = 2 * 3600;
-/// A signed-in session in the studio, which cannot fetch any key material.
-pub const STUDIO_SESSION_TTL_SECS: i64 = 12 * 3600;
+/// A signed-in session in the studio, which cannot fetch any key material. Long, so researchers
+/// do not need an email code every time; opening donations needs the passkey on the key page.
+pub const STUDIO_SESSION_TTL_SECS: i64 = 30 * 24 * 3600;
 /// A handoff code from the key page to the studio is used within seconds.
 pub const HANDOFF_TTL_SECS: i64 = 120;
 /// Personal and project public keys are X-Wing keys.
@@ -158,10 +159,13 @@ fn new_login_code() -> Result<String, AccountError> {
 }
 
 /// A code is stored hashed with its browser's secret, so the database alone does not give it away
-/// (8 digits would be quick to find from a plain hash).
-fn code_hash(request: &[u8], code: &str) -> Vec<u8> {
+/// (8 digits would be quick to find from a plain hash), and with its site, so a code asked for on
+/// the key page cannot sign in to the studio or the other way round.
+fn code_hash(site: Site, request: &[u8], code: &str) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(b"combray/login-code/v1/");
+    hasher.update(site.as_str().as_bytes());
+    hasher.update(b"/");
     hasher.update(request);
     hasher.update(code.as_bytes());
     hasher.finalize().to_vec()
@@ -430,6 +434,7 @@ impl Accounts {
     /// and behave alike.
     pub fn create_login_code(
         &self,
+        site: Site,
         request: &[u8; 32],
         email: &str,
     ) -> Result<Option<String>, AccountError> {
@@ -455,7 +460,7 @@ impl Accounts {
             params![
                 hash(request),
                 researcher,
-                code_hash(request, &code),
+                code_hash(site, request, &code),
                 now_secs() + LOGIN_CODE_TTL_SECS
             ],
         )?;
@@ -464,7 +469,12 @@ impl Accounts {
 
     /// Check a sign-in code against the pending sign-in of the browser holding `request`. Returns
     /// the researcher on success. Each pending sign-in works once and allows a few wrong guesses.
-    pub fn use_login_code(&self, request: &[u8], code: &str) -> Result<String, AccountError> {
+    pub fn use_login_code(
+        &self,
+        site: Site,
+        request: &[u8],
+        code: &str,
+    ) -> Result<String, AccountError> {
         let code: String = code
             .chars()
             .filter(|c| !c.is_whitespace() && *c != '-')
@@ -482,7 +492,7 @@ impl Accounts {
         let Some((researcher, expected, tries)) = row else {
             return Err(AccountError::Forbidden);
         };
-        let right = bool::from(code_hash(request, &code).as_slice().ct_eq(&expected));
+        let right = bool::from(code_hash(site, request, &code).as_slice().ct_eq(&expected));
         let result = match researcher {
             Some(id) if right => {
                 tx.execute(
@@ -978,26 +988,31 @@ mod tests {
         assert_eq!(a.add_researcher("ADA@uni.nl").unwrap(), id);
 
         let unknown = [1u8; 32];
-        assert_eq!(a.create_login_code(&unknown, "nobody@uni.nl").unwrap(), None);
+        assert_eq!(a.create_login_code(Site::Keys, &unknown, "nobody@uni.nl").unwrap(), None);
         assert_eq!(
-            a.use_login_code(&unknown, "00000000"),
+            a.use_login_code(Site::Keys, &unknown, "00000000"),
             Err(AccountError::Forbidden)
         );
 
         let browser = [2u8; 32];
-        let code = a.create_login_code(&browser, "Ada@uni.nl").unwrap().unwrap();
+        let code = a.create_login_code(Site::Keys, &browser, "Ada@uni.nl").unwrap().unwrap();
         assert_eq!(code.len(), 8);
         assert!(code.bytes().all(|b| b.is_ascii_digit()));
         // Another browser cannot use the code.
         assert_eq!(
-            a.use_login_code(&[3u8; 32], &code),
+            a.use_login_code(Site::Keys, &[3u8; 32], &code),
             Err(AccountError::Forbidden)
         );
         // Spaces and dashes are fine; it works once.
         let typed = format!("{} {}", &code[..4], &code[4..]);
-        assert_eq!(a.use_login_code(&browser, &typed).unwrap(), id);
+        // Nor can the other site.
         assert_eq!(
-            a.use_login_code(&browser, &code),
+            a.use_login_code(Site::Main, &browser, &code),
+            Err(AccountError::Forbidden)
+        );
+        assert_eq!(a.use_login_code(Site::Keys, &browser, &typed).unwrap(), id);
+        assert_eq!(
+            a.use_login_code(Site::Keys, &browser, &code),
             Err(AccountError::Forbidden)
         );
     }
@@ -1007,16 +1022,16 @@ mod tests {
         let (_dir, a) = accounts();
         a.add_researcher("ada@uni.nl").unwrap();
         let browser = [2u8; 32];
-        let code = a.create_login_code(&browser, "ada@uni.nl").unwrap().unwrap();
+        let code = a.create_login_code(Site::Keys, &browser, "ada@uni.nl").unwrap().unwrap();
         let wrong = if code == "00000000" { "11111111" } else { "00000000" };
         for _ in 0..LOGIN_CODE_TRIES {
             assert_eq!(
-                a.use_login_code(&browser, wrong),
+                a.use_login_code(Site::Keys, &browser, wrong),
                 Err(AccountError::Forbidden)
             );
         }
         assert_eq!(
-            a.use_login_code(&browser, &code),
+            a.use_login_code(Site::Keys, &browser, &code),
             Err(AccountError::Forbidden)
         );
     }
