@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
  * studio session can list projects and donations but never receives key material: opening
  * donations happens on the key page only.
  *
- * On a server without researcher accounts, or in `just dev` without a server, the card is not
+ * On a server without researcher accounts, or in `pnpm dev` without a server, the card is not
  * shown and the studio works as a local workspace.
  */
 

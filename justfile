@@ -1,5 +1,5 @@
-# Common tasks. `pnpm install` installs just: run recipes as `pnpm just <recipe>`, or as
-# `just <recipe>` with just installed (https://github.com/casey/just).
+# The tasks behind the scripts in package.json (`pnpm dev`, `pnpm test`, ...), which run them
+# with the just that `pnpm install` provides. Add a script there for each new recipe.
 
 default:
     @just --list
@@ -8,9 +8,9 @@ default:
 install:
     pnpm install
 
-# Run the web client with hot reload (http://localhost:5173)
+# Run the web client with hot reload (http://localhost:5173) and the server it talks to (:8080)
 dev:
-    pnpm --filter @combray/web dev
+    concurrently --kill-others --names web,server --prefix-colors auto "pnpm --filter @combray/web dev" "just server"
 
 # Development settings for the server: the example projects, with every database, the store
 # master key and sign-in mails under target/dev, which is not committed.
@@ -19,25 +19,31 @@ dev_env := "COMBRAY_WEB_DIR=apps/web/dist COMBRAY_DATA_DIR=deploy/examples COMBR
 # Serves whatever is in apps/web/dist and apps/keys/dist: participant app and studio on
 # http://localhost:8080, the key page on http://keys.localhost:8080. Sign-in links are written to
 # target/dev/outbox instead of mailed. Donations go to deploy/examples/donations (ignored by git).
-# Run the server without building first (the API for `just dev`, which passes /api to it)
+# Run the server without building first (`pnpm dev` runs it next to the web client)
 server:
     {{dev_env}} cargo run -p combray-server
 
 # Build the web client and key page, then run the server (http://localhost:8080)
 serve: build-web build-keys server
 
-# Add a researcher to the development server and a project: just researcher ada@uni.example example
+# Add a researcher to the development server and a project: pnpm researcher ada@uni.example example
 researcher email project:
     {{dev_env}} cargo run -q -p combray-server -- researcher add {{email}}
     {{dev_env}} cargo run -q -p combray-server -- project add-researcher {{project}} {{email}}
 
-# Seal a synthetic donation to a project's key and send it: just synthetic-donation http://localhost:8080 example
+# Seal a synthetic donation to a project's key and send it: pnpm synthetic-donation http://localhost:8080 example
 synthetic-donation server project:
     node apps/keys/scripts/run.mjs synthetic-donation {{server}} {{project}}
 
 # Run all tests
-test:
+test: test-client test-server
+
+# TypeScript tests: web client, key page and packages
+test-client:
     pnpm -r test
+
+# Rust tests: the server
+test-server:
     cargo test --workspace
 
 # Type checks, lints and formatting checks

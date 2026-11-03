@@ -125,7 +125,7 @@ It prints a one-time link (valid for 72 hours) that the participant opens on the
 
 ## Development
 
-`just serve` (or `pnpm just serve`) builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Sign-in links are written to `target/dev/outbox/`. Add yourself with `just researcher you@example.org example`, and send a synthetic donation with `just synthetic-donation http://localhost:8080 example`. `just e2e` runs the key page end to end with a virtual passkey. For hot reload while working on the participant app, run `just dev` (http://localhost:5173) next to `just server`, which runs the same server without building first.
+`pnpm serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Sign-in links are written to `target/dev/outbox/`. Add yourself with `pnpm researcher you@example.org example`, and send a synthetic donation with `pnpm synthetic-donation http://localhost:8080 example`. `pnpm e2e` runs the key page end to end with a virtual passkey. For hot reload while working on the participant app, use `pnpm dev`: the web client on http://localhost:5173 next to the same server, without building first.
 
 ## Lab laptop
 

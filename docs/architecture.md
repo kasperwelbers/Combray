@@ -153,7 +153,7 @@ combray/
 └── docs/
 ```
 
-Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, and a `justfile` with common tasks (`just dev`, `just test`, `just check`, `just build`, `just docker`). CI runs type checks, tests, clippy and a Docker build; releases publish the key page with its SHA-256; later also the server image.
+Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, and root `package.json` scripts for common tasks (`pnpm dev`, `pnpm test`, `pnpm check`, `pnpm build`, `pnpm docker`), which run recipes from a `justfile`. CI runs type checks, tests, clippy and a Docker build; releases publish the key page with its SHA-256; later also the server image.
 
 ## Deployment shapes
 

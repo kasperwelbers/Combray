@@ -7,12 +7,21 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --filter @combray/web dev",
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "dev": "just dev",
+    "serve": "just serve",
+    "test": "just test",
+    "test:client": "just test-client",
+    "test:server": "just test-server",
+    "typecheck": "pnpm -r typecheck",
+    "check": "just check",
+    "e2e": "just e2e",
+    "build": "just build",
+    "docker": "just docker",
+    "researcher": "just researcher",
+    "synthetic-donation": "just synthetic-donation"
   },
   "devDependencies": {
+    "concurrently": "^10.0.6",
     "rust-just": "1.59.0"
   }
 }

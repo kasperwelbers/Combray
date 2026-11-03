@@ -24,21 +24,22 @@ See [docs/architecture.md](docs/architecture.md#monorepo-layout). Separately dep
 
 ## Commands
 
-Requires Node 22+, pnpm 10 and stable Rust. `pnpm install` also installs [just](https://github.com/casey/just) (`rust-just`); run recipes as `pnpm just <recipe>`, or `just <recipe>` with just installed.
+Requires Node 22+, pnpm 10 and stable Rust.
 
 ```sh
-just install   # pnpm install
-just dev       # web client on http://localhost:5173 (researcher workspace at /studio/)
-just server    # the server without building first: the API for `just dev` (Vite passes /api)
-just test      # TypeScript and Rust tests
-just check     # type checks, rustfmt, clippy
-just serve     # build the web client and key page, run the server on http://localhost:8080
-               # (key page on http://keys.localhost:8080, sign-in mails in target/dev/outbox)
-just e2e       # key page end to end in Chromium with a virtual passkey
-just docker    # build the server image
+pnpm install
+pnpm dev           # web client on http://localhost:5173 (researcher workspace at /studio/) and
+                   # the server on :8080, side by side; Vite passes /api to it
+pnpm serve         # build the web client and key page, run the server on http://localhost:8080
+                   # (key page on http://keys.localhost:8080, sign-in mails in target/dev/outbox)
+pnpm test          # all tests; pnpm test:client (TypeScript) or pnpm test:server (Rust)
+pnpm check         # type checks, rustfmt, clippy
+pnpm e2e           # key page end to end in Chromium with a virtual passkey
+pnpm docker        # build the server image
+pnpm researcher you@example.org example   # add a researcher to the dev server and a project
 ```
 
-Without just: `pnpm -r test`, `pnpm -r typecheck`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`.
+These scripts run recipes from the `justfile`, with the [just](https://github.com/casey/just) that `pnpm install` provides (`rust-just`). The development server settings live there. When adding a recipe, add a script for it to the root `package.json`.
 
 ## Non-negotiable privacy rules
 

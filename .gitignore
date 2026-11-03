@@ -14,6 +14,6 @@ combray-store-master.key
 shots/
 # SMTP password and domain for docker compose
 deploy/.env
-# Donations from `just serve` (synthetic only)
+# Donations from `pnpm serve` (synthetic only)
 deploy/examples/donations/
 deploy/examples/donations.sqlite*

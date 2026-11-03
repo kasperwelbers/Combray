@@ -25,15 +25,14 @@ Example use cases are:
 
 ## Run it locally
 
-Requires Node 22+, pnpm 10 and stable Rust. `pnpm install` also installs [just](https://github.com/casey/just), which runs the project's tasks: use `pnpm just <recipe>`, or plain `just <recipe>` if you have just installed. `pnpm just` lists them all.
+Requires Node 22+, pnpm 10 and stable Rust.
 
 ```sh
 pnpm install
-pnpm just dev       # web client with hot reload on http://localhost:5173
-pnpm just server    # in a second terminal: the API on :8080, which the dev server passes /api to
+pnpm dev        # web client with hot reload on http://localhost:5173, plus the server it needs
 ```
 
-Or build everything and let the server serve it: `pnpm just serve` (http://localhost:8080).
+Or build everything and let the server serve it: `pnpm serve` (http://localhost:8080).
 
 | Path | What it is |
 | --- | --- |
@@ -42,7 +41,7 @@ Or build everything and let the server serve it: `pnpm just serve` (http://local
 | `/p/willow/#id=W-1234` | Example study that requires a participant id |
 | `/studio/` | Researcher workspace |
 
-Without the server, the study pages say it cannot be reached; the studio works without it, with exports kept in the browser's memory. Projects come from [deploy/examples/projects/](deploy/examples/projects/). Researcher sign-in and the key page need `pnpm just serve` and run on http://localhost:8080 and http://keys.localhost:8080; see [development]((docs/deployment.md#development). For Docker, see [deploy/docker-compose.yml](deploy/docker-compose.yml) (setup steps in its header comment).
+The first run builds the server, so the study pages may say it cannot be reached for a minute. The studio works without the server, with exports kept in the browser's memory. Projects come from [deploy/examples/projects/](deploy/examples/projects/). Researcher sign-in and the key page need `pnpm serve` and run on http://localhost:8080 and http://keys.localhost:8080; see [development](docs/deployment.md#development). For Docker, see [deploy/docker-compose.yml](deploy/docker-compose.yml) (setup steps in its header comment). All commands are in [CLAUDE.md](CLAUDE.md#commands).
 
 ## What makes Combray different
 

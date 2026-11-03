@@ -356,7 +356,7 @@ header = { v: 1, project, donation, key, chunkBytes, chunks, created }
 
 ## Transport
 
-Caddy terminates TLS with automatic certificates and sends HSTS. The Combray server itself listens only on the internal compose network. In development, the Vite dev server proxies `/api` to the local server. The dev server does not send the CSP, so check security-relevant changes against `just serve`.
+Caddy terminates TLS with automatic certificates and sends HSTS. The Combray server itself listens only on the internal compose network. In development, the Vite dev server proxies `/api` to the local server. The dev server does not send the CSP, so check security-relevant changes against `pnpm serve`.
 
 ## Structure metadata and consent
 

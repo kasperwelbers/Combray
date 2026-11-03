@@ -173,7 +173,7 @@ For each researcher setup in the pilot, and at least: a Mac with Safari, a Windo
 4. Lock; unlock again by QR code from the phone (on a computer).
 5. On a second device, sign in by email and unlock with the same synced passkey.
 6. Sign in by email in a private window and use "I lost my passkey" with the recovery code; add a new passkey.
-7. With a test project: create the project key, seal a synthetic donation (`just synthetic-donation`), open and download it.
+7. With a test project: create the project key, seal a synthetic donation (`pnpm synthetic-donation`), open and download it.
 8. Give a second researcher access after comparing key codes; they open the same donation.
 
 Write down browser, OS and passkey provider for each run, with the result, in the pilot log.

@@ -3,7 +3,7 @@
  * For trying the key page before the participant donate screen exists, and for the pilot's
  * manual test (docs/researcher-keys.md#manual-test-checklist-before-the-pilot).
  *
- *   just synthetic-donation https://combray.example willow
+ *   pnpm synthetic-donation https://combray.example willow
  *
  * The data is made up. Prints the donation id and its withdrawal token.
  */
