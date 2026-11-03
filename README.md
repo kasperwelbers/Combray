@@ -21,18 +21,19 @@ Example use cases are:
 * A participant looks at the data together with a researcher. The purpose of the data is to evoke memories and reflections (like Proust's madeleine).
 * A participant explores their own data, in a lab or at home, and answers questions about the data and/or their own reflections.
 
-> **Status:** early development (Phase 1). You can import a data download package in the browser, keep it encrypted on your computer and browse it as a tree. Donation, enrichment and the researcher tools come next. Start with [docs/](docs/README.md).
+> **Status:** early development, not yet used in a study. Participants can import a data download package in the browser, keep it encrypted on their computer, explore it and donate parts of it. Researchers can sign in, build an importer in the studio, and open donations on the key page with their passkey. Enrichment and hosting come next. Start with [docs/](docs/README.md).
 
-## Run it locally
+## Development
+
+This runs Combray on your own machine for development, with synthetic example projects. It is not a way to host Combray for a study: for that, see [docs/deployment.md](docs/deployment.md).
 
 Requires Node 22.18+ (24 recommended) and pnpm 10.
 
 ```sh
 pnpm install
-pnpm dev        # web client with hot reload on http://localhost:5173, plus the server it needs
+pnpm build      # once: the web client and the key page
+pnpm dev        # web client with hot reload on http://localhost:5173, plus the server on :8080
 ```
-
-Or build everything and let the server serve it: `pnpm serve` (http://localhost:8080).
 
 | Path | What it is |
 | --- | --- |
@@ -42,7 +43,19 @@ Or build everything and let the server serve it: `pnpm serve` (http://localhost:
 | `/p/willow/#id=W-1234` | Example study that requires a participant id |
 | `/studio/` | Researcher workspace |
 
-Projects come from [deploy/examples/projects/](deploy/examples/projects/). To sign in as a researcher, add yourself to a project first: `pnpm researcher example you@example.org`. The development server does not send mail: sign-in codes arrive as files in `.dev/outbox/`, and the page says so. The key page, where researchers set up their passkey, runs on http://keys.localhost:8080 once it is built (`pnpm build`, or use `pnpm serve`); see [development](docs/deployment.md#development). For Docker, see [deploy/docker-compose.yml](deploy/docker-compose.yml) (setup steps in its header comment). All commands are in [CLAUDE.md](CLAUDE.md#commands).
+Projects come from [deploy/examples/projects/](deploy/examples/projects/). The development server keeps its databases in `.dev/` and does not send mail: sign-in codes are written to `.dev/outbox/` as files.
+
+### Signing in as a researcher
+
+1. Add yourself to an example project (any address will do; no mail is sent):
+   ```sh
+   pnpm researcher example you@example.org
+   ```
+2. **Studio:** open http://localhost:5173/studio/, enter that address, and type the 8-digit code from the newest file in `.dev/outbox/`.
+3. **Key page** (passkey, project key, opening donations): open http://keys.localhost:8080, choose "Sign in with an email code", use a code from `.dev/outbox/` again, and set up your passkey and recovery code. Then create the project key.
+4. **A donation to open:** `pnpm synthetic-donation http://localhost:8080 example` seals a synthetic donation to the project key, which the key page can then open.
+
+`pnpm serve` instead builds everything and serves it from the server alone, on http://localhost:8080. More in [docs/deployment.md](docs/deployment.md#development); all commands are in [CLAUDE.md](CLAUDE.md#commands).
 
 ## What makes Combray different
 
