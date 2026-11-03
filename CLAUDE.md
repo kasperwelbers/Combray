@@ -18,7 +18,7 @@ See [docs/architecture.md](docs/architecture.md#monorepo-layout). Separately dep
 - `packages/store` encrypted IndexedDB store (WebCrypto); keys from the server's key service ([ADR 0004](docs/decisions/0004-server-held-store-keys.md))
 - `packages/seal` donation envelopes and researcher/project keys (HPKE with X-Wing)
 - `importers` platform packs: importer specs (YAML) with synthetic fixtures; format in [docs/importer-spec.md](docs/importer-spec.md)
-- `apps/server` the server: TypeScript on Node, no framework (`node:http`, `node:sqlite`); HTTP tests that start a real server in `apps/server/test` ([ADR 0010](docs/decisions/0010-node-server.md))
+- `apps/server` the server: TypeScript on Node, no framework (`node:http`, `node:sqlite` with Drizzle); HTTP tests that start a real server in `apps/server/test` ([ADR 0010](docs/decisions/0010-node-server.md))
 - `deploy/` docker compose, Caddyfile, example project configs
 - `docs/` design documents and decision records (`docs/decisions/NNNN-*.md`)
 
@@ -58,7 +58,7 @@ These apply to every change, however small.
 ## Conventions
 
 - TypeScript strict mode in the client; heavy processing runs in web workers, never on the main thread.
-- Server: plain Node, as few dependencies as possible, pinned to exact versions. Every change in server behaviour gets an HTTP test in `apps/server/test`.
+- Server: plain Node, as few dependencies as possible, pinned to exact versions. Every change in server behaviour gets an HTTP test in `apps/server/test`. The database schema is in `apps/server/src/db/`; after changing it, run `pnpm --filter @combray/server db:generate` and commit the migration in `apps/server/drizzle/`. Never edit a migration that has been released.
 - Keep the server small. If something can run in the browser, it runs in the browser.
 - UI copy is warm, plain and non-judgemental (see [docs/design-identity.md](docs/design-identity.md#tone-of-voice)). All participant-facing strings go through i18n (`apps/web/src/locales/{language}/{feature}.json`, see [docs/translation.md](docs/translation.md)); Dutch and English are first-class, and a test checks they match. Researcher tools and docs are English only.
 - Accessibility: WCAG 2.2 AA, keyboard navigable, respects `prefers-reduced-motion`.

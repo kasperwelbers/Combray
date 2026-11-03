@@ -18,6 +18,12 @@ Security-critical code needs reviewers who read it fluently. The maintainers and
 4. **Self-hosted first.** The supported deployment is one container with one data volume (Docker Compose with Caddy for HTTPS), on an institution's own server or an EU host. Not a serverless platform such as Cloudflare Workers: it would see traffic in the clear (including participants' passwords and the key page as it is served), would complicate GDPR approval, and would need different storage and a different runtime.
 5. **Plan, not built: object storage for large donations.** When donations can be large (videos), browsers upload encrypted envelopes straight to S3-compatible storage with presigned URLs, and the server keeps only the index, tombstones and sealed keys. Donation storage sits behind a small interface (save, read, delete an envelope) so this can be added without touching the rest.
 
+## Amendment (2026-11-03): Drizzle and two databases
+
+- **Drizzle** (`drizzle-orm` 1.0, release candidate, with its synchronous `node:sqlite` driver) defines the schema in TypeScript (`apps/server/src/db/`) and gives typed queries. `drizzle-kit` (development only) writes SQL migrations from schema changes (`pnpm --filter @combray/server db:generate`); the server applies them at start. The stable 0.45 line has no `node:sqlite` driver; its asynchronous proxy driver would have needed our own locking around every query to keep transactions from interleaving on one connection, so the release candidate is the smaller risk. Move to 1.0 when it is released.
+- **Two databases instead of four.** The main database holds everything but the sealed donation keys, which stay in their own file for their short backup retention (ADR 0006). One schema and migration history, transactions across all tables, fewer settings. `COMBRAY_RESEARCH_DB` is gone.
+- Built fresh: no conversion from the earlier databases (there was no production data).
+
 ## Consequences
 
 - One language for everything but configuration; contributors can review the whole system.

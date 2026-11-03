@@ -21,13 +21,15 @@ import { dirname } from 'node:path';
 import { hashRaw } from '@node-rs/argon2';
 
 import type { Argon2Cost } from './config.ts';
-import { type Db, one, openDb, run, transaction, bytes } from './db.ts';
+import { and, eq, gt, lte } from 'drizzle-orm';
+
+import { changes, type Db } from './db.ts';
+import { resetTokens, stores } from './db/schema.ts';
 import { RateLimit } from './limits.ts';
 import { log } from './log.ts';
 import { b64, fromB64, nowSecs, random, sameBytes, sha256, validRandomId } from './util.ts';
 
 const KEK_INFO = 'combray/store-kek/v1/';
-const SCHEMA_VERSION = 2;
 /** How long a password reset link stays valid. */
 export const RESET_TTL_SECS = 72 * 3600;
 const MIN_PASSWORD_CHARS = 8;
@@ -125,35 +127,10 @@ export class KeyService {
   private readonly attemptsPerIp = new RateLimit(ATTEMPTS_PER_IP, WINDOW_SECS);
   private readonly createsPerIp = new RateLimit(CREATES_PER_IP, WINDOW_SECS);
 
-  constructor(dbPath: string, master: Buffer, cost: Argon2Cost) {
+  constructor(db: Db, master: Buffer, cost: Argon2Cost) {
+    this.db = db;
     this.master = master;
     this.cost = cost;
-    this.db = openDb(
-      dbPath,
-      `PRAGMA journal_mode = WAL;
-       PRAGMA secure_delete = ON;
-       CREATE TABLE IF NOT EXISTS stores (
-           id             TEXT PRIMARY KEY,
-           project_id     TEXT NOT NULL,
-           participant_id TEXT,
-           kek_salt     BLOB NOT NULL,
-           pw_salt      BLOB NOT NULL,
-           pw_hash      BLOB NOT NULL,
-           delete_hash  BLOB NOT NULL,
-           m_kib        INTEGER NOT NULL,
-           t_cost       INTEGER NOT NULL,
-           p_cost       INTEGER NOT NULL,
-           failures     INTEGER NOT NULL DEFAULT 0,
-           locked_until INTEGER NOT NULL DEFAULT 0
-       );
-       CREATE TABLE IF NOT EXISTS reset_tokens (
-           token_hash     BLOB PRIMARY KEY,
-           project_id     TEXT NOT NULL,
-           participant_id TEXT NOT NULL,
-           expires_at     INTEGER NOT NULL
-       );`,
-    );
-    this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   }
 
   private kek(storeId: string, salt: Uint8Array): string {
@@ -188,14 +165,12 @@ export class KeyService {
     const kekSalt = random(32);
     const pwSalt = random(16);
     const cost = this.cost;
-    const hash = await this.hash(password, pwSalt, cost);
+    const pwHash = await this.hash(password, pwSalt, cost);
     const deleteToken = random(32);
-    run(
-      this.db,
-      `INSERT INTO stores (id, kek_salt, pw_salt, pw_hash, m_kib, t_cost, p_cost, delete_hash, project_id, participant_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      storeId, kekSalt, pwSalt, hash, cost.mKib, cost.t, cost.p, sha256(deleteToken), projectId, participantId,
-    );
+    this.db
+      .insert(stores)
+      .values({ id: storeId, projectId, participantId, kekSalt, pwSalt, pwHash, deleteHash: sha256(deleteToken), mKib: cost.mKib, tCost: cost.t, pCost: cost.p })
+      .run();
     return { storeId, kek: this.kek(storeId, kekSalt), deleteToken: b64(deleteToken) };
   }
 
@@ -206,24 +181,24 @@ export class KeyService {
     this.limited(this.attemptsPerIp, ip);
     const now = nowSecs();
     // Count this attempt as failed up front, in one transaction with the lockout check.
-    const row = transaction(this.db, () => {
-      const r = one(this.db, 'SELECT kek_salt, pw_salt, pw_hash, m_kib, t_cost, p_cost, failures, locked_until FROM stores WHERE id = ?', storeId);
-      if (!r) return fail({ kind: 'not_found' });
-      const lockedUntil = Number(r.locked_until);
-      if (lockedUntil > now) return fail({ kind: 'too_many_attempts', retryAfter: lockedUntil - now });
-      const failures = Number(r.failures) + 1;
-      run(this.db, 'UPDATE stores SET failures = ?, locked_until = ? WHERE id = ?', failures, now + lockoutSecs(failures), storeId);
-      return { r, failures };
-    });
-    const { r, failures } = row;
-    const cost = { mKib: Number(r.m_kib), t: Number(r.t_cost), p: Number(r.p_cost) };
-    const hash = await this.hash(password, bytes(r.pw_salt)!, cost);
-    if (!sameBytes(hash, bytes(r.pw_hash)!)) {
+    const { store, failures } = this.db.transaction(
+      (tx) => {
+        const store = tx.select().from(stores).where(eq(stores.id, storeId)).get();
+        if (!store) return fail({ kind: 'not_found' });
+        if (store.lockedUntil > now) return fail({ kind: 'too_many_attempts', retryAfter: store.lockedUntil - now });
+        const failures = store.failures + 1;
+        tx.update(stores).set({ failures, lockedUntil: now + lockoutSecs(failures) }).where(eq(stores.id, storeId)).run();
+        return { store, failures };
+      },
+      { behavior: 'immediate' },
+    );
+    const hash = await this.hash(password, store.pwSalt, { mKib: store.mKib, t: store.tCost, p: store.pCost });
+    if (!sameBytes(hash, store.pwHash)) {
       const lockout = lockoutSecs(failures);
       return fail({ kind: 'wrong_password', ...(lockout > 0 ? { retryAfter: lockout } : {}) });
     }
-    run(this.db, 'UPDATE stores SET failures = 0, locked_until = 0 WHERE id = ?', storeId);
-    return bytes(r.kek_salt)!;
+    this.db.update(stores).set({ failures: 0, lockedUntil: 0 }).where(eq(stores.id, storeId)).run();
+    return store.kekSalt;
   }
 
   /** Return the store's KEK, if the password is right. */
@@ -238,21 +213,17 @@ export class KeyService {
     this.limited(this.attemptsPerIp, ip);
     const token = fromB64(deleteToken);
     if (!token) return fail({ kind: 'wrong_password' });
-    const row = one(this.db, 'SELECT delete_hash FROM stores WHERE id = ?', storeId);
-    if (!row) return fail({ kind: 'not_found' });
-    if (!sameBytes(sha256(token), bytes(row.delete_hash)!)) return fail({ kind: 'wrong_password' });
-    run(this.db, 'DELETE FROM stores WHERE id = ?', storeId);
+    const store = this.db.select({ deleteHash: stores.deleteHash }).from(stores).where(eq(stores.id, storeId)).get();
+    if (!store) return fail({ kind: 'not_found' });
+    if (!sameBytes(sha256(token), store.deleteHash)) return fail({ kind: 'wrong_password' });
+    this.db.delete(stores).where(eq(stores.id, storeId)).run();
   }
 
   /** A one-time password reset token for a participant's stores in a project. */
   createResetToken(projectId: string, participantId: string): string {
     const token = random(32);
-    run(this.db, 'DELETE FROM reset_tokens WHERE expires_at <= ?', nowSecs());
-    run(
-      this.db,
-      'INSERT INTO reset_tokens (token_hash, project_id, participant_id, expires_at) VALUES (?, ?, ?, ?)',
-      sha256(token), projectId, participantId, nowSecs() + RESET_TTL_SECS,
-    );
+    this.db.delete(resetTokens).where(lte(resetTokens.expiresAt, nowSecs())).run();
+    this.db.insert(resetTokens).values({ tokenHash: sha256(token), projectId, participantId, expiresAt: nowSecs() + RESET_TTL_SECS }).run();
     return b64(token);
   }
 
@@ -264,26 +235,35 @@ export class KeyService {
     const raw = fromB64(token);
     if (!raw) return fail({ kind: 'invalid_reset_token' });
     // Use the token up first, so it cannot be raced; it only counts if it matches the store.
-    const kekSalt = transaction(this.db, () => {
-      const store = one(this.db, 'SELECT project_id, participant_id, kek_salt FROM stores WHERE id = ?', storeId);
-      if (!store) return fail({ kind: 'not_found' });
-      if (store.participant_id === null) return fail({ kind: 'invalid_reset_token' });
-      const used = run(
-        this.db,
-        'DELETE FROM reset_tokens WHERE token_hash = ? AND project_id = ? AND participant_id = ? AND expires_at > ?',
-        sha256(raw), store.project_id, store.participant_id, nowSecs(),
-      );
-      if (used !== 1) return fail({ kind: 'invalid_reset_token' });
-      return bytes(store.kek_salt)!;
-    });
+    const kekSalt = this.db.transaction(
+      (tx) => {
+        const store = tx.select().from(stores).where(eq(stores.id, storeId)).get();
+        if (!store) return fail({ kind: 'not_found' });
+        if (store.participantId === null) return fail({ kind: 'invalid_reset_token' });
+        const used = tx
+          .delete(resetTokens)
+          .where(
+            and(
+              eq(resetTokens.tokenHash, sha256(raw)),
+              eq(resetTokens.projectId, store.projectId),
+              eq(resetTokens.participantId, store.participantId),
+              gt(resetTokens.expiresAt, nowSecs()),
+            ),
+          )
+          .run();
+        if (changes(used) !== 1) return fail({ kind: 'invalid_reset_token' });
+        return store.kekSalt;
+      },
+      { behavior: 'immediate' },
+    );
     const pwSalt = random(16);
     const cost = this.cost;
-    const hash = await this.hash(password, pwSalt, cost);
-    run(
-      this.db,
-      `UPDATE stores SET pw_salt = ?, pw_hash = ?, m_kib = ?, t_cost = ?, p_cost = ?, failures = 0, locked_until = 0 WHERE id = ?`,
-      pwSalt, hash, cost.mKib, cost.t, cost.p, storeId,
-    );
+    const pwHash = await this.hash(password, pwSalt, cost);
+    this.db
+      .update(stores)
+      .set({ pwSalt, pwHash, mKib: cost.mKib, tCost: cost.t, pCost: cost.p, failures: 0, lockedUntil: 0 })
+      .where(eq(stores.id, storeId))
+      .run();
     return this.kek(storeId, kekSalt);
   }
 }

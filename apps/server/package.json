@@ -7,17 +7,20 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "start": "node --disable-warning=ExperimentalWarning src/main.ts"
+    "start": "node --disable-warning=ExperimentalWarning src/main.ts",
+    "db:generate": "drizzle-kit generate --config drizzle.main.config.ts && drizzle-kit generate --config drizzle.keys.config.ts"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
     "@types/nodemailer": "8.0.2",
+    "drizzle-kit": "1.0.0-rc.5",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },
   "dependencies": {
     "@node-rs/argon2": "2.2.2",
     "@simplewebauthn/server": "14.0.3",
+    "drizzle-orm": "1.0.0-rc.5",
     "nodemailer": "10.2.1"
   },
   "engines": {

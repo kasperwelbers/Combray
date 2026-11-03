@@ -135,9 +135,9 @@ Researchers can withdraw a donation for a participant by its id. The server then
 | What | Where | Backups |
 | --- | --- | --- |
 | Envelopes | `data/donations/{project}/{id}` | As long as the institution likes (ciphertext only) |
-| Donation index and tombstones | `data/donations.sqlite` | With the envelopes |
+| Donation index and tombstones | The main database (`COMBRAY_DB`) | With the envelopes |
 | Sealed donation keys | `COMBRAY_DONATION_KEYS_DB`, its own file and volume, `secure_delete` | Short retention, matching the withdrawal promise |
-| Accounts, passkeys, sealed project keys | `COMBRAY_RESEARCH_DB` (`research.sqlite`) | Regular |
+| Accounts, passkeys, sealed project keys | The main database (`COMBRAY_DB`) | Regular |
 
 A donation is one request: `u32 length | sealed donation key (JSON) | envelope`. The server checks that the envelope header names this project, a fresh random id, and the project key's fingerprint, stores the envelope and the key apart, and returns a withdrawal token. On start it re-applies every tombstone to the key database, so restoring an old key backup cannot bring a withdrawn donation back. The envelope format is in [security.md](security.md#donation-envelope).
 

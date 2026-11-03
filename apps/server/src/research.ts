@@ -35,6 +35,7 @@ import {
   type StoredPasskey,
 } from './accounts.ts';
 import { base, type Config, hostOf, originOf, type ResearchConfig } from './config.ts';
+import type { Db } from './db.ts';
 import { DonationFailure, Donations, readHeader } from './donations.ts';
 import { empty, HttpError, json, jsonBody, noStore, type Reply, type Request, str } from './http.ts';
 import { RateLimit } from './limits.ts';
@@ -118,10 +119,10 @@ export class Research {
   readonly recoveryPerResearcher = new RateLimit(5, 3600);
   readonly donationsPerIp = new RateLimit(60, 600);
 
-  constructor(config: Config, research: ResearchConfig) {
+  constructor(config: Config, research: ResearchConfig, main: Db, keys: Db) {
     this.config = research;
-    this.accounts = new Accounts(research.researchDb);
-    this.donations = new Donations(config.dataDir, research.donationKeysDb);
+    this.accounts = new Accounts(main);
+    this.donations = new Donations(main, keys, config.dataDir);
     this.mailer = new Mailer(research.mail);
     this.rpId = research.keysUrl.hostname;
   }

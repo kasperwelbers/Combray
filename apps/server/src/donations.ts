@@ -2,7 +2,7 @@
  * Donation storage, kept in two places on purpose (ADR 0006):
  *
  * - **Envelopes** (ciphertext) as files under `donations/{project}/{id}`, with a small index and the
- *   withdrawal tombstones in `donations.sqlite`. These can be backed up for as long as the
+ *   withdrawal tombstones in the main database. These can be backed up for as long as the
  *   institution likes: without the sealed keys they are unreadable.
  * - **Sealed donation keys** in `donation-keys.sqlite`, a separate file with its own, short backup
  *   retention. Withdrawing deletes the sealed key (with `secure_delete`), which makes every copy of
@@ -16,7 +16,11 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { type Db, all, bytes, one, openDb, run, transaction } from './db.ts';
+import { and, asc, eq } from 'drizzle-orm';
+
+import type { Db } from './db.ts';
+import { donations, tombstones } from './db/schema.ts';
+import { sealedKeys } from './db/keys-schema.ts';
 import { log } from './log.ts';
 import { b64, randomToken, sameBytes, sha256, today, validRandomId } from './util.ts';
 
@@ -77,37 +81,10 @@ export class Donations {
   private readonly keys: Db;
   private readonly envelopes: EnvelopeStore;
 
-  /** Open the index and envelope directory under `dataDir`, and the key database at `keysPath`. */
-  constructor(dataDir: string, keysPath: string) {
-    this.index = openDb(
-      join(dataDir, 'donations.sqlite'),
-      `PRAGMA journal_mode = WAL;
-       CREATE TABLE IF NOT EXISTS donations (
-           id              TEXT PRIMARY KEY,
-           project         TEXT NOT NULL,
-           day             TEXT NOT NULL,
-           bytes           INTEGER NOT NULL,
-           withdrawal_hash BLOB NOT NULL
-       );
-       CREATE INDEX IF NOT EXISTS donations_project ON donations (project);
-       CREATE TABLE IF NOT EXISTS tombstones (
-           id      TEXT PRIMARY KEY,
-           project TEXT NOT NULL,
-           day     TEXT NOT NULL
-       );`,
-    );
-    this.keys = openDb(
-      keysPath,
-      `PRAGMA journal_mode = WAL;
-       PRAGMA secure_delete = ON;
-       CREATE TABLE IF NOT EXISTS sealed_keys (
-           donation    TEXT PRIMARY KEY,
-           project     TEXT NOT NULL,
-           fingerprint TEXT NOT NULL,
-           enc         BLOB NOT NULL,
-           ciphertext  BLOB NOT NULL
-       );`,
-    );
+  /** The donation index in the main database, sealed keys in the key database, envelopes in `dataDir/donations`. */
+  constructor(index: Db, keys: Db, dataDir: string) {
+    this.index = index;
+    this.keys = keys;
     this.envelopes = new DirectoryStore(join(dataDir, 'donations'));
     this.reapplyWithdrawals();
   }
@@ -115,34 +92,44 @@ export class Donations {
   /** Delete every sealed key that has a tombstone. Runs on start, after a restore. */
   private reapplyWithdrawals(): void {
     let deleted = 0;
-    for (const row of all(this.index, 'SELECT id FROM tombstones')) {
-      deleted += run(this.keys, 'DELETE FROM sealed_keys WHERE donation = ?', row.id);
+    for (const { id } of this.index.select({ id: tombstones.id }).from(tombstones).all()) {
+      deleted += Number(this.keys.delete(sealedKeys).where(eq(sealedKeys.donation, id)).run().changes);
     }
     if (deleted > 0) log.warn({ count: deleted }, 'deleted sealed keys of withdrawn donations (a key database backup was restored?)');
+  }
+
+  private taken(id: string): boolean {
+    return (
+      this.index.select({ id: donations.id }).from(donations).where(eq(donations.id, id)).get() !== undefined ||
+      this.index.select({ id: tombstones.id }).from(tombstones).where(eq(tombstones.id, id)).get() !== undefined
+    );
+  }
+
+  private exists(project: string, id: string): boolean {
+    return this.index.select({ id: donations.id }).from(donations).where(and(eq(donations.id, id), eq(donations.project, project))).get() !== undefined;
   }
 
   /** Store a donation; returns the withdrawal token for the participant's receipt. */
   store(d: NewDonation): string {
     if (!validRandomId(d.id)) throw new Error('donation id');
     const token = randomToken();
-    if (one(this.index, 'SELECT 1 FROM donations WHERE id = ? UNION SELECT 1 FROM tombstones WHERE id = ?', d.id, d.id)) fail('conflict');
+    if (this.taken(d.id)) fail('conflict');
     // The envelope first, then the key, then the index entry that makes it visible.
     this.envelopes.save(d.project, d.id, d.envelope);
-    run(this.keys, 'INSERT INTO sealed_keys (donation, project, fingerprint, enc, ciphertext) VALUES (?, ?, ?, ?, ?)', d.id, d.project, d.keyFingerprint, d.enc, d.ciphertext);
-    run(
-      this.index,
-      'INSERT INTO donations (id, project, day, bytes, withdrawal_hash) VALUES (?, ?, ?, ?, ?)',
-      d.id, d.project, today(), d.envelope.length, sha256(token),
-    );
+    this.keys
+      .insert(sealedKeys)
+      .values({ donation: d.id, project: d.project, fingerprint: d.keyFingerprint, enc: Buffer.from(d.enc), ciphertext: Buffer.from(d.ciphertext) })
+      .run();
+    this.index.insert(donations).values({ id: d.id, project: d.project, day: today(), bytes: d.envelope.length, withdrawalHash: sha256(token) }).run();
     return b64(token);
   }
 
   /** Withdraw a donation: delete its sealed key and envelope, keep a tombstone. */
   private withdraw(project: string, id: string): void {
-    run(this.keys, 'DELETE FROM sealed_keys WHERE donation = ?', id);
-    transaction(this.index, () => {
-      run(this.index, 'DELETE FROM donations WHERE id = ?', id);
-      run(this.index, 'INSERT OR IGNORE INTO tombstones (id, project, day) VALUES (?, ?, ?)', id, project, today());
+    this.keys.delete(sealedKeys).where(eq(sealedKeys.donation, id)).run();
+    this.index.transaction((tx) => {
+      tx.delete(donations).where(eq(donations.id, id)).run();
+      tx.insert(tombstones).values({ id, project, day: today() }).onConflictDoNothing().run();
     });
     this.envelopes.delete(project, id);
   }
@@ -150,34 +137,36 @@ export class Donations {
   /** Withdraw with the participant's withdrawal token. */
   withdrawWithToken(id: string, token: Uint8Array): void {
     if (!validRandomId(id)) fail('not_found');
-    const row = one(this.index, 'SELECT project, withdrawal_hash FROM donations WHERE id = ?', id) ?? fail('not_found');
-    if (!sameBytes(sha256(token), bytes(row.withdrawal_hash)!)) fail('forbidden');
-    this.withdraw(String(row.project), id);
+    const row = this.index.select().from(donations).where(eq(donations.id, id)).get() ?? fail('not_found');
+    if (!sameBytes(sha256(token), row.withdrawalHash)) fail('forbidden');
+    this.withdraw(row.project, id);
   }
 
   /** Withdraw on a participant's behalf, by a researcher of the project. */
   withdrawForProject(project: string, id: string): void {
-    if (!one(this.index, 'SELECT 1 FROM donations WHERE id = ? AND project = ?', id, project)) fail('not_found');
+    if (!this.exists(project, id)) fail('not_found');
     this.withdraw(project, id);
   }
 
   list(project: string): { donations: { id: string; day: string; bytes: number }[]; withdrawn: { id: string; day: string }[] } {
     return {
-      donations: all(this.index, 'SELECT id, day, bytes FROM donations WHERE project = ? ORDER BY day, id', project).map((r) => ({
-        id: String(r.id),
-        day: String(r.day),
-        bytes: Number(r.bytes),
-      })),
-      withdrawn: all(this.index, 'SELECT id, day FROM tombstones WHERE project = ? ORDER BY day, id', project).map((r) => ({
-        id: String(r.id),
-        day: String(r.day),
-      })),
+      donations: this.index
+        .select({ id: donations.id, day: donations.day, bytes: donations.bytes })
+        .from(donations)
+        .where(eq(donations.project, project))
+        .orderBy(asc(donations.day), asc(donations.id))
+        .all(),
+      withdrawn: this.index
+        .select({ id: tombstones.id, day: tombstones.day })
+        .from(tombstones)
+        .where(eq(tombstones.project, project))
+        .orderBy(asc(tombstones.day), asc(tombstones.id))
+        .all(),
     };
   }
 
   envelope(project: string, id: string): Buffer {
-    if (!validRandomId(id)) fail('not_found');
-    if (!one(this.index, 'SELECT 1 FROM donations WHERE id = ? AND project = ?', id, project)) fail('not_found');
+    if (!validRandomId(id) || !this.exists(project, id)) fail('not_found');
     return this.envelopes.read(project, id);
   }
 
@@ -186,8 +175,8 @@ export class Donations {
     const out = [];
     for (const id of ids) {
       if (!validRandomId(id)) continue;
-      const row = one(this.keys, 'SELECT fingerprint, enc, ciphertext FROM sealed_keys WHERE donation = ? AND project = ?', id, project);
-      if (row) out.push({ id, key: String(row.fingerprint), enc: b64(bytes(row.enc)!), ciphertext: b64(bytes(row.ciphertext)!) });
+      const row = this.keys.select().from(sealedKeys).where(and(eq(sealedKeys.donation, id), eq(sealedKeys.project, project))).get();
+      if (row) out.push({ id, key: row.fingerprint, enc: b64(row.enc), ciphertext: b64(row.ciphertext) });
     }
     return out;
   }

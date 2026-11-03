@@ -54,8 +54,8 @@ The server container runs as a non-root user, with a read-only root filesystem, 
 | `COMBRAY_SMTP_URL` | (none) | `smtps://user:password@host:465`, or `smtp://user:password@host:587?tls=required` for STARTTLS |
 | `COMBRAY_MAIL_FROM` | (none) | `Combray <combray@uni.nl>` |
 | `COMBRAY_MAIL_OUTBOX` | (none) | Development only: write mails to this folder instead of sending them |
+| `COMBRAY_DB` | `{data}/combray.sqlite` | The main database: store key records, researchers, passkeys, sessions, members, sealed project keys, the donation index |
 | `COMBRAY_DONATION_KEYS_DB` | `{data}/donation-keys.sqlite` | Sealed donation keys; in compose, on its own volume |
-| `COMBRAY_RESEARCH_DB` | `{data}/research.sqlite` | Researcher accounts, passkeys, members, sealed project keys |
 | `COMBRAY_KEY_BACKUP_RETENTION_DAYS` | `30` | Told to participants as the time within which a withdrawal is complete |
 | `COMBRAY_MAX_DONATION_MB` | `64` | Largest donation the server accepts |
 | `COMBRAY_KEYS_PAGE` | `/app/keys/index.html` in the image | The built key page. The server reads it at start; restart after replacing it |
@@ -67,9 +67,8 @@ Without mail settings, the server starts, but researchers cannot sign in; it log
 
 ```
 combray-data/
-├── combray.sqlite        store key records (no keys without the store master key)
-├── research.sqlite       researchers, passkeys, members, sealed project keys
-├── donations.sqlite      donation index and withdrawal tombstones
+├── combray.sqlite        the main database: store key records (no keys without the store master
+│                         key), researchers, passkeys, members, sealed project keys, donation index
 ├── donations/{project}/  encrypted donation envelopes
 └── projects/             project configs and platform packs
 combray-donation-keys/
@@ -77,6 +76,8 @@ combray-donation-keys/
 secrets/
 └── store-master.key      32 random bytes; every store key is derived from it
 ```
+
+The server creates both databases on first start and applies pending migrations (`apps/server/drizzle/`) whenever it starts, so upgrading is replacing the image and restarting. Back up first.
 
 Nothing in these folders can be opened by the server: donations and their keys are sealed to project keys, which are sealed to researchers, whose keys are locked under their passkeys. A project config's `uploads` lists its upload points; each names a platform pack, such as `google-takeout` or `tiktok` ([tree-decisions.md](tree-decisions.md#upload-points-and-the-nameless-root)). See `deploy/examples/projects/example.json`.
 

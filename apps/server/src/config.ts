@@ -12,8 +12,7 @@ export interface ResearchConfig {
   keysUrl: URL;
   /** The built key page (`apps/keys/dist/index.html`). */
   keysPage: string;
-  researchDb: string;
-  /** Sealed donation keys: keep on its own volume, with short backup retention. */
+  /** Sealed donation keys: a database of its own, with short backup retention (ADR 0006). */
   donationKeysDb: string;
   mail: MailConfig;
   maxDonationBytes: number;
@@ -36,6 +35,7 @@ export interface Config {
   bind: { host: string; port: number };
   webDir: string;
   dataDir: string;
+  /** The main database: store keys, researchers, sessions, projects, the donation index. */
   dbPath: string;
   /** 32 random bytes from which every store's KEK is derived. Kept outside the data directory. */
   storeMasterKeyFile: string;
@@ -93,7 +93,6 @@ export function configFromEnv(): Config {
           publicUrl,
           keysUrl,
           keysPage: env.COMBRAY_KEYS_PAGE ?? 'apps/keys/dist/index.html',
-          researchDb: env.COMBRAY_RESEARCH_DB ?? join(dataDir, 'research.sqlite'),
           donationKeysDb: env.COMBRAY_DONATION_KEYS_DB ?? join(dataDir, 'donation-keys.sqlite'),
           mail: mailFromEnv(),
           maxDonationBytes: int('COMBRAY_MAX_DONATION_MB', 64) * 1024 * 1024,

@@ -156,7 +156,6 @@ export class TestServer {
     masterKey: string;
     outbox: string;
     keysPage: string;
-    researchDb: string;
     donationKeysDb: string;
   };
   private readonly options: ServerOptions;
@@ -180,7 +179,6 @@ export class TestServer {
       masterKey: join(this.dir, 'secrets/store-master.key'),
       outbox: join(this.dir, 'outbox'),
       keysPage: join(this.dir, 'keys.html'),
-      researchDb: join(data, 'research.sqlite'),
       // On its own "volume", as in production.
       donationKeysDb: join(this.dir, 'keys/donation-keys.sqlite'),
     };
@@ -217,7 +215,6 @@ export class TestServer {
         COMBRAY_PUBLIC_URL: `${scheme}://${this.mainHost}`,
         COMBRAY_KEYS_URL: `${scheme}://${this.keysHost}`,
         COMBRAY_KEYS_PAGE: this.paths.keysPage,
-        COMBRAY_RESEARCH_DB: this.paths.researchDb,
         COMBRAY_DONATION_KEYS_DB: this.paths.donationKeysDb,
         COMBRAY_MAX_DONATION_MB: '1',
       });

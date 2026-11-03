@@ -1,40 +1,40 @@
-/** SQLite through Node's built-in driver: no native modules to build or download. */
+/**
+ * The two SQLite databases, through Node's built-in driver (no native modules) and Drizzle. Pending
+ * migrations (drizzle/main, drizzle/keys) are applied when a database is opened.
+ *
+ * Queries and transactions run synchronously on one connection, so a transaction is never
+ * interleaved with another request's statements.
+ */
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
 
-export type Db = DatabaseSync;
-export type Row = Record<string, unknown>;
+import { drizzle, type NodeSQLiteDatabase } from 'drizzle-orm/node-sqlite';
+import { migrate } from 'drizzle-orm/node-sqlite/migrator';
 
-export function openDb(path: string, schema: string): Db {
+export type Db = NodeSQLiteDatabase;
+/** A transaction, for helpers that run inside one. */
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+/** Somewhere to run queries: the database itself or a transaction. */
+export type Queries = Db | Tx;
+
+function open(path: string, migrations: string): Db {
   mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec(schema);
+  const client = new DatabaseSync(path);
+  // WAL lets the operator's commands run next to the server; secure_delete overwrites deleted
+  // rows (withdrawn keys, ended sessions); the busy timeout waits for the other writer.
+  client.exec('PRAGMA journal_mode = WAL; PRAGMA secure_delete = ON; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+  const db = drizzle({ client });
+  migrate(db, { migrationsFolder: fileURLToPath(new URL(migrations, import.meta.url)) });
   return db;
 }
 
-/** Run `work` in a transaction (statements run synchronously, so nothing interleaves). */
-export function transaction<T>(db: Db, work: () => T): T {
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const result = work();
-    db.exec('COMMIT');
-    return result;
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
-  }
-}
+/** The main database: store keys, researchers, sessions, projects, the donation index. */
+export const openMainDb = (path: string): Db => open(path, '../drizzle/main');
 
-export const one = (db: Db, sql: string, ...params: unknown[]): Row | undefined =>
-  db.prepare(sql).get(...(params as never[])) as Row | undefined;
+/** The donation key database, kept apart on purpose (ADR 0006). */
+export const openKeysDb = (path: string): Db => open(path, '../drizzle/keys');
 
-export const all = (db: Db, sql: string, ...params: unknown[]): Row[] =>
-  db.prepare(sql).all(...(params as never[])) as Row[];
-
-/** Run a statement; returns the number of changed rows. */
-export const run = (db: Db, sql: string, ...params: unknown[]): number =>
-  Number(db.prepare(sql).run(...(params as never[])).changes);
-
-export const bytes = (value: unknown): Buffer | undefined =>
-  value instanceof Uint8Array ? Buffer.from(value) : undefined;
+/** The number of rows a write changed. */
+export const changes = (result: { changes: number | bigint }): number => Number(result.changes);

@@ -17,4 +17,3 @@ shots/
 deploy/.env
 # Donations from `pnpm serve` (synthetic only)
 deploy/examples/donations/
-deploy/examples/donations.sqlite*

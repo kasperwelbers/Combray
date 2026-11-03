@@ -13,6 +13,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { Site } from './accounts.ts';
 import { type Config, hostOf, VERSION } from './config.ts';
+import { openKeysDb, openMainDb } from './db.ts';
 import { dispatch, errorReply, HttpError, json, logRequest, noStore, type Reply, type Request, Router, send, serveStatic } from './http.ts';
 import { KeyService, loadStoreMasterKey } from './keys.ts';
 import { log } from './log.ts';
@@ -92,8 +93,9 @@ const KEYS_LIMIT = 64 * 1024;
 
 /** Build the request handler. Fails if a database or the store master key cannot be opened. */
 export function createApp(config: Config): (req: IncomingMessage, res: ServerResponse) => void {
-  const keys = new KeyService(config.dbPath, loadStoreMasterKey(config.storeMasterKeyFile), config.argon2);
-  const research = config.research ? new Research(config, config.research) : undefined;
+  const db = openMainDb(config.dbPath);
+  const keys = new KeyService(db, loadStoreMasterKey(config.storeMasterKeyFile), config.argon2);
+  const research = config.research ? new Research(config, config.research, db, openKeysDb(config.research.donationKeysDb)) : undefined;
   if (research && !research.mailer.enabled) log.warn({}, 'no mail settings: researchers cannot sign in (see docs/deployment.md)');
   const stores = storeHandlers(config, keys);
   const h = research?.handlers(config);

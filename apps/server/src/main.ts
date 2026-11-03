@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Accounts, AccountFailure } from './accounts.ts';
 import { createApp } from './app.ts';
 import { configFromEnv, VERSION } from './config.ts';
+import { openMainDb } from './db.ts';
 import { KeyService, loadStoreMasterKey, RESET_TTL_SECS } from './keys.ts';
 import { log } from './log.ts';
 import { validParticipantId, validProjectId } from './projects.ts';
@@ -42,7 +43,7 @@ function researchers(): void {
     console.error('set COMBRAY_PUBLIC_URL and COMBRAY_KEYS_URL to use researcher accounts');
     process.exit(2);
   }
-  const accounts = new Accounts(research.researchDb);
+  const accounts = new Accounts(openMainDb(config.dbPath));
   const [group, command, a, b] = args;
   try {
     if (group === 'researcher' && command === 'add' && a && !b) {
@@ -73,7 +74,7 @@ function resetLink(project: string, participant: string): void {
     console.error('invalid project or participant id');
     process.exit(2);
   }
-  const keys = new KeyService(config.dbPath, loadStoreMasterKey(config.storeMasterKeyFile), config.argon2);
+  const keys = new KeyService(openMainDb(config.dbPath), loadStoreMasterKey(config.storeMasterKeyFile), config.argon2);
   const token = keys.createResetToken(project, participant);
   const base = (process.env.COMBRAY_PUBLIC_URL ?? '').replace(/\/+$/, '');
   console.log(`${base}/p/${project}/#reset=${token}`);
