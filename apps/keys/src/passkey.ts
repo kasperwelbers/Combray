@@ -10,7 +10,7 @@
  */
 import { fromBase64Url, prfSalt, toBase64Url } from '@combray/seal';
 
-import { api } from './api';
+import { ApiError, api } from './api';
 
 type Json = Record<string, unknown>;
 
@@ -123,11 +123,25 @@ export async function signInWithPasskey(): Promise<{ credentialId: string; prf?:
   const start = await api.post<{ ceremony: string; options: Json }>('/auth/passkey/sign-in/start');
   const credential = (await navigator.credentials.get(requestOptions(start.options, await prfSalt()))) as PublicKeyCredential | null;
   if (!credential) throw new Error('No passkey was used.');
-  const result = await api.post<{ credential_id: string; wrapped_key: string | null }>('/auth/passkey/sign-in/finish', {
-    ceremony: start.ceremony,
-    credential: assertionJson(credential),
-  });
+  let result: { credential_id: string; wrapped_key: string | null };
+  try {
+    result = await api.post('/auth/passkey/sign-in/finish', { ceremony: start.ceremony, credential: assertionJson(credential) });
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'unknown_passkey') forgetPasskey(credential.id);
+    throw e;
+  }
   return { credentialId: result.credential_id, prf: prfOutput(credential), wrapped: result.wrapped_key };
+}
+
+/**
+ * Tell the browser (or password manager) that the server does not know this passkey, so it stops
+ * offering it: the WebAuthn Signal API, where available. Only after a passkey-only sign-in, where
+ * the passkey names its own account: then "unknown" means it no longer exists on this server.
+ */
+function forgetPasskey(credentialId: string): void {
+  const signal = (PublicKeyCredential as unknown as { signalUnknownCredential?: (o: { rpId: string; credentialId: string }) => Promise<void> })
+    .signalUnknownCredential;
+  if (typeof signal === 'function') void signal.call(PublicKeyCredential, { rpId: location.hostname, credentialId }).catch(() => undefined);
 }
 
 /** Use a passkey: signs in, and returns its PRF output and the personal key wrapped under it. */

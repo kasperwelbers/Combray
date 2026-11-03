@@ -255,12 +255,21 @@ describe('signing in with the passkey alone', () => {
     const ada = await setUpResearcher(s, ADA);
     const bob = await setUpResearcher(s, BOB);
     const other = await signInStart(s);
-    const cases: [string, Tamper][] = [
-      ['a bad signature', { badSignature: true }],
-      ['a signature by another key', { signingKey: strangerKey() }],
+    // A passkey the server does not know: on another account, or on none.
+    const unknown: [string, Tamper][] = [
       ["another researcher's user handle", { userHandle: uuidBytes(bob.id) }],
       ['an unknown user handle', { userHandle: fill(3, 16) }],
       ['no user handle', { userHandle: null }],
+    ];
+    for (const [what, tamper] of unknown) {
+      const r = await passkeySignIn(s, ada, tamper);
+      expect(r.status, what).toBe(401);
+      expect(r.json, what).toEqual({ error: 'unknown_passkey' });
+      expect(r.headers['set-cookie'], what).toBeUndefined();
+    }
+    const cases: [string, Tamper][] = [
+      ['a bad signature', { badSignature: true }],
+      ['a signature by another key', { signingKey: strangerKey() }],
       ['another origin', { origin: s.main.origin }],
       ['another RP id', { rpId: 'localhost' }],
       ['the type of a registration', { type: 'webauthn.create' }],
@@ -278,12 +287,12 @@ describe('signing in with the passkey alone', () => {
     const stranger = authenticatorFor(s);
     stranger.register({ publicKey: { challenge: b64(fill(1, 32)), user: { id: b64(uuidBytes(ada.id)) } } });
     const start = await signInStart(s);
-    const unknown = await s.keys.post('/api/v1/auth/passkey/sign-in/finish', {
+    const never = await s.keys.post('/api/v1/auth/passkey/sign-in/finish', {
       ceremony: start.ceremony,
       credential: stranger.assert(start.options),
     });
-    expect(unknown.status).toBe(401);
-    expect(unknown.json).toEqual({ error: 'passkey_rejected' });
+    expect(never.status).toBe(401);
+    expect(never.json).toEqual({ error: 'unknown_passkey' });
 
     // And after all that, the real passkey still works.
     expect((await passkeySignIn(s, ada)).status).toBe(200);
@@ -354,7 +363,7 @@ describe('signing in with the passkey alone', () => {
     expect((await s.keys.get('/api/v1/me', ada.session)).status, 'sessions end').toBe(401);
     const r = await passkeySignIn(s, ada);
     expect(r.status).toBe(401);
-    expect(r.json).toEqual({ error: 'passkey_rejected' });
+    expect(r.json).toEqual({ error: 'unknown_passkey' });
   });
 });
 

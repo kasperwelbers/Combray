@@ -469,6 +469,8 @@ export class Research {
         if (!challenge) throw fail(400, 'no_ceremony');
         const credential = credentialOf(body);
         const passkey = call(() => r.accounts.passkeys(who.researcherId)).find((p) => p.id === credential.id);
+        // Not one of this researcher's passkeys. Deliberately not `unknown_passkey`: it may well be a
+        // colleague's passkey on a shared computer, which the browser must not be told to forget.
         if (!passkey) throw fail(401, 'passkey_rejected');
         const used = await verifyPasskey(credential, challenge, passkey);
         call(() => r.accounts.passkeyUsed(who.researcherId, used));
@@ -504,9 +506,12 @@ export class Research {
         // Passkeys are registered with the researcher id as their user handle.
         const handle = fromB64(response.userHandle);
         const id = handle ? uuidFromBytes(handle) : undefined;
-        if (!id) throw fail(401, 'passkey_rejected');
+        // A passkey the server does not know (for example from an account that was reset, or from
+        // another server): the key page tells the browser, which can then stop offering it.
+        // Credential ids are random, so saying so reveals nothing about who has an account.
+        if (!id) throw fail(401, 'unknown_passkey');
         const passkey = call(() => r.accounts.passkeys(id)).find((p) => p.id === credential.id);
-        if (!passkey) throw fail(401, 'passkey_rejected');
+        if (!passkey) throw fail(401, 'unknown_passkey');
         const used = await verifyPasskey(credential, challenge, passkey);
         call(() => r.accounts.passkeyUsed(id, used));
         const wrapped = call(() => r.accounts.wrappedMaster(id, used.id));

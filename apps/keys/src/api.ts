@@ -20,6 +20,8 @@ function describe(status: number, code: string): string {
       return 'Too many attempts. Please wait a while and try again.';
     case 'wrong_recovery_code':
       return 'That recovery code does not match your account.';
+    case 'unknown_passkey':
+      return 'This passkey is not linked to an account on this server: it may be from an earlier account, or from another server. Sign in with an email code below to set up a new passkey.';
     case 'passkey_rejected':
       return 'The server did not accept this passkey.';
     case 'not_signed_in':

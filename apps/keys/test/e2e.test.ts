@@ -265,6 +265,11 @@ describe.skipIf(!enabled)('key page', () => {
     const ada2 = await startOver('ada@uni.example');
     await ada2.page.getByRole('heading', { name: 'Create your passkey' }).waitFor();
     await ada2.context.close();
+    // Her first browser still holds her old passkey, which the server no longer knows: the page
+    // says so, instead of a bare refusal.
+    await ada.page.goto(KEYS);
+    await ada.page.getByRole('button', { name: 'Sign in with your passkey' }).click();
+    await ada.page.getByText('This passkey is not linked to an account on this server').waitFor();
     // Now Bob is the only one with access: starting over would lose willow's donations.
     const bob2 = await startOver('bob@uni.example');
     await bob2.page.getByText('You are the only researcher with access to these projects').waitFor();
