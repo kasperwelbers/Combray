@@ -563,6 +563,50 @@ async fn the_studio_signs_in_with_an_email_code_for_a_long_session_without_keys(
 }
 
 #[tokio::test]
+async fn passkey_sign_in_starts_without_a_session_and_needs_its_ceremony() {
+    let f = Fixture::new();
+    let (status, _, body) = f
+        .json(
+            Method::POST,
+            KEYS,
+            "/api/v1/auth/passkey/sign-in/start",
+            None,
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["ceremony"].as_str().unwrap().len() >= 43);
+    let options = &body["options"]["publicKey"];
+    assert!(options["challenge"].is_string());
+    assert_eq!(options["userVerification"], "required");
+    // The browser offers whichever passkeys it has for the key page.
+    assert!(options.get("allowCredentials").is_none_or(|c| c.as_array().unwrap().is_empty()));
+
+    let (status, _, _) = f
+        .json(
+            Method::POST,
+            KEYS,
+            "/api/v1/auth/passkey/sign-in/finish",
+            None,
+            Some(json!({ "ceremony": b64(&[7u8; 32]), "credential": {} })),
+        )
+        .await;
+    assert!(status.is_client_error());
+
+    // Not on the main site.
+    let (status, _, _) = f
+        .json(
+            Method::POST,
+            MAIN,
+            "/api/v1/auth/passkey/sign-in/start",
+            None,
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn sign_in_emails_are_rate_limited_per_address() {
     let f = Fixture::new();
     for _ in 0..3 {

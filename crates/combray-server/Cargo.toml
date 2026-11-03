@@ -23,7 +23,8 @@ getrandom = "0.4.3"
 subtle = "2.6.1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 regex = "1.13.1"
-webauthn-rs = "0.6"
+# conditional-ui: discoverable passkey sign-in (start/identify/finish_discoverable_authentication).
+webauthn-rs = { version = "0.6", features = ["conditional-ui"] }
 lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "builder", "tokio1", "tokio1-native-tls", "hostname"] }
 url = "2.5.8"
 tower = { version = "0.5", features = ["util"] }

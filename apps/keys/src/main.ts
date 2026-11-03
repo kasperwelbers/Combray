@@ -26,7 +26,7 @@ import {
 import { type Me, type Member, type Project, type ProjectSummary, type Site, ApiError, api, projectName } from './api';
 import { answersCsv, openAll, safeFileName, toCsv } from './decrypt';
 import { action, download, h, message, show } from './dom';
-import { authenticate, passkeysAvailable, register } from './passkey';
+import { authenticate, passkeysAvailable, register, signInWithPasskey } from './passkey';
 import * as vault from './vault';
 
 let site: Site = { researchers: true, public_url: '', keys_url: location.origin };
@@ -34,6 +34,26 @@ let site: Site = { researchers: true, public_url: '', keys_url: location.origin 
 // Screens before sign-in.
 
 function signInScreen(note?: string) {
+  show(
+    h('h1', {}, 'Sign in to your keys'),
+    note && h('p', { class: 'notice' }, note),
+    h('p', {}, 'This page holds the keys to your projects’ donations. Sign in with your passkey.'),
+    !passkeysAvailable() && noPasskeys(),
+    action('Sign in with your passkey', async () => {
+      const used = await signInWithPasskey();
+      await unlockWith(await api.get<Me>('/me'), used);
+    }),
+    h(
+      'p',
+      { class: 'meta' },
+      'First time here, no passkey on this device, or lost it? ',
+      h('button', { type: 'button', class: 'link', onclick: () => emailScreen() }, 'Sign in with an email code'),
+    ),
+    h('p', { class: 'meta' }, 'Researcher accounts are created by your server operator or by a colleague on a project.'),
+  );
+}
+
+function emailScreen(note?: string) {
   const email = h('input', { type: 'email', id: 'email', autocomplete: 'email', required: true });
   const status = h('p', { role: 'status' });
   const form = h(
@@ -55,11 +75,11 @@ function signInScreen(note?: string) {
     }
   });
   show(
-    h('h1', {}, 'Sign in to Combray'),
+    h('h1', {}, 'Sign in with an email code'),
     note && h('p', { class: 'notice' }, note),
-    h('p', {}, 'This page holds the keys to your projects. You sign in with a code by email and then with your passkey.'),
+    h('p', {}, 'We email you a code. After it, you set up or use your passkey, or your recovery code.'),
     form,
-    h('p', { class: 'meta' }, 'Researcher accounts are created by your server operator or by a colleague on a project.'),
+    h('p', { class: 'meta' }, h('button', { type: 'button', class: 'link', onclick: () => signInScreen() }, 'Back to signing in with a passkey')),
   );
 }
 
@@ -100,7 +120,7 @@ function codeScreen(address: string) {
     site.mail_outbox &&
       h('p', { class: 'notice' }, 'This is a development server: it does not send mail, but writes it to a folder (target/dev/outbox with pnpm serve).'),
     form,
-    h('p', { class: 'meta' }, h('button', { type: 'button', class: 'quiet', onclick: () => signInScreen() }, 'Use another address or send a new code')),
+    h('p', { class: 'meta' }, h('button', { type: 'button', class: 'quiet', onclick: () => emailScreen() }, 'Use another address or send a new code')),
   );
   code.focus();
 }
@@ -118,11 +138,31 @@ function createPasskeyScreen(me: Me) {
   show(
     h('h1', {}, 'Create your passkey'),
     h('p', {}, `Welcome, ${me.email}. A passkey replaces a password: you unlock it with your fingerprint, face or device PIN.`),
+    h('h2', {}, 'Your passkey holds the key to your projects’ donations'),
     h(
       'p',
       {},
-      'We recommend a passkey that syncs: in iCloud Keychain, Google Password Manager or a password manager such as 1Password. ',
-      'Then losing a phone does not lose your keys. When your browser asks, you can also choose your phone and scan the QR code.',
+      'Your passkey does two things: it signs you in, and it unlocks the key that opens the donations in your projects. ',
+      'Only researchers on a project can read its donations. Not the server, and not whoever runs it. Your data stays safe even if the server is broken into.',
+    ),
+    h('p', {}, 'This also means the server cannot get your key back for you. To make sure you never lose access:'),
+    h(
+      'ul',
+      {},
+      h('li', {}, h('strong', {}, 'Keep your recovery code safe. '), 'You get it in the next step. With it you can set up a new passkey and keep everything.'),
+      h(
+        'li',
+        {},
+        h('strong', {}, 'Add a colleague to each project. '),
+        'Once they have set up their own passkey and you have given them access, they can give you access again if you ever lose both your passkey and your recovery code.',
+      ),
+    ),
+    h('h2', {}, 'Which passkey'),
+    h(
+      'p',
+      {},
+      'Best is a passkey that syncs: in iCloud Keychain, Google Password Manager or a password manager such as 1Password. ',
+      'Then losing a phone does not lose your keys. You can also choose your phone and scan the QR code when your browser asks.',
     ),
     !passkeysAvailable() && noPasskeys(),
     h('label', { for: 'passkey-name' }, 'A name for this passkey, so you can tell it apart later'),
@@ -216,7 +256,7 @@ function recoveryFile(email: string, code: string): string {
 function secondStepScreen(me: Me) {
   show(
     h('h1', {}, 'Use your passkey'),
-    h('p', {}, `Signed in by email as ${me.email}. Now confirm it is you with your passkey.`),
+    h('p', {}, me.signed_in ? `Signed in as ${me.email}. Unlock your keys with your passkey.` : `Signed in by email as ${me.email}. Now confirm it is you with your passkey.`),
     !passkeysAvailable() && noPasskeys(),
     action('Use passkey', async () => {
       const used = await authenticate();
@@ -336,8 +376,9 @@ async function openStudio() {
 }
 
 async function signOut() {
+  // End the session first: locking re-renders the page, which must already find it signed out.
+  await api.post('/auth/logout').catch(() => undefined);
   vault.lock();
-  await api.post('/auth/logout');
   signInScreen();
 }
 

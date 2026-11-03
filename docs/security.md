@@ -284,7 +284,7 @@ The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participan
 
 | | Email level | Full |
 | --- | --- | --- |
-| How | Emailed 8-digit code, typed in the browser that asked for it (10 minutes, single use, 5 tries) | Key site: passkey, or recovery code, after the email level. Studio: the email code alone, or a handoff from the key site |
+| How | Emailed 8-digit code, typed in the browser that asked for it (10 minutes, single use, 5 tries) | Key site: a passkey alone, or the passkey or recovery code after the email level. Studio: the email code alone, or a handoff from the key site |
 | Lasts | 15 minutes | 2 hours on the key site; 30 days for a studio session |
 | Can | Register or use a passkey, use the recovery code | Everything the researcher may do on that site |
 
@@ -299,7 +299,7 @@ The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participan
 
 ### Passkeys
 
-`webauthn-rs` checks registrations and assertions (user verification required, discoverable credentials, at most ten per researcher). Ceremony state is kept in server memory for five minutes and used once. The page asks for the PRF extension on every ceremony with the salt `SHA-256("combray/prf-salt/v1")`. The JSON sent to the server is built by hand, with `extensions: {}`: the PRF output is never serialised. (`PublicKeyCredential.toJSON()` would include client extension results, so the page does not use it.)
+`webauthn-rs` checks registrations and assertions (user verification required, at most ten per researcher). The page asks for discoverable credentials (`residentKey: "preferred"`), so a passkey alone can sign in: that flow uses `webauthn-rs`'s discoverable authentication (its `conditional-ui` feature), with no session before it. The server reads the researcher id from the credential's user handle, looks up that researcher's passkey by credential id, and has `webauthn-rs` verify the assertion against it; an unknown user or credential is rejected like a bad signature. Starting such a sign-in is unauthenticated, so it is rate limited (60 per IP per 10 minutes) and the server holds at most 10,000 ceremonies at once. Ceremony state is kept in server memory for five minutes and used once; a passkey-only sign-in has its own random ceremony id instead of a session. The page asks for the PRF extension on every ceremony with the salt `SHA-256("combray/prf-salt/v1")`. The JSON sent to the server is built by hand, with `extensions: {}`: the PRF output is never serialised. (`PublicKeyCredential.toJSON()` would include client extension results, so the page does not use it.)
 
 ### Constructions
 

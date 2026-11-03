@@ -104,6 +104,7 @@ async function researcherBrowser(): Promise<{ context: BrowserContext; page: Pag
 
 async function signInByEmail(page: Page, email: string) {
   await page.goto(KEYS);
+  await page.getByRole('button', { name: 'Sign in with an email code' }).click();
   await page.getByLabel('Your email address').fill(email);
   await page.getByRole('button', { name: 'Email me a sign-in code' }).click();
   await page.getByRole('heading', { name: 'Check your email' }).waitFor();
@@ -162,6 +163,12 @@ describe.skipIf(!enabled)('key page', () => {
     expect((await link.textContent())!.endsWith(config.donation_key.fingerprint)).toBe(true);
   }, 60_000);
 
+  it('signs in again with the passkey alone', async () => {
+    await ada.page.getByRole('button', { name: 'Sign out' }).click();
+    await ada.page.getByRole('button', { name: 'Sign in with your passkey' }).click();
+    await ada.page.getByRole('heading', { name: 'Your keys' }).waitFor();
+  }, 30_000);
+
   it('opens a donation and exports it as CSV', async () => {
     const config = await (await fetch(`${MAIN}/api/v1/p/willow/config`)).json();
     const payload = encodePayload({
@@ -194,7 +201,8 @@ describe.skipIf(!enabled)('key page', () => {
   it.skipIf(!hasWeb)('opens the studio with a one-time handoff, without key material', async () => {
     const page = ada.page;
     await page.getByRole('button', { name: 'Open the studio' }).click();
-    await page.getByText('Signed in as ada@uni.example.').waitFor();
+    await page.getByRole('heading', { name: 'Your projects' }).waitFor();
+    await page.getByText('Signed in as ada@uni.example').waitFor();
     await page.getByText('ready for donations').waitFor();
     expect(page.url()).toBe(`${MAIN}/studio/`);
     // The studio session cannot fetch envelopes or keys: those are for the key page only.

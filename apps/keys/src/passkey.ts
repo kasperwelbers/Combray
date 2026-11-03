@@ -23,6 +23,13 @@ export function creationOptions(json: Json, salt: Uint8Array<ArrayBuffer>): Cred
   return {
     publicKey: {
       ...(o as unknown as PublicKeyCredentialCreationOptions),
+      // Ask for a discoverable passkey, so researchers can sign in with it alone. Synced passkeys
+      // always are; a security key that cannot be still works after the email code.
+      authenticatorSelection: {
+        ...((o.authenticatorSelection as AuthenticatorSelectionCriteria | undefined) ?? {}),
+        residentKey: 'preferred',
+        requireResidentKey: false,
+      },
       challenge: bin(o.challenge),
       user: { ...(user as unknown as PublicKeyCredentialUserEntity), id: bin(user.id) },
       excludeCredentials: ((o.excludeCredentials as Json[] | undefined) ?? []).map((c) => ({
@@ -109,6 +116,18 @@ export async function register(name: string): Promise<{ credentialId: string; pr
   const ext = credential.getClientExtensionResults() as { prf?: { enabled?: boolean } };
   const prf = prfOutput(credential);
   return { credentialId: credential_id, prf, prfEnabled: !!prf || ext.prf?.enabled === true };
+}
+
+/** Sign in with a passkey alone (no email code first). Returns what `authenticate` returns. */
+export async function signInWithPasskey(): Promise<{ credentialId: string; prf?: Uint8Array<ArrayBuffer>; wrapped: string | null }> {
+  const start = await api.post<{ ceremony: string; options: Json }>('/auth/passkey/sign-in/start');
+  const credential = (await navigator.credentials.get(requestOptions(start.options, await prfSalt()))) as PublicKeyCredential | null;
+  if (!credential) throw new Error('No passkey was used.');
+  const result = await api.post<{ credential_id: string; wrapped_key: string | null }>('/auth/passkey/sign-in/finish', {
+    ceremony: start.ceremony,
+    credential: assertionJson(credential),
+  });
+  return { credentialId: result.credential_id, prf: prfOutput(credential), wrapped: result.wrapped_key };
 }
 
 /** Use a passkey: signs in, and returns its PRF output and the personal key wrapped under it. */

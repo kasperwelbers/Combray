@@ -35,8 +35,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use url::Url;
 use webauthn_rs::prelude::{
-    PasskeyAuthentication, PasskeyRegistration, PublicKeyCredential, RegisterPublicKeyCredential,
-    Uuid,
+    DiscoverableAuthentication, PasskeyAuthentication, PasskeyRegistration, PublicKeyCredential,
+    RegisterPublicKeyCredential, Uuid,
 };
 use webauthn_rs::{Webauthn, WebauthnBuilder};
 
@@ -132,7 +132,12 @@ fn decode_b64(value: &str) -> Result<Vec<u8>, ApiError> {
 enum Ceremony {
     Register(PasskeyRegistration),
     Authenticate(PasskeyAuthentication),
+    /// Sign-in with a passkey alone, before there is a session.
+    Discover(DiscoverableAuthentication),
 }
+
+/// Passkey sign-ins that may be in progress at once, so unauthenticated starts cannot fill memory.
+const MAX_CEREMONIES: usize = 10_000;
 
 pub struct Research {
     pub accounts: Accounts,
@@ -145,6 +150,7 @@ pub struct Research {
     ceremonies: Mutex<HashMap<Vec<u8>, (Instant, Ceremony)>>,
     email_per_ip: RateLimit<IpAddr>,
     email_per_address: RateLimit<Vec<u8>>,
+    passkey_per_ip: RateLimit<IpAddr>,
     recovery_per_researcher: RateLimit<String>,
     donations_per_ip: RateLimit<IpAddr>,
 }
@@ -197,6 +203,7 @@ impl Research {
             ceremonies: Mutex::new(HashMap::new()),
             email_per_ip: RateLimit::new(20, Duration::from_secs(600)),
             email_per_address: RateLimit::new(3, Duration::from_secs(900)),
+            passkey_per_ip: RateLimit::new(60, Duration::from_secs(600)),
             recovery_per_researcher: RateLimit::new(5, Duration::from_secs(3600)),
             donations_per_ip: RateLimit::new(60, Duration::from_secs(600)),
         })
@@ -293,16 +300,27 @@ impl Research {
     }
 
     fn put_ceremony(&self, session: &Session, ceremony: Ceremony) -> Result<(), ApiError> {
+        self.put_ceremony_at(session.key.clone(), ceremony)
+    }
+
+    fn put_ceremony_at(&self, key: Vec<u8>, ceremony: Ceremony) -> Result<(), ApiError> {
         let mut map = self.ceremonies.lock().map_err(|_| internal("lock"))?;
         let now = Instant::now();
         map.retain(|_, (start, _)| now.duration_since(*start) < CEREMONY_TTL);
-        map.insert(session.key.clone(), (now, ceremony));
+        if map.len() >= MAX_CEREMONIES {
+            return Err(fail(StatusCode::SERVICE_UNAVAILABLE, "busy"));
+        }
+        map.insert(key, (now, ceremony));
         Ok(())
     }
 
     fn take_ceremony(&self, session: &Session) -> Option<Ceremony> {
+        self.take_ceremony_at(&session.key)
+    }
+
+    fn take_ceremony_at(&self, key: &[u8]) -> Option<Ceremony> {
         let mut map = self.ceremonies.lock().ok()?;
-        let (start, ceremony) = map.remove(&session.key)?;
+        let (start, ceremony) = map.remove(key)?;
         (start.elapsed() < CEREMONY_TTL).then_some(ceremony)
     }
 
@@ -648,6 +666,83 @@ pub async fn finish_authentication(who: Started, Json(body): Json<AuthenticateBo
         &who.session,
         Json(json!({ "credential_id": credential_id, "wrapped_key": wrapped })).into_response(),
     )
+}
+
+/// Ceremonies of passkey sign-ins without a session are kept under their own keys, apart from
+/// session keys (which are SHA-256 hashes, 32 bytes).
+fn discover_key(id: &[u8]) -> Vec<u8> {
+    [b"discover/".as_slice(), id].concat()
+}
+
+/// Start signing in with a passkey alone: the browser offers the researcher's passkeys for the key
+/// page, and the server learns from the answer whose it is. Returns a ceremony id with the options.
+pub async fn start_passkey_sign_in(
+    State(state): State<AppState>,
+    caller: Caller,
+    headers: HeaderMap,
+    peer: Option<axum::Extension<ConnectInfo<SocketAddr>>>,
+) -> ApiResult {
+    caller.keys_only()?;
+    let r = &caller.r;
+    r.passkey_per_ip
+        .hit(client_ip(&state.config, &headers, peer))
+        .map_err(too_many)?;
+    let (options, ceremony) = r
+        .webauthn
+        .start_discoverable_authentication()
+        .map_err(|_| internal("webauthn"))?;
+    let id = random_token().map_err(|_| internal("random"))?;
+    r.put_ceremony_at(discover_key(&id), Ceremony::Discover(ceremony))?;
+    Ok(no_store(
+        Json(json!({ "ceremony": b64(&id), "options": options })).into_response(),
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct PasskeySignInBody {
+    ceremony: String,
+    credential: PublicKeyCredential,
+}
+
+/// Finish signing in with a passkey alone: a full key page session, and the personal key wrapped
+/// under this passkey (as after the email code and passkey).
+pub async fn finish_passkey_sign_in(
+    caller: Caller,
+    Json(body): Json<PasskeySignInBody>,
+) -> ApiResult {
+    caller.keys_only()?;
+    let r = &caller.r;
+    let ceremony_id = decode_b64(&body.ceremony)?;
+    let Some(Ceremony::Discover(ceremony)) = r.take_ceremony_at(&discover_key(&ceremony_id)) else {
+        return Err(fail(StatusCode::BAD_REQUEST, "no_ceremony"));
+    };
+    let rejected = || fail(StatusCode::UNAUTHORIZED, "passkey_rejected");
+    let (user, cred_id) = r
+        .webauthn
+        .identify_discoverable_authentication(&body.credential)
+        .map_err(|_| rejected())?;
+    // Passkeys are registered with the researcher id as their user handle.
+    let id = user.to_string();
+    let mut passkeys = r.accounts.passkeys(&id).map_err(|_| rejected())?;
+    let passkey = passkeys
+        .iter_mut()
+        .find(|p| AsRef::<[u8]>::as_ref(p.cred_id()) == cred_id)
+        .ok_or_else(rejected)?;
+    let result = r
+        .webauthn
+        .finish_discoverable_authentication_v2(&body.credential, ceremony, &*passkey)
+        .map_err(|_| rejected())?;
+    passkey.update_credential(&result);
+    r.accounts.passkey_used(&id, passkey)?;
+    let credential_id = b64(passkey.cred_id().as_ref());
+    let wrapped = r.accounts.wrapped_master(&id, &credential_id)?;
+    let token = r.accounts.create_session(&id, Site::Keys, Level::Full)?;
+    Ok(r.with_cookie(
+        Site::Keys,
+        &token,
+        Level::Full,
+        Json(json!({ "credential_id": credential_id, "wrapped_key": wrapped })).into_response(),
+    ))
 }
 
 #[derive(Deserialize)]

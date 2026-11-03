@@ -462,6 +462,11 @@ pub fn app(config: Config) -> std::io::Result<Router> {
             "/auth/passkey/register/finish",
             post(research::finish_registration),
         )
+        .route("/auth/passkey/sign-in/start", post(research::start_passkey_sign_in))
+        .route(
+            "/auth/passkey/sign-in/finish",
+            post(research::finish_passkey_sign_in),
+        )
         .route("/auth/passkey/start", post(research::start_authentication))
         .route(
             "/auth/passkey/finish",
