@@ -300,6 +300,47 @@ function recoveryScreen(me: Me, signIn: boolean) {
       if (signIn) return newPasskeyAfterRecovery(me);
       return home();
     }),
+    signIn && h('p', { class: 'meta' }, h('button', { type: 'button', class: 'link', onclick: () => resetScreen() }, 'I lost my recovery code too')),
+  );
+}
+
+/** Lost both passkey and recovery code: start over with a new key, if colleagues can give access again. */
+function resetScreen() {
+  const result = h('div', {});
+  show(
+    h('h1', {}, 'Start over with a new key'),
+    h('p', {}, 'If you have lost both your passkey and your recovery code, you can set up a new key. This is what happens:'),
+    h(
+      'ul',
+      {},
+      h('li', {}, 'Your old passkeys and key stop working, and you are signed out everywhere.'),
+      h('li', {}, 'You create a new passkey and get a new recovery code.'),
+      h('li', {}, 'A colleague on each of your projects gives you access again, after you compare a short code with them.'),
+    ),
+    h('p', {}, 'This only works if another researcher on each of your projects has access. We check that first, so nothing is lost.'),
+    action('Start over with a new key', async () => {
+      result.replaceChildren();
+      try {
+        await api.post('/me/reset-key');
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.code !== 'sole_access') throw e;
+        const projects = (e.details.projects as { id: string; name: unknown }[] | undefined) ?? [];
+        result.replaceChildren(
+          h('p', { class: 'notice' }, 'You are the only researcher with access to these projects, so starting over would make their donations unreadable for good:'),
+          h('ul', {}, ...projects.map((p) => h('li', {}, projectName(p.name, p.id)))),
+          h(
+            'p',
+            {},
+            'Look for your recovery code once more: as a file named combray-recovery-code.txt, or on paper. ',
+            'If it is really gone, your server operator can reset your key, but nobody will be able to open these projects’ donations again.',
+          ),
+        );
+        return;
+      }
+      createPasskeyScreen(await api.get<Me>('/me'));
+    }),
+    result,
+    h('p', { class: 'meta' }, h('button', { type: 'button', class: 'link', onclick: () => signInScreen() }, 'Back to signing in')),
   );
 }
 

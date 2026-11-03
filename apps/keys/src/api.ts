@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
+    /** The whole error answer, for errors that carry more than a code. */
+    public details: Record<string, unknown> = {},
   ) {
     super(describe(status, code));
     this.name = 'ApiError';
@@ -24,6 +26,8 @@ function describe(status: number, code: string): string {
       return 'Your session has ended. Please sign in again.';
     case 'mail_disabled':
       return 'This server cannot send email yet. Ask the server operator to set it up.';
+    case 'sole_access':
+      return 'You are the only researcher with access to some of your projects.';
     case 'conflict':
       return 'This was already done, or conflicts with what is there.';
     default:
@@ -40,8 +44,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
-    const error = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new ApiError(response.status, error.error ?? 'unknown');
+    const error = (await response.json().catch(() => ({}))) as { error?: string } & Record<string, unknown>;
+    throw new ApiError(response.status, error.error ?? 'unknown', error);
   }
   if (response.status === 204 || response.status === 201 || response.status === 202) return undefined as T;
   const type = response.headers.get('content-type') ?? '';

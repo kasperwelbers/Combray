@@ -607,6 +607,68 @@ async fn passkey_sign_in_starts_without_a_session_and_needs_its_ceremony() {
 }
 
 #[tokio::test]
+async fn researchers_reset_their_own_key_unless_they_alone_have_access() {
+    let f = Fixture::new();
+    let ada = researcher(&f, "ada@uni.nl", &[1u8; 32]);
+    let accounts = f.accounts();
+    accounts.add_member("willow", &ada).unwrap();
+    accounts
+        .create_project_key("willow", &ada, &[5; PUBLIC_KEY_BYTES], "fp", b"e", b"c")
+        .unwrap();
+    let full = sign_in(&f, "ada@uni.nl", &[1u8; 32]).await;
+
+    // Lost passkey and recovery code: only the email code.
+    let login = request_code(&f, "ada@uni.nl").await;
+    let code = wait_for_code(&f, "ada@uni.nl").await;
+    let (_, headers, _) = verify_code(&f, Some(&login), &code).await;
+    let email = set_cookie(&headers);
+
+    let (status, _, body) = f
+        .json(Method::POST, KEYS, "/api/v1/me/reset-key", Some(&email), Some(json!({})))
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "Ada alone can open willow");
+    assert_eq!(body["error"], "sole_access");
+    assert_eq!(body["projects"][0]["id"], "willow");
+    assert_eq!(accounts.membership("willow", &ada).unwrap(), Some(true));
+
+    // With Bob on the project, Ada can reset; Bob can give her access again.
+    let bob = researcher(&f, "bob@uni.nl", &[2u8; 32]);
+    accounts.add_member("willow", &bob).unwrap();
+    accounts.grant("willow", &ada, &bob, b"e", b"c").unwrap();
+    let (status, headers, _) = f
+        .json(Method::POST, KEYS, "/api/v1/me/reset-key", Some(&email), Some(json!({})))
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let after = set_cookie(&headers);
+    assert_eq!(accounts.membership("willow", &ada).unwrap(), Some(false));
+    assert_eq!(accounts.membership("willow", &bob).unwrap(), Some(true));
+
+    // Her old sessions are gone; the new one is at the email level, without a key.
+    for cookie in [&full, &email] {
+        let (status, _, _) = f
+            .json(Method::GET, KEYS, "/api/v1/me", Some(cookie), None)
+            .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+    let (status, _, me) = f
+        .json(Method::GET, KEYS, "/api/v1/me", Some(&after), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(me["signed_in"], false);
+    assert!(me["public_key"].is_null(), "{me}");
+    assert!(me["passkeys"].as_array().unwrap().is_empty());
+
+    // And she is told by mail.
+    for _ in 0..100 {
+        if f.outbox().iter().any(|m| m.starts_with("To: ada@uni.nl\n") && m.contains("was reset")) {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("no mail about the reset");
+}
+
+#[tokio::test]
 async fn sign_in_emails_are_rate_limited_per_address() {
     let f = Fixture::new();
     for _ in 0..3 {

@@ -250,8 +250,29 @@ describe.skipIf(!enabled)('key page', () => {
     await lost.context.close();
   }, 60_000);
 
+  it('starts over with a new key, but not while alone with access', async () => {
+    const startOver = async (email: string) => {
+      const b = await researcherBrowser();
+      await signInByEmail(b.page, email);
+      await b.page.getByRole('button', { name: 'I lost my passkey: use my recovery code' }).click();
+      await b.page.getByRole('button', { name: 'I lost my recovery code too' }).click();
+      await b.page.getByRole('button', { name: 'Start over with a new key' }).click();
+      return b;
+    };
+    // Bob also has access to willow, so Ada can start over; Bob can give her access again.
+    const ada2 = await startOver('ada@uni.example');
+    await ada2.page.getByRole('heading', { name: 'Create your passkey' }).waitFor();
+    await ada2.context.close();
+    // Now Bob is the only one with access: starting over would lose willow's donations.
+    const bob2 = await startOver('bob@uni.example');
+    await bob2.page.getByText('You are the only researcher with access to these projects').waitFor();
+    await bob2.page.getByText('Willow study').waitFor();
+    await bob2.context.close();
+  }, 90_000);
+
   it('ran without CSP violations or script errors', () => {
-    // 401: probing for a session; 404: the studio probing for key routes it must not have.
-    expect(consoleErrors.filter((e) => !/status of 40[14]/.test(e))).toEqual([]);
+    // 401: probing for a session; 404: the studio probing for key routes it must not have;
+    // 409: refusing to start over while alone with access.
+    expect(consoleErrors.filter((e) => !/status of 40[149]/.test(e))).toEqual([]);
   });
 });

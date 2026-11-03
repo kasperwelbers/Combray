@@ -39,6 +39,7 @@ The participant's data download package, and everything derived from it, stays o
 | A malicious importer script | A shared importer tries to exfiltrate | A QuickJS sandbox with no network or DOM (see [plugins.md](plugins.md)). |
 | Someone with the server's databases | Reads donations and keys | Envelopes and donation keys are sealed to the project key, which the server holds only sealed to researchers' personal keys, which it holds only locked under their passkeys. |
 | Someone with a researcher's email | Requests a sign-in code | The code only works in the browser that asked for it, and only allows using a passkey or the recovery code. It cannot open keys or reach donations. |
+| Someone with a researcher's email | Starts over on their account (new key) | Locks the researcher out until they start over themselves, and the researcher is mailed. Gets no access: colleagues give access only after comparing key codes with the real person, and starting over is refused while the researcher alone has access to a project. |
 | A bug or XSS in the participant app or studio | Tries to reach researcher keys | Keys exist only on the key page, on another origin. The studio session gets no key material, and the main site has no key routes. The studio shares the main site's origin with the participant app, so such a bug could use a signed-in researcher's studio session: list their projects and donation counts. |
 
 **Out of scope**, stated honestly:

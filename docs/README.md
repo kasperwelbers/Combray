@@ -23,7 +23,7 @@ Suggested reading order:
 11. [translation.md](translation.md): how participant-facing text is translated, by people or with AI
 12. [roadmap.md](roadmap.md) and [open-questions.md](open-questions.md)
 
-Decision records live in [decisions/](decisions/): [0001 server language](decisions/0001-server-language.md), [0002 modular components](decisions/0002-modular-components.md), [0003 TypeScript core and key tool](decisions/0003-typescript-core-and-key-tool.md), [0004 server-held store keys](decisions/0004-server-held-store-keys.md), [0005 projects scope stores](decisions/0005-projects-scope-stores.md), [0006 revocable donation keys](decisions/0006-revocable-donation-keys.md), [0007 browser key page](decisions/0007-browser-key-page.md) and [0008 project paths](decisions/0008-project-paths.md).
+Decision records live in [decisions/](decisions/): [0001 server language](decisions/0001-server-language.md), [0002 modular components](decisions/0002-modular-components.md), [0003 TypeScript core and key tool](decisions/0003-typescript-core-and-key-tool.md), [0004 server-held store keys](decisions/0004-server-held-store-keys.md), [0005 projects scope stores](decisions/0005-projects-scope-stores.md), [0006 revocable donation keys](decisions/0006-revocable-donation-keys.md), [0007 browser key page](decisions/0007-browser-key-page.md), [0008 project paths](decisions/0008-project-paths.md) and [0009 researcher sign-in](decisions/0009-researcher-sign-in.md).
 
 ## Glossary
 

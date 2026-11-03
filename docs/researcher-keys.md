@@ -85,7 +85,9 @@ Every time the page opens the personal key, it checks the public key it derives 
 
 **Losing the passkey.** Sign in by email, choose "I lost my passkey", and enter the recovery code (or open the file). The server checks the recovery sign-in secret (rate limited: five tries an hour), the page derives the personal key, checks it against the server's public key, and asks for a new passkey.
 
-**Losing both.** The operator runs `combray-server researcher reset-key <email>`, which removes the personal key and the researcher's sealed project keys. The researcher sets up a new key, and a colleague gives access again. If they were the only member with access, the project's existing donations cannot be opened by anyone: that is the price of a server that cannot open them.
+**Losing both.** After the email code, "I lost my recovery code too" lets the researcher **start over**: the server removes their personal key, passkeys, sessions and copies of project keys, and mails them that it happened. They set up a new passkey and key, and a colleague on each project gives them access again, after comparing key codes. The server refuses while the researcher is the only member with access to a project, and names those projects: starting over would leave nobody able to open their donations. For that case the operator can still run `combray-server researcher reset-key <email>`, knowing the project's existing donations cannot be opened by anyone again: that is the price of a server that cannot open them.
+
+Someone who gets into a researcher's email can start over on their account too. That locks the researcher out until they start over themselves, but gives the intruder nothing: a colleague only gives access after comparing key codes with the real person, and the mail warns the researcher.
 
 ### Which passkey to use
 

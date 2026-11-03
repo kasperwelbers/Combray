@@ -41,7 +41,7 @@ use webauthn_rs::prelude::{
 use webauthn_rs::{Webauthn, WebauthnBuilder};
 
 use crate::accounts::{
-    AccountError, Accounts, EMAIL_SESSION_TTL_SECS, KEYS_SESSION_TTL_SECS, LOGIN_CODE_TTL_SECS,
+    AccountError, Accounts, EMAIL_SESSION_TTL_SECS, ResetError, KEYS_SESSION_TTL_SECS, LOGIN_CODE_TTL_SECS,
     Level, STUDIO_SESSION_TTL_SECS, Session, Site, b64, normalize_email,
 };
 use crate::donations::{DonationError, Donations, NewDonation, read_header};
@@ -742,6 +742,57 @@ pub async fn finish_passkey_sign_in(
         &token,
         Level::Full,
         Json(json!({ "credential_id": credential_id, "wrapped_key": wrapped })).into_response(),
+    ))
+}
+
+/// A researcher who lost both passkey and recovery code resets their own key, after the email
+/// code. Refused while they are the only member with access to a project (the answer names those
+/// projects). Afterwards their sessions are gone but this one, which continues at the email level
+/// so they can set up a new passkey and key; colleagues then give them access again. A mail tells
+/// them it happened, in case it was not them.
+pub async fn reset_own_key(State(state): State<AppState>, who: Started) -> ApiResult {
+    who.caller.keys_only()?;
+    let r = who.caller.r.clone();
+    let id = who.session.researcher_id.clone();
+    match r.accounts.reset_own_key(&id) {
+        Ok(()) => {}
+        Err(ResetError::SoleAccess(projects)) => {
+            let mut named = Vec::new();
+            for project in projects {
+                named.push(json!({ "id": project, "name": project_name(&state, &project).await }));
+            }
+            return Ok(no_store(
+                (
+                    StatusCode::CONFLICT,
+                    Json(json!({ "error": "sole_access", "projects": named })),
+                )
+                    .into_response(),
+            ));
+        }
+        Err(ResetError::Account(e)) => return Err(e.into()),
+    }
+    let token = r.accounts.create_session(&id, Site::Keys, Level::Email)?;
+    let address = r.accounts.email_of(&id)?;
+    let mail = r.clone();
+    tokio::spawn(async move {
+        let body = format!(
+            "Hello,\n\nThe key for your Combray researcher account was just reset, after a sign-in \
+             with an email code. Your old passkeys no longer work, and colleagues need to give \
+             you access to your projects again.\n\n\
+             If this was not you, tell your colleagues not to give this account access, and \
+             contact your server operator.\n\n{}\n",
+            base(&mail.keys_url),
+        );
+        let _ = mail
+            .mailer
+            .send(&address, "Your Combray key was reset", body)
+            .await;
+    });
+    Ok(r.with_cookie(
+        Site::Keys,
+        &token,
+        Level::Email,
+        StatusCode::NO_CONTENT.into_response(),
     ))
 }
 

@@ -477,6 +477,7 @@ pub fn app(config: Config) -> std::io::Result<Router> {
         .route("/auth/handoff", post(research::create_handoff))
         .route("/me", get(research::me))
         .route("/me/key", post(research::set_personal_key))
+        .route("/me/reset-key", post(research::reset_own_key))
         .route("/me/passkeys/{id}", delete(research::remove_passkey))
         .route("/me/passkeys/{id}/wrapped", put(research::set_wrapped_key))
         .route("/projects", get(research::list_projects))

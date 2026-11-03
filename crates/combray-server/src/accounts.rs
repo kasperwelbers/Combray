@@ -171,6 +171,55 @@ fn code_hash(site: Site, request: &[u8], code: &str) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+/// Forget a researcher's personal key, passkeys, sessions and copies of project keys.
+fn clear_key(db: &Connection, id: &str) -> Result<(), AccountError> {
+    db.execute(
+        "UPDATE researchers SET public_key = NULL, recovery_verifier = NULL WHERE id = ?1",
+        params![id],
+    )?;
+    db.execute("DELETE FROM passkeys WHERE researcher_id = ?1", params![id])?;
+    db.execute("DELETE FROM sessions WHERE researcher_id = ?1", params![id])?;
+    db.execute(
+        "UPDATE members SET sealed_enc = NULL, sealed_ct = NULL WHERE researcher_id = ?1",
+        params![id],
+    )?;
+    Ok(())
+}
+
+fn sole_access(db: &Connection, id: &str) -> Result<Vec<String>, AccountError> {
+    let mut stmt = db.prepare(
+        "SELECT m.project FROM members m
+         WHERE m.researcher_id = ?1 AND m.sealed_ct IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM members o WHERE o.project = m.project
+                           AND o.researcher_id != ?1 AND o.sealed_ct IS NOT NULL)
+         ORDER BY m.project",
+    )?;
+    let rows = stmt
+        .query_map(params![id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(rows)
+}
+
+/// Why a researcher could not reset their own key.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ResetError {
+    /// They are the only member with access to these projects.
+    SoleAccess(Vec<String>),
+    Account(AccountError),
+}
+
+impl From<AccountError> for ResetError {
+    fn from(e: AccountError) -> Self {
+        ResetError::Account(e)
+    }
+}
+
+impl From<rusqlite::Error> for ResetError {
+    fn from(e: rusqlite::Error) -> Self {
+        ResetError::Account(e.into())
+    }
+}
+
 fn decode(token: &str) -> Result<Vec<u8>, AccountError> {
     URL_SAFE_NO_PAD
         .decode(token)
@@ -327,16 +376,29 @@ impl Accounts {
             )
             .optional()?
             .ok_or(AccountError::NotFound)?;
-        tx.execute(
-            "UPDATE researchers SET public_key = NULL, recovery_verifier = NULL WHERE id = ?1",
-            params![id],
-        )?;
-        tx.execute("DELETE FROM passkeys WHERE researcher_id = ?1", params![id])?;
-        tx.execute("DELETE FROM sessions WHERE researcher_id = ?1", params![id])?;
-        tx.execute(
-            "UPDATE members SET sealed_enc = NULL, sealed_ct = NULL WHERE researcher_id = ?1",
-            params![id],
-        )?;
+        clear_key(&tx, &id)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The projects where this researcher is the only member with access to the project key.
+    /// Resetting their key would leave nobody able to open those projects' donations.
+    pub fn sole_access_projects(&self, researcher_id: &str) -> Result<Vec<String>, AccountError> {
+        let db = self.db()?;
+        sole_access(&db, researcher_id)
+    }
+
+    /// A researcher resets their own key after losing both passkey and recovery code: as the
+    /// operator's `reset-key`, but refused (with the projects) while they are the only member with
+    /// access to a project. Ends all their sessions.
+    pub fn reset_own_key(&self, researcher_id: &str) -> Result<(), ResetError> {
+        let mut db = self.db()?;
+        let tx = db.transaction()?;
+        let sole = sole_access(&tx, researcher_id)?;
+        if !sole.is_empty() {
+            return Err(ResetError::SoleAccess(sole));
+        }
+        clear_key(&tx, researcher_id)?;
         tx.commit()?;
         Ok(())
     }
