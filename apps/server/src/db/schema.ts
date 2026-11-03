@@ -101,11 +101,62 @@ export const handoffs = sqliteTable('handoffs', {
   expires: integer('expires').notNull(),
 });
 
-// Projects.
+// Projects. A project has a draft, edited in the studio in parts (details, platforms), and a live
+// version: one JSON document, copied from the draft when it is published on the key page, which
+// is what participants get.
+
+export const projects = sqliteTable('projects', {
+  id: text('id').primaryKey(),
+  created: integer('created').notNull(),
+  /** When any part of the draft last changed. */
+  draftUpdated: integer('draft_updated').notNull(),
+  /** Counts changes to the draft; `publishedRevision` is the one that went live. */
+  draftRevision: integer('draft_revision').notNull().default(1),
+  publishedRevision: integer('published_revision').notNull().default(0),
+  /** The published config (JSON), or empty while the project was never published. */
+  live: text('live'),
+  liveVersion: integer('live_version').notNull().default(0),
+  publishedAt: integer('published_at'),
+});
+
+const projectId = () =>
+  text('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' });
+
+/** The draft's details. Localised texts are JSON (`{"en": "…", "nl": "…"}` or a plain string). */
+export const projectDetails = sqliteTable('project_details', {
+  projectId: projectId().primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  participantsMode: text('participants_mode', { enum: ['anonymous', 'optional', 'required'] }).notNull().default('optional'),
+  /** A regular expression participant ids must match (never sent to participants). */
+  participantsPattern: text('participants_pattern'),
+});
+
+/** The draft's platforms (upload points): each with the project tree participants' data is read with. */
+export const projectPlatforms = sqliteTable(
+  'project_platforms',
+  {
+    projectId: projectId(),
+    /** The upload point id, e.g. `tiktok`; also stored with each donation. */
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    /** The bundled platform pack it started from, if any. */
+    pack: text('pack'),
+    position: integer('position').notNull().default(0),
+    /** The project tree as the studio saves it: structure and settings (JSON, opaque to the server). */
+    structure: text('structure'),
+    importer: text('importer'),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.id] })],
+);
 
 /** The project public key; the private key exists only sealed to members (`members`). */
 export const projectKeys = sqliteTable('project_keys', {
-  project: text('project').primaryKey(),
+  project: text('project')
+    .primaryKey()
+    .references(() => projects.id, { onDelete: 'cascade' }),
   publicKey: bytes('public_key').notNull(),
   fingerprint: text('fingerprint').notNull(),
   created: integer('created').notNull(),
@@ -114,7 +165,9 @@ export const projectKeys = sqliteTable('project_keys', {
 export const members = sqliteTable(
   'members',
   {
-    project: text('project').notNull(),
+    project: text('project')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
     researcherId: researcherId(),
     /** The project private key sealed to this member's personal key, once they have access. */
     sealedEnc: bytes('sealed_enc'),

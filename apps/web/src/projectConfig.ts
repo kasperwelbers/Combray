@@ -9,13 +9,24 @@ const isLocalized = (v: unknown): v is Localized =>
   typeof v === 'string' || (isObject(v) && Object.values(v).every((s) => typeof s === 'string'));
 
 /**
- * The upload points of a project config: `[{ id, pack, name? }]`. Malformed entries are left
- * out; packs the client does not have are ignored when importing.
+ * The upload points of a project config: `[{ id, name?, pack?, structure?, importer? }]`, with the
+ * project's own tree (published from the studio) or a bundled pack to start from. Malformed
+ * entries are left out; the tree files are checked when they are used.
  */
 export function uploadPoints(raw: unknown): UploadPoint[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((p): UploadPoint[] => {
-    if (!isObject(p) || typeof p.id !== 'string' || typeof p.pack !== 'string') return [];
-    return [{ id: p.id, pack: p.pack, ...(isLocalized(p.name) ? { name: p.name } : {}) }];
+    if (!isObject(p) || typeof p.id !== 'string') return [];
+    const pack = typeof p.pack === 'string' ? p.pack : undefined;
+    const tree = isObject(p.structure) && isObject(p.importer);
+    if (!pack && !tree) return [];
+    return [
+      {
+        id: p.id,
+        ...(pack ? { pack } : {}),
+        ...(isLocalized(p.name) ? { name: p.name } : {}),
+        ...(tree ? { structure: p.structure, importer: p.importer } : {}),
+      },
+    ];
   });
 }

@@ -7,7 +7,7 @@
   "participants": {
     "mode": "optional"
   },
-  "note": "Placeholder. In Phase 2 project configs are signed and registered from the researcher tool. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match, such as W-[0-9]{4}; no quantified groups, at most two * or +, 100 characters) is optional and never sent to clients. uploads lists the upload points: each names a bundled platform pack whose project tree the client matches uploads against; without uploads, the YAML importers run.",
+  "note": "An example project for development: import it with `pnpm admin project import deploy/examples/projects/*.json`, which creates the project and publishes it. Researchers edit projects in the studio. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match, such as W-[0-9]{4}; no quantified groups, at most two * or +, 100 characters) is optional and never sent to participants. uploads lists the platforms; each starts from a bundled platform pack (pack), or carries the project's own tree (structure and importer, as the studio saves them).",
   "uploads": [
     {
       "id": "takeout",

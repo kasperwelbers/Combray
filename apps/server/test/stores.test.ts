@@ -69,9 +69,6 @@ describe('the web client and project configs', () => {
     expect(missing.status).toBe(404);
     expect(missing.json).toEqual({ error: 'no_such_project' });
 
-    const broken = await get(s, '/api/v1/p/broken/config');
-    expect(broken.status).toBe(500);
-    expect(broken.json).toEqual({ error: 'invalid_config' });
   });
 
   it('rejects path traversal and invalid characters in project ids', async () => {
@@ -116,16 +113,22 @@ describe('the web client and project configs', () => {
     expect(r.headers['cross-origin-opener-policy']).toBe('same-origin');
   });
 
-  it('treats configs with an invalid participant policy as broken', async () => {
+  it('refuses to import configs that are broken or have an invalid participant policy', async () => {
     const s = await startServer({ research: false });
-    const projects = join(s.paths.data, 'projects');
-    writeFileSync(join(projects, 'ash.json'), JSON.stringify({ id: 'ash', participants: { mode: 'sometimes' } }));
-    writeFileSync(join(projects, 'fir.json'), JSON.stringify({ id: 'fir', participants: { pattern: '(' } }));
-    for (const project of ['ash', 'fir']) {
-      const config = await get(s, `/api/v1/p/${project}/config`);
-      expect(config.status, project).toBe(500);
-      expect(config.json).toEqual({ error: 'invalid_config' });
-      expect((await createIn(s, project, 'P1234')).status, project).toBe(500);
+    const files = {
+      ash: JSON.stringify({ id: 'ash', participants: { mode: 'sometimes' } }),
+      fir: JSON.stringify({ id: 'fir', participants: { pattern: '(' } }),
+      // A pattern that could backtrack badly: a quantified group.
+      yew: JSON.stringify({ id: 'yew', participants: { pattern: '(a+)+' } }),
+      broken: '{not json',
+    };
+    for (const [project, text] of Object.entries(files)) {
+      const file = join(s.paths.data, `${project}.json`);
+      writeFileSync(file, text);
+      const r = await s.cli('project', 'import', file);
+      expect(r.code, project).not.toBe(0);
+      expect((await get(s, `/api/v1/p/${project}/config`)).status, project).toBe(404);
+      expect((await createIn(s, project, 'P1234')).status, project).toBe(404);
     }
   });
 
@@ -293,8 +296,6 @@ describe('store keys', () => {
       expect(r.status, project).toBe(404);
       expect(r.json).toEqual({ error: 'no_such_project' });
     }
-    const broken = await createIn(s, 'broken');
-    expect(broken.status).toBe(500);
   });
 
   it("enforces the project's participant policy", async () => {

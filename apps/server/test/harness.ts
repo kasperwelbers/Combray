@@ -134,12 +134,11 @@ async function freePort(): Promise<number> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** The test projects. */
+/** The test projects, imported (and published) with `project import` before the first start. */
 const PROJECTS: Record<string, string> = {
   'willow.json': JSON.stringify({ id: 'willow', name: { en: 'Willow study' } }),
   'oak.json': JSON.stringify({ id: 'oak', participants: { mode: 'required', pattern: 'P[0-9]{4}' } }),
   'elm.json': JSON.stringify({ id: 'elm', participants: { mode: 'anonymous' } }),
-  'broken.json': '{not json',
 };
 
 export class TestServer {
@@ -183,10 +182,10 @@ export class TestServer {
       donationKeysDb: join(this.dir, 'keys/donation-keys.sqlite'),
     };
     mkdirSync(join(this.paths.web, 'assets'), { recursive: true });
-    mkdirSync(join(data, 'projects'), { recursive: true });
+    mkdirSync(join(this.dir, 'projects'), { recursive: true });
     writeFileSync(join(this.paths.web, 'index.html'), '<!doctype html><title>Combray</title>');
     writeFileSync(join(this.paths.web, 'assets/app.js'), 'console.log(1)');
-    for (const [name, text] of Object.entries(PROJECTS)) writeFileSync(join(data, 'projects', name), text);
+    for (const [name, text] of Object.entries(PROJECTS)) writeFileSync(join(this.dir, 'projects', name), text);
     writeFileSync(
       this.paths.keysPage,
       `<!doctype html><meta http-equiv="Content-Security-Policy" content="${KEYS_PAGE_CSP}"><title>Keys</title>`,
@@ -227,11 +226,17 @@ export class TestServer {
     return env;
   }
 
+  private imported = false;
+
   /** Start the server and wait until it answers its health check. */
   async start(): Promise<void> {
     const { command, args } = serverCommand();
     if (!existsSync(args.at(-1) ?? command)) {
       throw new Error(`${args.at(-1) ?? command} does not exist`);
+    }
+    if (!this.imported) {
+      await this.cliOk('project', 'import', ...Object.keys(PROJECTS).map((name) => join(this.dir, 'projects', name)));
+      this.imported = true;
     }
     this.output = '';
     const child = spawn(command, args, { env: this.env(), stdio: ['ignore', 'pipe', 'pipe'] });

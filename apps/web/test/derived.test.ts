@@ -1,4 +1,5 @@
 import { locateRoot, UploadListing, type UploadProblem } from '@combray/core';
+import { packs } from '@combray/importers';
 import { describe, expect, it } from 'vitest';
 
 import { fixtureFiles, fixtureListing, fixtureZip, uploadFiles } from '../../../importers/test/load';
@@ -116,6 +117,25 @@ describe('project config', () => {
       { id: 'b', pack: 'p' },
     ]);
     expect(uploadPoints(undefined)).toEqual([]);
+  });
+
+  it("reads a project's own tree, published from the studio", () => {
+    const structure = { format: 'combray-structure/1' };
+    const importer = { format: 'combray-importer/1', entries: [] };
+    expect(uploadPoints([{ id: 'own', structure, importer }, { id: 'half', structure }, { id: 'both', pack: 'tiktok', structure, importer }])).toEqual([
+      { id: 'own', structure, importer },
+      { id: 'both', pack: 'tiktok', structure, importer },
+    ]);
+  });
+
+  it("uses the project's own tree over the pack, and the pack when the tree cannot be read", () => {
+    const pack = packs.find((p) => p.id === 'tiktok')!;
+    const renamed = { ...pack.importer, name: { en: 'Our TikTok' } };
+    const own = pointTree({ id: 'own-tiktok', pack: 'tiktok', structure: pack.structure, importer: renamed });
+    expect(own).toBeDefined();
+    expect(own).not.toBe(pointTree(TIKTOK));
+    const unreadable = pointTree({ id: 'broken-tiktok', pack: 'tiktok', structure: { format: 'nope' }, importer: {} });
+    expect(unreadable).toBe(pointTree(TIKTOK));
   });
 });
 

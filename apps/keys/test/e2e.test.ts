@@ -133,8 +133,9 @@ async function setUp(page: Page, email: string): Promise<string> {
 describe.skipIf(!enabled)('key page', () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'combray-e2e-'));
-    mkdirSync(join(dir, 'data/projects'), { recursive: true });
-    writeFileSync(join(dir, 'data/projects/willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' } }));
+    mkdirSync(join(dir, 'data'), { recursive: true });
+    writeFileSync(join(dir, 'willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' } }));
+    cli('project', 'import', join(dir, 'willow.json'));
     cli('researcher', 'add', 'ada@uni.example');
     cli('project', 'add-researcher', 'willow', 'ada@uni.example');
     server = spawn(command, commandArgs, { env: env(), stdio: 'inherit' });

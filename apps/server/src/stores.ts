@@ -1,8 +1,7 @@
 /** The participant side of the store key service (docs/security.md#store-keys). */
-import type { Config } from './config.ts';
 import { empty, HttpError, json, jsonBody, noStore, optStr, type Reply, type Request, str } from './http.ts';
 import { KeyFailure, type KeyService } from './keys.ts';
-import { checkParticipant, loadProject } from './projects.ts';
+import { checkParticipant, type Projects } from './projects.ts';
 
 function keyError(e: unknown): never {
   if (!(e instanceof KeyFailure)) throw e;
@@ -26,7 +25,7 @@ export function projectError(e: 'not_found' | 'invalid' | 'io'): HttpError {
   return new HttpError(500, e === 'invalid' ? 'invalid_config' : 'io');
 }
 
-export function storeHandlers(config: Config, keys: KeyService) {
+export function storeHandlers(keys: KeyService, projects: Projects) {
   const guard = async (work: () => Promise<Reply> | Reply): Promise<Reply> => {
     try {
       return await work();
@@ -40,7 +39,7 @@ export function storeHandlers(config: Config, keys: KeyService) {
       const projectId = str(body, 'project');
       const participantId = optStr(body, 'participant_id');
       const password = str(body, 'password');
-      const project = await loadProject(config.dataDir, projectId);
+      const project = projects.live(projectId);
       if (typeof project !== 'object') throw projectError(project);
       const participant = checkParticipant(project, participantId);
       if (participant === 'required') throw new HttpError(400, 'participant_required');

@@ -10,7 +10,10 @@ import {
   deriveRows,
   deriveTables,
   getNode,
+  joinProjectTree,
   mergeShape,
+  parseImporterFile,
+  parseStructureFile,
   type ColumnDef,
   type DerivedRow,
   type FieldValue,
@@ -36,10 +39,22 @@ const pathKey = (path: NodePath) => path.join('\u0000');
 const trees = new Map<string, ProjectNode>();
 
 /**
- * The tree of an upload point: its pack, for now. Projects get their own trees in Phase 2.
- * Kept once joined; matching an upload works on a copy (`mergeShape`).
+ * The tree of an upload point: the project's own, as published from the studio, or else the
+ * bundled pack it names. Kept once joined; matching an upload works on a copy (`mergeShape`).
  */
 export function pointTree(point: UploadPoint): ProjectNode | undefined {
+  if (point.structure !== undefined && point.importer !== undefined) {
+    const key = `project:${point.id}`;
+    if (!trees.has(key)) {
+      try {
+        trees.set(key, joinProjectTree(parseStructureFile(point.structure), parseImporterFile(point.importer)).tree);
+      } catch {
+        // A tree the client cannot read: fall back to the pack, if there is one.
+      }
+    }
+    const own = trees.get(key);
+    if (own) return own;
+  }
   const pack = packs.find((p) => p.id === point.pack);
   if (!pack) return undefined;
   if (!trees.has(pack.id)) trees.set(pack.id, packTree(pack));

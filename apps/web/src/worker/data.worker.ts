@@ -203,7 +203,7 @@ async function storeDerived(
     const manifest: TableManifest = {
       type: 'table',
       sourceId,
-      importer: { id: `${derived.point.id}:${derived.point.pack}`, version: 1 },
+      importer: { id: `${derived.point.id}:${derived.point.pack ?? 'project'}`, version: 1 },
       name,
       importedAt,
       rowCount: rows.length,

@@ -30,9 +30,12 @@ export interface SourceManifest {
  */
 export interface UploadPoint {
   id: string;
-  /** A bundled platform pack (`google-takeout`, `tiktok`). */
-  pack: string;
+  /** The bundled platform pack it started from (`google-takeout`, `tiktok`), if any. */
+  pack?: string;
   name?: Localized;
+  /** The project's own tree, as published from the studio (structure and settings files). */
+  structure?: unknown;
+  importer?: unknown;
 }
 
 /** A column of a table derived through a project tree. */

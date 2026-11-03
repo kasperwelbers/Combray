@@ -21,7 +21,12 @@ Example use cases are:
 * A participant looks at the data together with a researcher. The purpose of the data is to evoke memories and reflections.
 * A participant explores their own data, in a lab or at home, and answers questions about the data and/or their own reflections.
 
-So what really sets Combray apart is not where it runs, but how it's used. Participants have sessions they can come back to (with their data encrypted on their own computer in between), and researchers can set up a study without writing a line of code. Both need a server, so Combray is built server first: one shared server per university or institute, which keeps the data safe, and which participants and researchers only ever reach through their browser.
+This focus measn that participants need to have sessions they can come back to. This is achieved by storing data locally in IndexedDB, encrypted with a key that is only released after the participant logs in to the server. The server cannot see the data, and the data is only decrypted when the participant is authenticated.
+
+Combray also implements some new idea, and builds on lessons learned from earlier tools:
+
+* Donations are encrypted, and the key is sealed to the researcher's passkey using the WebAuthn PRF extension. This 
+* Most donation packages have a fairly simple structure. Combray standardizes any uploaded data to a tree structure, so researrchers only need to indicate what parts of the tree the participants sees, and what parts to optionally donate. The exploration part is optimized to explore and visualize these trees. This enables a no-code first experience for researchers. 
 
 > **Status:** early development, not yet used in a study. Participants can import a data download package in the browser, keep it encrypted on their computer, explore it and donate parts of it. Researchers can sign in, build an importer in the studio, and open donations on the key page with their passkey. Enrichment and hosting come next. Start with [docs/](docs/README.md).
 
@@ -45,14 +50,16 @@ pnpm dev        # web client with hot reload on http://localhost:5173, plus the 
 | `/p/willow/#id=W-1234` | Example study that requires a participant id |
 | `/studio/` | Researcher workspace |
 
-Projects come from [deploy/examples/projects/](deploy/examples/projects/). The development server keeps its databases in `.dev/` and does not send mail: sign-in codes are written to `.dev/outbox/` as files.
+The development server keeps its databases in `.dev/` and does not send mail: sign-in codes are written to `.dev/outbox/` as files.
 
 ### Signing in as a researcher
 
-1. Add yourself to an example project (any address will do; no mail is sent):
+1. Import the example projects, and add yourself to one (any address will do; no mail is sent):
    ```sh
+   pnpm admin project import deploy/examples/projects/*.json
    pnpm admin project add-researcher example you@example.org
    ```
+   Or skip the import and create your own project in the studio after signing in.
    `pnpm admin` runs the server's operator commands on the development server; on its own it lists them.
 2. **Studio:** open http://localhost:5173/studio/, enter that address, and type the 8-digit code from the newest file in `.dev/outbox/`.
 3. **Key page** (passkey, project key, opening donations): open http://keys.localhost:8080, choose "Sign in with an email code", use a code from `.dev/outbox/` again, and set up your passkey and recovery code. Then create the project key.

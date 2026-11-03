@@ -22,9 +22,10 @@ For a first, small study on one VM. Each step is explained below.
 4. In `deploy/`: create `secrets/store-master.key`, the data folders and `.env` ([below](#docker-compose)).
 5. `docker compose up -d`, then check `https://combray.uni.nl/api/v1/health` and `https://keys.combray.uni.nl/`.
 6. **Check the key page** against the release: `curl -s https://keys.combray.uni.nl/ | sha256sum` must match `combray-keys.html.sha256` of the release you deployed.
-7. **Add the project** config in `combray-data/projects/{id}.json`, and the researchers:
+7. **Add the researchers.** They create their projects themselves in the studio; or put a first researcher on a project you create or import:
    ```sh
    docker compose run --rm combray researcher add ada@uni.nl
+   docker compose run --rm combray project create willow "Willow diary study"
    docker compose run --rm combray project add-researcher willow ada@uni.nl
    ```
 8. The researcher signs in at `https://keys.combray.uni.nl/`, sets up a passkey, saves the recovery code and creates the project key. The key page then shows the **participant link** (`https://combray.uni.nl/p/willow/#k=…`). Use that link, with its `#k=` part, in invitations and on printed cards.
@@ -72,7 +73,6 @@ combray-data/
 ├── combray.sqlite        the main database: store key records (no keys without the store master
 │                         key), researchers, passkeys, members, sealed project keys, donation index
 ├── donations/{project}/  encrypted donation envelopes
-└── projects/             project configs and platform packs
 combray-donation-keys/
 └── donation-keys.sqlite  sealed donation keys (its own volume)
 secrets/
@@ -81,7 +81,7 @@ secrets/
 
 The server creates both databases on first start and applies pending migrations (`apps/server/drizzle/`) whenever it starts, so upgrading is replacing the image and restarting. Back up first.
 
-Nothing in these folders can be opened by the server: donations and their keys are sealed to project keys, which are sealed to researchers, whose keys are locked under their passkeys. A project config's `uploads` lists its upload points; each names a platform pack, such as `google-takeout` or `tiktok` ([tree-decisions.md](tree-decisions.md#upload-points-and-the-nameless-root)). See `deploy/examples/projects/example.json`.
+Nothing in these folders can be opened by the server: donations and their keys are sealed to project keys, which are sealed to researchers, whose keys are locked under their passkeys. Projects live in the main database: a draft that researchers edit in the studio, and the published version participants get, which a researcher publishes on the key page. A project's platforms (upload points) each carry the project tree that participants' data is read with; a platform can start from a bundled platform pack, such as `google-takeout` or `tiktok` ([tree-decisions.md](tree-decisions.md#upload-points-and-the-nameless-root)).
 
 ### Backups
 
@@ -103,7 +103,9 @@ Run with `docker compose run --rm combray …`:
 | `researcher list` | List researchers, and whether they have set up a key |
 | `researcher remove <email>` | Remove a researcher, their passkeys, memberships and copies of project keys. Unlike removing a member on the key page, this does not stop at the last member with access: make sure a colleague has access first |
 | `researcher reset-key <email>` | For a researcher who lost both passkey and recovery code: removes their key and their copies of project keys, so they can set up a new key and be given access again |
-| `project add-researcher <project> <email>` | Put a researcher on a project (members can add colleagues on the key page too) |
+| `project create <project> <name>` | Create a project (researchers can also create projects in the studio) |
+| `project import <file.json> […]` | Create or replace projects from config files and publish them, e.g. the examples in `deploy/examples/projects/` |
+| `project add-researcher <project> <email>` | Put a researcher on a project, creating the account if needed (members can add colleagues on the key page too) |
 | `reset-link <project> <participant-id>` | A one-time password reset link for a participant ([below](#password-reset-links)) |
 
 ## Checking what the server serves

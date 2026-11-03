@@ -1,7 +1,7 @@
-# Combray server: the web client and studio, project configs, the store key service, researcher
+# Combray server: the web client and studio, projects, the store key service, researcher
 # sign-in, the key page and donation storage. See docs/deployment.md. From this directory, once:
 #
-#   mkdir -p secrets combray-data combray-donation-keys && cp -r examples/projects combray-data/
+#   mkdir -p secrets combray-data combray-donation-keys
 #   head -c 32 /dev/urandom > secrets/store-master.key && chmod 600 secrets/store-master.key
 #   cp env.example .env     # then fill in the domain and mail settings
 #
@@ -36,8 +36,8 @@ services:
       COMBRAY_MAX_DONATION_MB: ${COMBRAY_MAX_DONATION_MB:-64}
     secrets: [combray_store_master_key]
     volumes:
-      # Project configs in ./combray-data/projects/{id}.json; store key records in
-      # ./combray-data/combray.sqlite (no keys in it without the store master key).
+      # The main database (projects, store key records, researchers) in ./combray-data/combray.sqlite
+      # (no keys in it without the store master key), and donation envelopes.
       - ./combray-data:/data
       # Sealed donation keys only. Deleting a key here is what withdraws a donation.
       - ./combray-donation-keys:/donation-keys

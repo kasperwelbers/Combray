@@ -1,12 +1,11 @@
 /** The server operator's commands: researcher accounts, project members, reset links. */
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 import { Accounts, AccountFailure } from './accounts.ts';
 import { configFromEnv } from './config.ts';
 import { openMainDb } from './db.ts';
 import { KeyService, loadStoreMasterKey, RESET_TTL_SECS } from './keys.ts';
-import { validParticipantId, validProjectId } from './projects.ts';
+import { ProjectFailure, Projects, validParticipantId, validProjectId } from './projects.ts';
 
 /** How these commands are called: `combray-server`, or `pnpm admin` in development. */
 const NAME = process.env.COMBRAY_CLI_NAME || 'combray-server';
@@ -21,6 +20,11 @@ const USAGE = `Commands for the server operator:
       delete an account, its passkeys and memberships
   ${NAME} researcher reset-key <email>
       forget a researcher's key after they lost both passkey and recovery code
+  ${NAME} project create <project> <name>
+      create a project (researchers can also create projects in the studio)
+  ${NAME} project import <file.json> [...]
+      create or replace projects from config files, and publish them
+      (for example deploy/examples/projects/*.json)
   ${NAME} project add-researcher <project> <email>
       make a researcher a member of a project, creating the account if needed
       (the first member creates the project key on the key page)
@@ -65,7 +69,7 @@ function researchers(): void {
     } else if (group === 'researcher' && command === 'reset-key' && a && !b) {
       accounts.resetResearcherKey(a);
     } else if (group === 'project' && command === 'add-researcher' && a && b && args.length === 4) {
-      if (!validProjectId(a) || !existsSync(join(config.dataDir, 'projects', `${a}.json`))) {
+      if (!new Projects(openMainDb(config.dbPath)).exists(a)) {
         console.error(`no such project: ${a}`);
         process.exit(2);
       }
@@ -77,6 +81,36 @@ function researchers(): void {
       }
     } else usage();
   } catch (e) {
+    failed(e);
+  }
+}
+
+/** Project commands that need no researcher settings: creating and importing projects. */
+function projectCommands(): void {
+  const projects = new Projects(openMainDb(config.dbPath));
+  const [, command, ...rest] = args;
+  try {
+    if (command === 'create' && rest.length >= 2) {
+      const [id, ...name] = rest;
+      projects.create(id!, name.join(' '));
+      console.log(`created project ${id}; add researchers with: ${NAME} project add-researcher ${id} <email>`);
+    } else if (command === 'import' && rest.length >= 1) {
+      for (const file of rest) {
+        let config: unknown;
+        try {
+          config = JSON.parse(readFileSync(file, 'utf8'));
+        } catch {
+          console.error(`not a JSON file: ${file}`);
+          process.exit(2);
+        }
+        console.log(`imported and published ${projects.importConfig(config)} (from ${file})`);
+      }
+    } else usage();
+  } catch (e) {
+    if (e instanceof ProjectFailure) {
+      console.error(e.error === 'conflict' ? 'failed: a project with this id exists' : 'failed: invalid project (id, name, participants or uploads)');
+      process.exit(1);
+    }
     failed(e);
   }
 }
@@ -98,6 +132,7 @@ function resetLink(project: string, participant: string): void {
 export function runCommand(argv: string[]): void {
   args = argv;
   if (args[0] === 'reset-link' && args.length === 3) resetLink(args[1]!, args[2]!);
+  else if (args[0] === 'project' && (args[1] === 'create' || args[1] === 'import')) projectCommands();
   else if (args[0] === 'researcher' || args[0] === 'project') researchers();
   else usage();
 }

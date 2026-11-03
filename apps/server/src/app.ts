@@ -17,8 +17,8 @@ import { openKeysDb, openMainDb } from './db.ts';
 import { dispatch, errorReply, HttpError, json, logRequest, noStore, type Reply, type Request, Router, send, serveStatic } from './http.ts';
 import { KeyService, loadStoreMasterKey } from './keys.ts';
 import { log } from './log.ts';
-import { loadProject } from './projects.ts';
-import { Research } from './research.ts';
+import { Projects } from './projects.ts';
+import { PLATFORM_BODY_LIMIT, Research } from './research.ts';
 import { projectError, storeHandlers } from './stores.ts';
 
 /**
@@ -95,9 +95,10 @@ const KEYS_LIMIT = 64 * 1024;
 export function createApp(config: Config): (req: IncomingMessage, res: ServerResponse) => void {
   const db = openMainDb(config.dbPath);
   const keys = new KeyService(db, loadStoreMasterKey(config.storeMasterKeyFile), config.argon2);
-  const research = config.research ? new Research(config, config.research, db, openKeysDb(config.research.donationKeysDb)) : undefined;
+  const projects = new Projects(db);
+  const research = config.research ? new Research(config, config.research, db, openKeysDb(config.research.donationKeysDb), projects) : undefined;
   if (research && !research.mailer.enabled) log.warn({}, 'no mail settings: researchers cannot sign in (see docs/deployment.md)');
-  const stores = storeHandlers(config, keys);
+  const stores = storeHandlers(keys, projects);
   const h = research?.handlers(config);
 
   type SiteHandler = (req: Request, site: Site) => Reply | Promise<Reply>;
@@ -113,7 +114,7 @@ export function createApp(config: Config): (req: IncomingMessage, res: ServerRes
 
   /** A project's config, with its public key once created. The participant pattern is left out. */
   const projectConfig = async (req: Request): Promise<Reply> => {
-    const project = await loadProject(config.dataDir, req.params.id);
+    const project = projects.live(req.params.id);
     if (typeof project !== 'object') throw projectError(project);
     const out: Record<string, unknown> = { ...project.config };
     if (out.participants && typeof out.participants === 'object') {
@@ -148,7 +149,13 @@ export function createApp(config: Config): (req: IncomingMessage, res: ServerRes
     .add('POST', '/auth/logout', on('main', (x) => x.signOut), MAIN_RESEARCH_LIMIT)
     .add('GET', '/me', on('main', (x) => x.me), 0)
     .add('GET', '/projects', on('main', (x) => x.listProjects), 0)
+    .add('POST', '/projects', on('main', (x) => x.createProject), MAIN_RESEARCH_LIMIT)
     .add('GET', '/projects/{id}', on('main', (x) => x.getProject), 0)
+    .add('GET', '/projects/{id}/draft', on('main', (x) => x.getDraft), 0)
+    .add('PUT', '/projects/{id}/draft/details', on('main', (x) => x.putDetails), MAIN_RESEARCH_LIMIT * 8)
+    .add('GET', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.getPlatform), 0)
+    .add('PUT', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.putPlatform), PLATFORM_BODY_LIMIT)
+    .add('DELETE', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.deletePlatform), MAIN_RESEARCH_LIMIT)
     .add('GET', '/projects/{id}/donations', on('main', (x) => x.listDonations), 0)
     .add('POST', '/donations/{id}/withdraw', on('main', (x) => x.withdraw), MAIN_RESEARCH_LIMIT)
     .add('POST', '/p/{id}/donations', on('main', (x) => x.donate), (config.research?.maxDonationBytes ?? 0) + 16 * 1024);
@@ -174,6 +181,8 @@ export function createApp(config: Config): (req: IncomingMessage, res: ServerRes
     .add('PUT', '/me/passkeys/{id}/wrapped', on('keys', (x) => x.setWrappedKey), KEYS_LIMIT)
     .add('GET', '/projects', on('keys', (x) => x.listProjects), 0)
     .add('GET', '/projects/{id}', on('keys', (x) => x.getProject), 0)
+    .add('GET', '/projects/{id}/draft', on('keys', (x) => x.getDraft), 0)
+    .add('POST', '/projects/{id}/publish', on('keys', (x) => x.publish), KEYS_LIMIT)
     .add('POST', '/projects/{id}/key', on('keys', (x) => x.createProjectKey), KEYS_LIMIT)
     .add('POST', '/projects/{id}/members', on('keys', (x) => x.addMember), KEYS_LIMIT)
     .add('DELETE', '/projects/{id}/members/{researcher}', on('keys', (x) => x.removeMember), KEYS_LIMIT)

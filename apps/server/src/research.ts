@@ -41,7 +41,7 @@ import { empty, HttpError, json, jsonBody, noStore, type Reply, type Request, st
 import { RateLimit } from './limits.ts';
 import { log } from './log.ts';
 import { Mailer } from './mail.ts';
-import { loadProject, validProjectId } from './projects.ts';
+import { MAX_TREE_BYTES, ProjectFailure, Projects, validPlatformId, validProjectId } from './projects.ts';
 import { b64, fromB64, randomToken, sha256, validRandomId } from './util.ts';
 
 /** How long a passkey ceremony may take between its start and finish. */
@@ -58,6 +58,11 @@ const tooMany = (retryAfter: number): HttpError => new HttpError(429, 'too_many_
 export function storeError(e: unknown): never {
   if (e instanceof AccountFailure) {
     const map = { not_found: [404, 'not_found'], forbidden: [403, 'forbidden'], conflict: [409, 'conflict'], invalid: [400, 'invalid'] } as const;
+    const [status, code] = map[e.error];
+    throw fail(status, code);
+  }
+  if (e instanceof ProjectFailure) {
+    const map = { not_found: [404, 'no_such_project'], conflict: [409, 'conflict'], invalid: [400, 'invalid'] } as const;
     const [status, code] = map[e.error];
     throw fail(status, code);
   }
@@ -109,6 +114,7 @@ function setCookie(reply: Reply, value: string, append: boolean): Reply {
 export class Research {
   readonly accounts: Accounts;
   readonly donations: Donations;
+  readonly projects: Projects;
   readonly mailer: Mailer;
   readonly config: ResearchConfig;
   private readonly rpId: string;
@@ -119,8 +125,9 @@ export class Research {
   readonly recoveryPerResearcher = new RateLimit(5, 3600);
   readonly donationsPerIp = new RateLimit(60, 600);
 
-  constructor(config: Config, research: ResearchConfig, main: Db, keys: Db) {
+  constructor(config: Config, research: ResearchConfig, main: Db, keys: Db, projects: Projects) {
     this.config = research;
+    this.projects = projects;
     this.accounts = new Accounts(main);
     this.donations = new Donations(main, keys, config.dataDir);
     this.mailer = new Mailer(research.mail);
@@ -194,9 +201,8 @@ export class Research {
     return this.withCookie(site, call(() => this.accounts.upgradeSession(session)), 'full', reply);
   }
 
-  private async projectName(dataDir: string, project: string): Promise<unknown> {
-    const p = await loadProject(dataDir, project);
-    return typeof p === 'object' ? (p.config.name ?? project) : project;
+  private async projectName(_dataDir: string, project: string): Promise<unknown> {
+    return this.projects.name(project);
   }
 
   /** The routes of both sites, as handlers taking the site the request came to. */
@@ -549,7 +555,65 @@ export class Research {
         return r.withCookie('keys', token, 'email', empty(204));
       },
 
-      // Projects.
+      // Projects: creating, the draft (edited in the studio, in parts), and publishing (key page).
+
+      /** A researcher creates a project in the studio and becomes its first member. */
+      createProject: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        const body = jsonBody(req);
+        const id = str(body, 'id');
+        if (!validProjectId(id)) throw fail(400, 'invalid_project_id');
+        call(() => r.projects.create(id, body.name));
+        call(() => r.accounts.addMember(id, who.researcherId));
+        return json({ id }, 201);
+      },
+
+      getDraft: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        return noStore(json(call(() => r.projects.draft(req.params.id!))));
+      },
+
+      putDetails: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        call(() => r.projects.setDetails(req.params.id!, jsonBody(req)));
+        return empty(204);
+      },
+
+      getPlatform: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        return noStore(json(call(() => r.projects.platform(req.params.id!, req.params.platform!))));
+      },
+
+      putPlatform: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        if (!validPlatformId(req.params.platform)) throw fail(400, 'invalid_platform_id');
+        call(() => r.projects.putPlatform(req.params.id!, req.params.platform!, jsonBody(req)));
+        return empty(204);
+      },
+
+      deletePlatform: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        call(() => r.projects.deletePlatform(req.params.id!, req.params.platform!));
+        return empty(204);
+      },
+
+      /**
+       * Make the draft live: what participants see and are asked to donate. Only on the key page,
+       * with a passkey session: a studio session (from an email code alone) cannot change it.
+       */
+      publish: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        keysOnly(site);
+        memberOf(who, req.params.id);
+        const version = call(() => r.projects.publish(req.params.id!));
+        log.info({ event: 'project_published', version }, 'a project was published');
+        return noStore(json({ version }));
+      },
 
       listProjects: async (req: Request, site: Site): Promise<Reply> => {
         const who = signedIn(req, site);
@@ -697,7 +761,7 @@ export class Research {
         const wait = r.donationsPerIp.hit(req.ip);
         if (wait !== undefined) throw tooMany(wait);
         const project = req.params.id!;
-        if (typeof (await loadProject(dataDir, project)) !== 'object') throw fail(404, 'no_such_project');
+        if (typeof r.projects.live(project) !== 'object') throw fail(404, 'no_such_project');
         const key = call(() => r.accounts.projectKey(project));
         if (!key) throw fail(409, 'no_project_key');
         const invalid = () => fail(400, 'invalid_donation');
@@ -738,3 +802,6 @@ export class Research {
 }
 
 export { hostOf };
+
+/** Platform drafts carry two project tree files. */
+export const PLATFORM_BODY_LIMIT = 2 * MAX_TREE_BYTES + 64 * 1024;
