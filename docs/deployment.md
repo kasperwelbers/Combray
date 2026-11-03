@@ -59,6 +59,8 @@ The server container runs as a non-root user, with a read-only root filesystem, 
 | `COMBRAY_MAIL_OUTBOX` | (none) | Development only: write mails to this folder instead of sending them |
 | `COMBRAY_DB` | `{data}/combray.sqlite` | The main database: store key records, researchers, passkeys, sessions, members, sealed project keys, the donation index |
 | `COMBRAY_DONATION_KEYS_DB` | `{data}/donation-keys.sqlite` | Sealed donation keys; in compose, on its own volume |
+| `COMBRAY_STUDIO_IDLE_SECS` | `3600` | A studio session ends after this long without activity |
+| `COMBRAY_STUDIO_MAX_SECS` | `43200` | and at most this long after the passkey sign-in |
 | `COMBRAY_KEY_BACKUP_RETENTION_DAYS` | `30` | Told to participants as the time within which a withdrawal is complete |
 | `COMBRAY_MAX_DONATION_MB` | `64` | Largest donation the server accepts |
 | `COMBRAY_KEYS_PAGE` | `/app/keys/index.html` in the image | The built key page. The server reads it at start; restart after replacing it |

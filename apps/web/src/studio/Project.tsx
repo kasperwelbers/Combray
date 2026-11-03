@@ -5,7 +5,16 @@ import { useTranslation } from 'react-i18next';
 
 import { STUDIO_TABS, studioPath, type StudioTab } from '../route';
 import { fromFiles, toFiles } from './model';
-import { ApiFailure, projectApi, type Donations, type Draft, type Member, type PlatformDraft, type ProjectDetails } from './projectApi';
+import {
+  ApiFailure,
+  projectApi,
+  type Donations,
+  type Draft,
+  type Member,
+  type PlatformDraft,
+  type ProjectDetails,
+  type ProjectInfo,
+} from './projectApi';
 import { Studio, type DraftStore } from './Studio';
 
 const english = (text: Localized | undefined): string => (text === undefined ? '' : localize(text, 'en'));
@@ -19,11 +28,13 @@ const english = (text: Localized | undefined): string => (text === undefined ? '
 export function Project({ projectId, tab: initialTab, account, keysUrl }: { projectId: string; tab?: StudioTab; account: ReactNode; keysUrl?: string }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [draft, setDraft] = useState<Draft>();
+  const [info, setInfo] = useState<ProjectInfo>();
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<StudioTab>(initialTab ?? 'details');
 
   const refresh = useCallback(() => {
     void projectApi.draft(projectId).then(setDraft, () => setFailed(true));
+    void projectApi.project(projectId).then(setInfo, () => undefined);
   }, [projectId]);
   useEffect(refresh, [refresh]);
 
@@ -62,7 +73,8 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
       </p>
       <h1>{english(draft.details.name) || draft.id}</h1>
       {account}
-      <PublishBar draft={draft} keysUrl={keysUrl} />
+      {info?.key && !info.has_access && <p className="message">{t('studio.project.noAccess')}</p>}
+      {info && <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} />}
       <nav className="tabs" aria-label={t('studio.project.tabsLabel')}>
         {STUDIO_TABS.map((key) => (
           <a
@@ -87,6 +99,56 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
         {tab === 'donations' && <DonationsTab projectId={projectId} />}
       </div>
     </div>
+  );
+}
+
+/**
+ * What a project needs before participants can use it, in order, with what is done. Once all is
+ * done, only a note about unpublished changes remains.
+ */
+function SetupSteps({ draft, info, keysUrl, onData }: { draft: Draft; info: ProjectInfo; keysUrl?: string; onData: () => void }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const steps = [
+    { key: 'encryptionKey', done: info.key !== null, action: keysUrl ? <a href={keysUrl}>{t('studio.project.steps.encryptionKeyAction')}</a> : null },
+    {
+      key: 'platforms',
+      done: draft.platforms.length > 0,
+      action: (
+        <button type="button" className="link-button" onClick={onData}>
+          {t('studio.project.steps.platformsAction')}
+        </button>
+      ),
+    },
+    {
+      key: 'publish',
+      done: draft.published !== null && !draft.unpublished_changes,
+      action: keysUrl && info.has_access ? <a href={keysUrl}>{t('studio.project.steps.publishAction')}</a> : null,
+    },
+  ];
+  if (steps.every((s) => s.done)) return <PublishBar draft={draft} keysUrl={keysUrl} />;
+  const next = steps.findIndex((s) => !s.done);
+  return (
+    <section className="card setup-steps" aria-labelledby="setup-steps">
+      <h2 id="setup-steps">{t('studio.project.steps.title')}</h2>
+      <ol>
+        {steps.map((s, i) => (
+          <li key={s.key} className={s.done ? 'done' : i === next ? 'next' : undefined}>
+            <span className="step-mark" aria-hidden="true">
+              {s.done ? '✓' : i + 1}
+            </span>
+            <div>
+              <strong>{t(`studio.project.steps.${s.key}`)}</strong>
+              {s.done && <span className="visually-hidden"> ({t('studio.project.steps.doneLabel')})</span>}
+              {!s.done && (
+                <p className="meta">
+                  {t(`studio.project.steps.${s.key}Help`)} {i === next && s.action}
+                </p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

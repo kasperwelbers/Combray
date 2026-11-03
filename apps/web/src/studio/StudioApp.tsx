@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { studioPath, type StudioTab } from '../route';
 import { localDraft } from './draft';
 import { Project } from './Project';
-import { ApiFailure, projectApi } from './projectApi';
+import { ApiFailure, projectApi, SIGNED_OUT_EVENT } from './projectApi';
 import { Studio } from './Studio';
 
 /**
@@ -93,6 +93,13 @@ export function StudioApp({ projectId, tab }: { projectId?: string; tab?: Studio
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [state, setState] = useState<State>({ kind: 'loading' });
 
+  // A session ends after an hour without activity: any answer "not signed in" brings back the sign-in.
+  useEffect(() => {
+    const onSignedOut = () => setState((s) => (s.kind === 'signed-in' ? { kind: 'signed-out', site: s.site } : s));
+    window.addEventListener(SIGNED_OUT_EVENT, onSignedOut);
+    return () => window.removeEventListener(SIGNED_OUT_EVENT, onSignedOut);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void load(takeHandoff())
@@ -109,11 +116,7 @@ export function StudioApp({ projectId, tab }: { projectId?: string; tab?: Studio
   if (state.kind === 'local') return <Studio title={t('studio.title')} draft={localDraft()} />;
   if (state.kind === 'signed-out') {
     return (
-      <SignIn
-        site={state.site}
-        handoffFailed={state.handoffFailed}
-        onSignedIn={() => void load().then(setState)}
-      />
+      <SignIn site={state.site} {...(state.handoffFailed ? { handoffFailed: true } : {})} />
     );
   }
 
@@ -233,51 +236,14 @@ function NewProject() {
   );
 }
 
-/** Sign in with a code from email. The code only works in this browser. */
-function SignIn({ site, handoffFailed, onSignedIn }: { site: Site; handoffFailed?: boolean; onSignedIn: () => void }) {
+/**
+ * Not signed in (or the session ended): the studio signs in through the key page, with the
+ * passkey, and comes straight back here.
+ */
+function SignIn({ site, handoffFailed }: { site: Site; handoffFailed?: boolean }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const [email, setEmail] = useState('');
-  const [sentTo, setSentTo] = useState<string>();
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const codeInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (sentTo) codeInput.current?.focus();
-  }, [sentTo]);
-
-  const describe = (r: { status: number; error: string }) =>
-    r.error === 'invalid_code'
-      ? t('studio.codeWrong')
-      : r.status === 429
-        ? t('studio.tooMany')
-        : r.error === 'mail_disabled'
-          ? t('studio.mailDisabled')
-          : t('studio.signInFailed');
-
-  async function requestCode(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    const result = await post('/auth/email', { email }).catch(() => ({ ok: false as const, status: 0, error: 'network' }));
-    setBusy(false);
-    if (result.ok) {
-      setCode('');
-      setSentTo(email);
-    } else setError(describe(result));
-  }
-
-  async function verify(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    const result = await post('/auth/email/verify', { code }).catch(() => ({ ok: false as const, status: 0, error: 'network' }));
-    setBusy(false);
-    if (result.ok) onSignedIn();
-    else setError(describe(result));
-  }
-
+  const keysUrl = site.keys_url;
+  const back = location.pathname.startsWith('/studio/') ? location.pathname : '/studio/';
   return (
     <div className="studio studio-sign-in">
       <h1>{t('studio.signInTitle')}</h1>
@@ -286,54 +252,17 @@ function SignIn({ site, handoffFailed, onSignedIn }: { site: Site; handoffFailed
           {t('studio.handoffFailed')}
         </p>
       )}
-      {!sentTo ? (
-        <form className="card" onSubmit={(e) => void requestCode(e)}>
-          <p>{t('studio.signInIntro')}</p>
-          <label className="field">
-            {t('studio.emailLabel')}
-            <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          {error && (
-            <p className="message error" role="alert">
-              {error}
-            </p>
-          )}
-          <button className="button" type="submit" disabled={busy}>
-            {t('studio.sendCode')}
-          </button>
-          <p className="meta">{t('studio.accountsBy')}</p>
-        </form>
-      ) : (
-        <form className="card" onSubmit={(e) => void verify(e)}>
-          <p>{t('studio.codeSent', { email: sentTo })}</p>
-          {site.mail_outbox && <p className="message">{t('studio.devOutbox')}</p>}
-          <label className="field">
-            {t('studio.codeLabel')}
-            <input
-              ref={codeInput}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={10}
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-          </label>
-          {error && (
-            <p className="message error" role="alert">
-              {error}
-            </p>
-          )}
-          <button className="button" type="submit" disabled={busy}>
-            {t('studio.signIn')}
-          </button>
-          <p className="meta">
-            <button type="button" className="link-button" onClick={() => setSentTo(undefined)}>
-              {t('studio.anotherCode')}
-            </button>
-          </p>
-        </form>
-      )}
+      <section className="card">
+        <p>{t('studio.signInIntro')}</p>
+        {keysUrl ? (
+          <a className="button" href={`${keysUrl}/#studio=${back}`}>
+            {t('studio.signInWithPasskey')}
+          </a>
+        ) : (
+          <p className="message error">{t('studio.noKeyPage')}</p>
+        )}
+        <p className="meta">{t('studio.signInFirstTime')}</p>
+      </section>
     </div>
   );
 }

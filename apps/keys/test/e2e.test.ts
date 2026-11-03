@@ -297,6 +297,38 @@ describe.skipIf(!enabled)('key page', () => {
     await bob2.context.close();
   }, 90_000);
 
+  it.skipIf(!hasWeb)('signs a new researcher in from the studio: key page, email code, passkey, and back', async () => {
+    cli('project', 'add-researcher', 'willow', 'cleo@uni.example');
+    const cleo = await researcherBrowser();
+    const page = cleo.page;
+    await page.goto(`${MAIN}/studio/p/willow/`);
+    await page.getByRole('heading', { name: 'Sign in to the researcher workspace' }).waitFor();
+    await page.getByRole('link', { name: 'Sign in with your passkey' }).click();
+    // On the key page, which says why: arriving from the studio.
+    await page.getByRole('heading', { name: 'Confirm it’s you' }).waitFor();
+    await page.getByRole('button', { name: 'Sign in with an email code' }).click();
+    await page.getByLabel('Your email address').fill('cleo@uni.example');
+    await page.getByRole('button', { name: 'Email me a sign-in code' }).click();
+    await page.getByLabel('Sign-in code').fill(await loginCode('cleo@uni.example'));
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('heading', { name: 'Set up your passkey' }).waitFor();
+    await page.getByRole('button', { name: 'Create passkey' }).click();
+    const oneMore = page.getByRole('button', { name: 'Use passkey' });
+    const code = page.locator('.printable .code');
+    await Promise.race([oneMore.waitFor(), code.waitFor()]);
+    if (await oneMore.isVisible()) await oneMore.click();
+    await code.waitFor();
+    await page.getByLabel('I have saved my recovery code somewhere safe').check();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    // Straight back to the project in the studio, signed in.
+    await page.waitForURL(`${MAIN}/studio/p/willow/`);
+    await page.getByRole('heading', { name: 'Willow study' }).waitFor();
+    // Willow has an encryption key (Ada made it), which Cleo has no access to yet.
+    await page.getByText('a colleague needs to give you access to its encryption key').waitFor();
+    await page.getByRole('heading', { name: 'Set up this project' }).waitFor();
+    await cleo.context.close();
+  }, 90_000);
+
   it('ran without CSP violations or script errors', () => {
     // 401: probing for a session; 404: the studio probing for key routes it must not have;
     // 409: refusing to start over while alone with access.

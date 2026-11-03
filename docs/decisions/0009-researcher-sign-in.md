@@ -16,7 +16,7 @@ ADR 0007 had researchers sign in on the key page with an emailed link and then a
 ## Decision
 
 1. **The email step is an 8-digit code**, typed in the browser that asked for it. The code is tied to that browser by an `HttpOnly` cookie with a random secret, and to the site it was asked for on. It works once, for 10 minutes, with 5 tries.
-2. **The studio signs in with the email code alone**, for 30 days. A studio session lists the researcher's projects and holds their drafts, and never receives key material. Signed out, the studio shows only its sign-in. Each project has its own workspace (`/studio/p/{project}/`).
+2. **The studio signs in through the key page, with the passkey** (amended 2026-11-03; first it signed in with the email code alone, for 30 days). The studio sends researchers to the key page and back with a one-time handoff; the session ends after an hour without activity and at most twelve hours after the passkey. Opening a project is something only a passkey allows: with the email code alone, nobody reaches a researcher's projects. A studio session never receives key material. Each project has its own workspace (`/studio/p/{project}/`).
 3. **The key page signs in with the passkey alone** (a discoverable credential). The email code is for the first passkey, a new device or a lost passkey. Key page sessions stay short (2 hours), because they open donations.
 4. **Researchers can start over** after losing both passkey and recovery code: after the email code, the server forgets their key, and colleagues give access again after comparing key codes. Refused while they are the only member with access to a project.
 5. **Publishing project changes will need the passkey** (not built yet): the studio sends the researcher to the key page to confirm, which is also where project configs can be signed.
@@ -25,7 +25,8 @@ Details are in [researcher-keys.md](../researcher-keys.md#accounts-and-sign-in) 
 
 ## Consequences
 
-- Someone with a researcher's email, or their unlocked browser, can see their projects and studio drafts. They cannot open donations or (once publishing exists) change what participants see.
+- Someone with a researcher's email alone cannot reach their projects. Someone at their unlocked, signed-in browser can, for up to an hour of inactivity and twelve hours in all, but cannot open donations or publish without the passkey.
+- Publishing needs access to the project's encryption key. For researchers, the project key is called the **encryption key**.
 - Someone with a researcher's email can start over on their account, locking the researcher out until they do the same; they get no access, because colleagues compare key codes with the real person.
 - The operator's `reset-key` remains for a researcher who alone had access and lost everything; that project's existing donations are then lost.
 - Under `pnpm dev`, the server treats :5173 as the main site, so studio sign-in works with hot reload.

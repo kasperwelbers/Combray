@@ -40,6 +40,14 @@ export interface Member {
   added: number;
 }
 
+/** A project as a member sees it: its encryption key, whether you have access, and the members. */
+export interface ProjectInfo {
+  id: string;
+  key: { public_key: string; fingerprint: string; created: number } | null;
+  has_access: boolean;
+  members: Member[];
+}
+
 export interface Donations {
   donations: { id: string; day: string; bytes: number }[];
   withdrawn: { id: string; day: string }[];
@@ -55,6 +63,9 @@ export class ApiFailure extends Error {
   }
 }
 
+/** Sent on `window` when the server says the studio session has ended. */
+export const SIGNED_OUT_EVENT = 'combray:signed-out';
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/v1${path}`, {
     method,
@@ -65,6 +76,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   });
   if (!response.ok) {
     const answer = (await response.json().catch(() => ({}))) as { error?: string };
+    if (response.status === 401) window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
     throw new ApiFailure(response.status, answer.error ?? 'unknown');
   }
   return (response.status === 204 || response.status === 202 ? undefined : await response.json()) as T;
@@ -80,6 +92,7 @@ export const projectApi = {
   savePlatform: (id: string, platform: string, value: { name: Localized; pack?: string; structure?: unknown; importer?: unknown }) =>
     call<void>('PUT', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`, value),
   removePlatform: (id: string, platform: string) => call<void>('DELETE', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
+  project: (id: string) => call<ProjectInfo>('GET', project(id)),
   members: (id: string) => call<{ members: Member[] }>('GET', project(id)).then((p) => p.members),
   donations: (id: string) => call<Donations>('GET', `${project(id)}/donations`),
 };
