@@ -88,7 +88,7 @@ Format 1 (the passphrase-locked store from before any release) is dropped on upg
 
 ## Store keys
 
-The data stays on the device and the key stays on the server. Neither alone can read the data. Implemented in `crates/combray-server/src/keys.rs` (server) and `apps/web/src/worker/keyService.ts` (client).
+The data stays on the device and the key stays on the server. Neither alone can read the data. Implemented in `apps/server/src/keys.ts` (server) and `apps/web/src/worker/keyService.ts` (client).
 
 ```
  device (IndexedDB)                               server (combray.sqlite + store master key)
@@ -171,7 +171,7 @@ Each project config says how participants are identified (`participants.mode`):
 | `required` | Only participants with an id that matches the project's pattern | Yes |
 
 - **Participant ids come in the link's fragment**: `/p/{project}/#id=P1234`. Browsers never send the fragment to the server, so the id does not end up in any proxy or access log. The client removes it from the address bar straight away, so it is not on screen for the next person. It is kept in the tab's `sessionStorage` until the store exists, so a reload does not lose it.
-- **The server enforces the policy** when a store is created. Ids are 1 to 64 characters from `A-Z a-z 0-9 . _ -`, and the whole id must match the project's `participants.pattern` (a regular expression, with Rust's `regex` crate, which runs in linear time). The pattern is never sent to clients. That gives the "allowed part of the id" check.
+- **The server enforces the policy** when a store is created. Ids are 1 to 64 characters from `A-Z a-z 0-9 . _ -`, and the whole id must match the project's `participants.pattern` (a regular expression from a safe subset: at most 100 characters, no quantified groups and at most two unbounded repetitions, because JavaScript regular expressions backtrack; a config with another pattern is refused as invalid). The pattern is never sent to clients. That gives the "allowed part of the id" check.
 - **Participant ids are pseudonyms.** Only the researchers know who is behind them, and the server stores them with the store record because a reset needs them. Ids must never be names, emails or student numbers.
 - **Email or phone instead of ids** would let participants identify themselves without a researcher, at the cost of the server holding contact details. We do not do this for now (see open questions).
 
@@ -214,7 +214,7 @@ A data download package contains text that strangers wrote: video titles, channe
 
 ### Content Security Policy
 
-Sent by the server on every response (`CSP` in `crates/combray-server/src/lib.rs`):
+Sent by the server on every response (`CSP` in `apps/server/src/app.ts`):
 
 | Directive | Why |
 | --- | --- |
@@ -296,11 +296,11 @@ The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participan
 - **Email codes are tied to one browser and one site.** Asking for a code sets an `HttpOnly`, `SameSite=Strict` cookie on that site with a random 256-bit secret; the server keeps its SHA-256, and the code only as SHA-256 over the site, the secret and the code, so the database alone does not reveal a code, and a code asked for in the studio cannot be used on the key site or the other way round. Checking a code needs the cookie, so a code read from the mail on another device is useless. Each code allows 5 wrong tries, then the pending sign-in is deleted. With the rate limit of 3 codes per address per 15 minutes, someone guessing around the clock gets 1,440 tries a day at 100 million codes: about 1 in 70,000 per address per day. On the key site, success only reaches the email level, which still needs the passkey or recovery code, except on an account that has no passkey yet (where it allows registering the first one). In the studio it signs in, with the limits above. For an unknown address the server stores a pending sign-in all the same, with a code it never sends, so both cases behave alike.
 - **Rate limits**: email codes 20 per IP per 10 minutes and 3 per address per 15 minutes; recovery codes 5 per researcher per hour; donations 60 per IP per 10 minutes. The email answer is the same for known and unknown addresses.
 - **Studio handoff**: a one-time code (two minutes) created by a full key-site session, sent in the fragment to `/studio/`, and traded for a main-site session. Studio sessions cannot create handoffs.
-- **Email** goes through SMTP with TLS (`lettre`). The SMTP URL never appears in logs or `Debug` output.
+- **Email** goes through SMTP with TLS (`nodemailer`: `smtps://`, or `smtp://…?tls=required` for STARTTLS that must succeed). The SMTP URL never appears in logs.
 
 ### Passkeys
 
-`webauthn-rs` checks registrations and assertions (user verification required, at most ten per researcher). The page asks for discoverable credentials (`residentKey: "preferred"`), so a passkey alone can sign in: that flow uses `webauthn-rs`'s discoverable authentication (its `conditional-ui` feature), with no session before it. The server reads the researcher id from the credential's user handle, looks up that researcher's passkey by credential id, and has `webauthn-rs` verify the assertion against it; an unknown user or credential is rejected like a bad signature. Starting such a sign-in is unauthenticated, so it is rate limited (60 per IP per 10 minutes) and the server holds at most 10,000 ceremonies at once. Ceremony state is kept in server memory for five minutes and used once; a passkey-only sign-in has its own random ceremony id instead of a session. The page asks for the PRF extension on every ceremony with the salt `SHA-256("combray/prf-salt/v1")`. The JSON sent to the server is built by hand, with `extensions: {}`: the PRF output is never serialised. (`PublicKeyCredential.toJSON()` would include client extension results, so the page does not use it.)
+`@simplewebauthn/server` checks registrations and assertions (user verification required, at most ten per researcher). Passkeys are stored as their COSE public key and counter; records from the earlier Rust server (webauthn-rs) are converted when read. The page asks for discoverable credentials (`residentKey: "preferred"`), so a passkey alone can sign in: that flow has no session before it: the server reads the researcher id from the credential's user handle, looks up that researcher's passkey by credential id, and has `@simplewebauthn/server` verify the assertion against it; an unknown user or credential is rejected like a bad signature. Starting such a sign-in is unauthenticated, so it is rate limited (60 per IP per 10 minutes) and the server holds at most 10,000 ceremonies at once. Ceremony state is kept in server memory for five minutes and used once; a passkey-only sign-in has its own random ceremony id instead of a session. The page asks for the PRF extension on every ceremony with the salt `SHA-256("combray/prf-salt/v1")`. The JSON sent to the server is built by hand, with `extensions: {}`: the PRF output is never serialised. (`PublicKeyCredential.toJSON()` would include client extension results, so the page does not use it.)
 
 ### Constructions
 
@@ -377,14 +377,14 @@ The researcher decides, for every path in a platform's tree, what happens to it.
 
 ## Researcher workspace
 
-The researcher workspace (`/studio/`) works on the researcher's own exports. They are parsed in a separate worker and kept only in its memory: nothing is written to IndexedDB or sent anywhere, and closing the tab drops them. What is kept between visits is a draft of the project tree in `localStorage`: the structure (names screened as in shapes) and the researcher's settings, never values. Values from the exports are shown only in the "view as participant" preview and the table views, as React text, like everywhere else. The studio lets HTML table headers and `<dl>` terms become names, because the export is the researcher's own; that is how such names reach the project tree. Participants' clients only use header text as a name when the project tree already has it (`knownKeys`), so text from a participant's file never becomes a name in their shape. Charts run their query in the same worker and only counts and summaries come back to the page; they are SVG drawn by React, so labels are text. `studio` is reserved as a project id.
+The researcher workspace (`/studio/`) works on the researcher's own exports. They are parsed in a separate worker and kept only in its memory: nothing is written to IndexedDB or sent anywhere, and closing the tab drops them. What is kept between visits is a draft of the project tree in `localStorage`: the structure (names screened as in shapes) and the researcher's settings, never values. Values from the exports are shown only in the "view as participant" preview and the table views, as React text, like everywhere else. The studio lets HTML table headers and `<dl>` terms become names, because the export is the researcher's own; that is how such names reach the project tree. Participants' clients only use header text as a name when the project tree already has it (`knownKeys`), so text from a participant's file never becomes a name in their shape. Charts run their query in the same worker and only counts and summaries come back to the page; they are SVG drawn by React, so labels are text.
 
 ## Supply chain
 
-- Lockfiles (`pnpm-lock.yaml`, `Cargo.lock`) are committed, and CI installs with `--frozen-lockfile` and `--locked`.
+- The lockfile (`pnpm-lock.yaml`) is committed, and CI installs with `--frozen-lockfile`. Server dependencies are pinned to exact versions.
 - pnpm only resolves package versions that have been published for at least a week (`minimumReleaseAge` in `pnpm-workspace.yaml`), so a hijacked release is likely to be caught before we pick it up.
-- The participant client's store crypto uses only WebCrypto. Donation sealing and researcher keys use `@hpke/core` and `@hpke/hybridkem-x-wing` (by the same author, pure TypeScript over WebCrypto and `@noble` primitives) in `packages/seal`. The server uses `webauthn-rs` (with OpenSSL) for passkeys, `lettre` for mail, and RustCrypto (`argon2`, `hkdf`, `sha2`, `subtle`), `getrandom` for randomness and `rusqlite` with bundled SQLite. New dependencies that touch data or keys need a reason in the PR.
-- Rust code forbids `unsafe` (`unsafe_code = "forbid"` in the workspace).
+- The participant client's store crypto uses only WebCrypto. Donation sealing and researcher keys use `@hpke/core` and `@hpke/hybridkem-x-wing` (by the same author, pure TypeScript over WebCrypto and `@noble` primitives) in `packages/seal`. The server has three dependencies: `@simplewebauthn/server` for passkeys, `@node-rs/argon2` for password hashing (prebuilt per platform, no install scripts) and `nodemailer` for mail. Everything else is Node itself: `node:crypto` (HKDF, SHA-256, random values, constant-time comparison), `node:sqlite` and `node:http`. New dependencies that touch data or keys need a reason in the PR.
+- Participant id patterns in project configs are limited to a safe subset (no quantified groups, at most two unbounded repetitions, 100 characters), because JavaScript regular expressions backtrack: a careless pattern could otherwise make matching very slow.
 
 ## Decision log
 

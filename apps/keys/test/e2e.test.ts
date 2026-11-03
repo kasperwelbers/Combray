@@ -1,7 +1,6 @@
 /**
  * The key page end to end, in Chromium with a virtual passkey that supports PRF, against a real
- * Combray server. Run with `pnpm --filter @combray/keys e2e` after building the server
- * (`cargo build -p combray-server`) and the page (`pnpm --filter @combray/keys build`).
+ * Combray server. Run with `pnpm e2e`, which builds the web client and the page first.
  *
  * Covers: email sign-in, passkey creation, key setup and recovery code, the project key, a
  * donation sealed in Node and opened on the page, adding a colleague and granting access after
@@ -18,11 +17,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const enabled = process.env.COMBRAY_E2E === '1';
 const repo = join(__dirname, '../../..');
-/** The server under test: the Node server, or the Rust binary while both exist (COMBRAY_TEST_SERVER=rust). */
-const [command, commandArgs] =
-  process.env.COMBRAY_TEST_SERVER === 'rust'
-    ? [join(repo, 'target/debug/combray-server'), []]
-    : [process.execPath, ['--disable-warning=ExperimentalWarning', join(repo, 'apps/server/src/main.ts')]];
+/** The server, run from its TypeScript sources. */
+const command = process.execPath;
+const commandArgs = ['--disable-warning=ExperimentalWarning', join(repo, 'apps/server/src/main.ts')];
 const port = 18_000 + Math.floor(Math.random() * 1000);
 const MAIN = `http://localhost:${port}`;
 const KEYS = `http://keys.localhost:${port}`;

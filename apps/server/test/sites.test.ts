@@ -1,6 +1,6 @@
 /**
  * The two host names: the main site (participant app and studio) and the key page. Ported from
- * `the_key_page_is_served_only_on_its_own_host` in crates/combray-server/tests/research.rs, plus
+ * `the_key_page_is_served_only_on_its_own_host` in the Rust server's tests/ (removed in ADR 0010): research.rs, plus
  * the behaviour of src/lib.rs (key page headers, site info, disabled features).
  */
 import { describe, expect, it } from 'vitest';

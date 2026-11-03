@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Madeleine } from '../components/Madeleine';
 import type { CreateResult, ResetResult, UnlockResult } from '../worker/api';
 
-/** The server's minimum; see crates/combray-server/src/keys.rs. */
+/** The server's minimum; see apps/server/src/keys.ts. */
 export const MIN_PASSWORD = 8;
 
 interface Props {

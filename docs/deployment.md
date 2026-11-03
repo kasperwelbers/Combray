@@ -22,8 +22,8 @@ For a first, small study on one VM. Each step is explained below.
 6. **Check the key page** against the release: `curl -s https://keys.combray.uni.nl/ | sha256sum` must match `combray-keys.html.sha256` of the release you deployed.
 7. **Add the project** config in `combray-data/projects/{id}.json`, and the researchers:
    ```sh
-   docker compose exec combray combray-server researcher add ada@uni.nl
-   docker compose exec combray combray-server project add-researcher willow ada@uni.nl
+   docker compose run --rm combray researcher add ada@uni.nl
+   docker compose run --rm combray project add-researcher willow ada@uni.nl
    ```
 8. The researcher signs in at `https://keys.combray.uni.nl/`, sets up a passkey, saves the recovery code and creates the project key. The key page then shows the **participant link** (`https://combray.uni.nl/p/willow/#k=…`). Use that link, with its `#k=` part, in invitations and on printed cards.
 9. Colleagues: the first researcher adds them on the key page and gives them access after comparing key codes.
@@ -32,7 +32,7 @@ For a first, small study on one VM. Each step is explained below.
 
 ## Docker compose
 
-The stack in `deploy/` has two services: `combray` (the server image: Rust server, built web client and key page) and `caddy` (TLS with automatic certificates, HSTS, no access logs). From `deploy/`, once:
+The stack in `deploy/` has two services: `combray` (the server image: the Node server, built web client and key page) and `caddy` (TLS with automatic certificates, HSTS, no access logs). From `deploy/`, once:
 
 ```sh
 mkdir -p secrets combray-data combray-donation-keys && cp -r examples/projects combray-data/
@@ -92,7 +92,7 @@ On start, the server deletes every sealed key that has a withdrawal tombstone, s
 
 ## Server commands
 
-Run with `docker compose exec combray combray-server …`:
+Run with `docker compose run --rm combray …`:
 
 | Command | What it does |
 | --- | --- |
@@ -118,7 +118,7 @@ The hash must match the release. Researchers can do the same, or compare the ver
 Until the researcher UI exists, the operator creates reset links on the researcher's behalf, after the researcher has verified who the participant is:
 
 ```sh
-docker compose exec combray combray-server reset-link <project> <participant-id>
+docker compose run --rm combray reset-link <project> <participant-id>
 ```
 
 It prints a one-time link (valid for 72 hours) that the participant opens on the computer that holds their data. See [security.md](security.md#password-reset).
@@ -129,11 +129,11 @@ It prints a one-time link (valid for 72 hours) that the participant opens on the
 
 ## Lab laptop
 
-The server runs on a laptop as one binary (`cargo build --release -p combray-server`, or the Docker image). Researcher sign-in needs mail and two host names, which a laptop without a network usually does not have; for an offline lab the participant app works as before, and donations wait for a server. A design for offline sign-in is open.
+The server runs on a laptop with Node (`pnpm install`, then `node apps/server/src/main.ts` with the settings above), or as the Docker image. Researcher sign-in needs mail and two host names, which a laptop without a network usually does not have; for an offline lab the participant app works as before, and donations wait for a server. A design for offline sign-in is open.
 
 ## Later
 
-- The server binary embeds the web client and key page, so a deployment runs exactly a released version.
+- A released image pins the web client and key page, so a deployment runs exactly a released version.
 - A multi-arch image on GHCR with each release.
 - Institutional sign-in (SURFconext, OIDC) in place of the email code.
 - Health metrics (counts and timings only).

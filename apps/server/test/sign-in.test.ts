@@ -1,6 +1,6 @@
 /**
  * Researcher sign-in with an emailed code, the recovery code, sessions and origin checks.
- * Ported from crates/combray-server/tests/research.rs, plus the unit tests of src/accounts.rs
+ * Ported from the Rust server's tests/ (removed in ADR 0010): research.rs, plus the unit tests of the Rust src/accounts.rs
  * that are observable over HTTP (codes work once, only in the browser and on the site that asked,
  * five wrong tries; sessions belong to one site and get a new id when sign-in completes).
  *

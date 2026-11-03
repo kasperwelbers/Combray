@@ -59,7 +59,7 @@ On the key page, a researcher with a passkey on this device **signs in with the 
 
 Sessions are `HttpOnly`, `SameSite=Strict`, host-only cookies (`__Host-` on https). Every request that changes something must carry an `Origin` header for the site it is sent to, and `Sec-Fetch-Site` must be `same-origin` or `none`.
 
-Sign-in is a module of its own (`accounts.rs`, `research.rs`), so an institutional login (SURFconext, OIDC) can later replace the email code without touching keys.
+Sign-in is a module of its own (`apps/server/src/accounts.ts`, `research.ts`), so an institutional login (SURFconext, OIDC) can later replace the email code without touching keys.
 
 ### The studio
 

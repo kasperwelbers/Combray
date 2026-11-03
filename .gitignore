@@ -1,5 +1,6 @@
 node_modules/
 dist/
+# Development databases, store master key and sign-in mails (pnpm dev / pnpm serve)
 target/
 coverage/
 *.log

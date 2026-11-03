@@ -4,8 +4,9 @@
  * writes. Nothing here knows how the server is built, so the same tests run against the Rust
  * server and the Node server.
  *
- * Which server: `COMBRAY_TEST_SERVER=rust` (the default, `target/debug/combray-server`, build it
- * with `cargo build -p combray-server`) or `COMBRAY_TEST_SERVER=node` (`apps/server/src/main.ts`).
+ * The server runs from its TypeScript sources (`apps/server/src/main.ts`). These tests were first
+ * written against the earlier Rust server and passed against both (ADR 0010), so they describe
+ * behaviour, not an implementation.
  *
  * All data here is synthetic.
  */
@@ -23,10 +24,7 @@ export const repo = fileURLToPath(new URL('../../..', import.meta.url));
 
 /** The command that runs the server (and its CLI), with any leading arguments. */
 export function serverCommand(): { command: string; args: string[] } {
-  const which = process.env.COMBRAY_TEST_SERVER ?? 'rust';
-  if (which === 'rust') return { command: join(repo, 'target/debug/combray-server'), args: [] };
-  if (which === 'node') return { command: process.execPath, args: ['--disable-warning=ExperimentalWarning', join(repo, 'apps/server/src/main.ts')] };
-  throw new Error(`COMBRAY_TEST_SERVER must be "rust" or "node", not "${which}"`);
+  return { command: process.execPath, args: ['--disable-warning=ExperimentalWarning', join(repo, 'apps/server/src/main.ts')] };
 }
 
 /** The CSP of the main site (participant app and studio). */
@@ -238,7 +236,7 @@ export class TestServer {
   async start(): Promise<void> {
     const { command, args } = serverCommand();
     if (!existsSync(args.at(-1) ?? command)) {
-      throw new Error(`${args.at(-1) ?? command} does not exist; build the server first (cargo build -p combray-server)`);
+      throw new Error(`${args.at(-1) ?? command} does not exist`);
     }
     this.output = '';
     const child = spawn(command, args, { env: this.env(), stdio: ['ignore', 'pipe', 'pipe'] });

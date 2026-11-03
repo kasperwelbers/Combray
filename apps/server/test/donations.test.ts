@@ -1,7 +1,7 @@
 /**
  * Donations: participants send sealed envelopes, researchers list them, fetch envelopes and
  * sealed keys on the key page, and withdrawals delete the key and leave a tombstone. Ported from
- * crates/combray-server/tests/research.rs and the unit tests of src/donations.rs (withdrawal
+ * the Rust server's tests/ (removed in ADR 0010): research.rs and the unit tests of the Rust src/donations.rs (withdrawal
  * survives restoring a backup of the donation key database; withdrawn ids are not reused).
  */
 import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';

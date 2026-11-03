@@ -1,6 +1,6 @@
 /**
  * The web client, project configs and the store key service (participants' store keys).
- * Ported from crates/combray-server/tests/api.rs, plus behaviour from src/keys.rs and
+ * Ported from the Rust server's tests/ (removed in ADR 0010): api.rs, plus behaviour from src/keys.rs and
  * src/projects.rs. These servers run without researcher settings, as in api.rs, unless a test
  * needs the reset link (which prints the public URL).
  */

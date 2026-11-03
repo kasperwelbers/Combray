@@ -1,6 +1,6 @@
 /**
  * Projects, members, project keys, the studio handoff and the researcher's own key. Ported from
- * crates/combray-server/tests/research.rs, plus the unit tests of src/accounts.rs that are
+ * the Rust server's tests/ (removed in ADR 0010): research.rs, plus the unit tests of the Rust src/accounts.rs that are
  * observable over HTTP (the personal key is set once; project keys are created once and granted
  * by members with access; the last member with access cannot be removed).
  *

@@ -100,7 +100,7 @@ Not the server's job: parsing DDPs, running importers, analysing data, and above
 
 **Storage.** The server has its own storage by default: SQLite for metadata and a data directory on disk for donation envelopes and vault blobs. That keeps a university deployment to one container and one volume. S3-compatible object storage is planned for large donations (presigned uploads straight from the browser, [ADR 0010](decisions/0010-node-server.md)), not a requirement.
 
-Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language.md). The component split itself is recorded in [ADR 0002](decisions/0002-modular-components.md).
+Language: **TypeScript on Node**, without a framework, see [ADR 0010](decisions/0010-node-server.md) (which replaced Rust, ADR 0001). The component split itself is recorded in [ADR 0002](decisions/0002-modular-components.md).
 
 **API sketch** (JSON over HTTPS, versioned under `/api/v1`):
 
@@ -138,22 +138,21 @@ What exists now is marked with ✓; the rest is planned.
 combray/
 ├── apps/
 │   ├── web/                  ✓ participant web client and studio (React SPA, Vite)
-│   └── keys/                 ✓ key page: researcher keys and decryption (one HTML file)
+│   ├── keys/                 ✓ key page: researcher keys and decryption (one HTML file)
+│   └── server/               ✓ shared server (Node): store keys, researcher accounts, donations
 ├── packages/
 │   ├── core/                 ✓ tree model, parsers, paths, shapes (TypeScript)
 │   ├── store/                ✓ encrypted local IndexedDB store
 │   ├── ui/                   design system: tokens, components, illustrations
 │   ├── seal/                 ✓ donation sealing, researcher and project keys (HPKE, X-Wing)
 │   └── viz/                  tree-aware visualisation components
-├── crates/
-│   └── combray-server/       ✓ shared server (axum): store keys, researcher accounts, donations
 ├── importers/                ✓ importer specs (YAML) + synthetic fixtures + expected output
 ├── plugins/                  example WASM plugins (anonymiser, classifier)
 ├── deploy/                   ✓ docker compose, Caddyfile, example project configs
 └── docs/
 ```
 
-Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, and root `package.json` scripts for common tasks (`pnpm dev`, `pnpm test`, `pnpm check`, `pnpm build`, `pnpm docker`), which run recipes from a `justfile`. CI runs type checks, tests, clippy and a Docker build; releases publish the key page with its SHA-256; later also the server image.
+Tooling: pnpm workspaces, and root `package.json` scripts for common tasks (`pnpm dev`, `pnpm test`, `pnpm check`, `pnpm build`, `pnpm docker`), which run recipes from a `justfile`. CI runs type checks, tests (including the server's HTTP tests and the key page end to end) and a Docker build; releases publish the key page with its SHA-256; later also the server image.
 
 ## Deployment shapes
 

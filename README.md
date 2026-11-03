@@ -25,7 +25,7 @@ Example use cases are:
 
 ## Run it locally
 
-Requires Node 22+, pnpm 10 and stable Rust.
+Requires Node 22.18+ (24 recommended) and pnpm 10.
 
 ```sh
 pnpm install
@@ -87,7 +87,7 @@ See [docs/architecture.md](docs/architecture.md) for the full picture.
 | [Vision and use cases](docs/vision.md) | Who Combray is for, research scenarios, guiding principles |
 | [Architecture](docs/architecture.md) | Researcher tools, web client and shared server; monorepo layout; workers and WASM |
 | [Modular components (ADR 0002)](docs/decisions/0002-modular-components.md) | Why researcher tool, web client and server are separate |
-| [Server language (ADR 0001)](docs/decisions/0001-server-language.md) | Rust or Go, with a recommendation |
+| [Server language (ADR 0010)](docs/decisions/0010-node-server.md) | TypeScript on Node, self-hosted first (replaces ADR 0001: Rust) |
 | [Privacy and encryption](docs/privacy-and-encryption.md) | Threat model, local encryption, key handling, donation crypto |
 | [Universal tree importer](docs/universal-importer.md) | Files as trees, path language, importer specs, schema metadata, QuickJS |
 | [Enrichment and scraping](docs/enrichment.md) | Consent-scoped URL enrichment, fast metadata fetching, privacy of requests |
