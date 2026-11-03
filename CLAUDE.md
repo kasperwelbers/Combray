@@ -24,11 +24,12 @@ See [docs/architecture.md](docs/architecture.md#monorepo-layout). Separately dep
 
 ## Commands
 
-Requires Node 22+, pnpm 10 and stable Rust. With [just](https://github.com/casey/just):
+Requires Node 22+, pnpm 10 and stable Rust. `pnpm install` also installs [just](https://github.com/casey/just) (`rust-just`); run recipes as `pnpm just <recipe>`, or `just <recipe>` with just installed.
 
 ```sh
 just install   # pnpm install
-just dev       # web client on http://localhost:5173
+just dev       # web client on http://localhost:5173 (researcher workspace at /studio/)
+just server    # the server without building first: the API for `just dev` (Vite passes /api)
 just test      # TypeScript and Rust tests
 just check     # type checks, rustfmt, clippy
 just serve     # build the web client and key page, run the server on http://localhost:8080

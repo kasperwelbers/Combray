@@ -23,14 +23,26 @@ Example use cases are:
 
 > **Status:** early development (Phase 1). You can import a data download package in the browser, keep it encrypted on your computer and browse it as a tree. Donation, enrichment and the researcher tools come next. Start with [docs/](docs/README.md).
 
-## Try it
+## Run it locally
+
+Requires Node 22+, pnpm 10 and stable Rust. `pnpm install` also installs [just](https://github.com/casey/just), which runs the project's tasks: use `pnpm just <recipe>`, or plain `just <recipe>` if you have just installed. `pnpm just` lists them all.
 
 ```sh
 pnpm install
-pnpm dev                      # http://localhost:5173
+pnpm just dev       # web client with hot reload on http://localhost:5173
+pnpm just server    # in a second terminal: the API on :8080, which the dev server passes /api to
 ```
 
-Or run the server with the built web client: `just serve`, or `docker compose up` in [deploy/](deploy/docker-compose.yml). See [CLAUDE.md](CLAUDE.md#commands) for all commands.
+Or build everything and let the server serve it: `pnpm just serve` (http://localhost:8080).
+
+| Path | What it is |
+| --- | --- |
+| `/` | Participant home: studies with data on this computer |
+| `/p/example/` | Example study (participant id optional) |
+| `/p/willow/#id=W-1234` | Example study that requires a participant id |
+| `/studio/` | Researcher workspace |
+
+Without the server, the study pages say it cannot be reached; the studio works without it, with exports kept in the browser's memory. Projects come from [deploy/examples/projects/](deploy/examples/projects/). Researcher sign-in and the key page need `pnpm just serve` and run on http://localhost:8080 and http://keys.localhost:8080; see [development]((docs/deployment.md#development). For Docker, see [deploy/docker-compose.yml](deploy/docker-compose.yml) (setup steps in its header comment).
 
 ## What makes Combray different
 

@@ -25,7 +25,7 @@ For a first, small study on one VM. Each step is explained below.
    docker compose exec combray combray-server researcher add ada@uni.nl
    docker compose exec combray combray-server project add-researcher willow ada@uni.nl
    ```
-8. The researcher signs in at `https://keys.combray.uni.nl/`, sets up a passkey, saves the recovery code and creates the project key. The key page then shows the **participant link** (`https://combray.uni.nl/willow/#k=…`). Use that link, with its `#k=` part, in invitations and on printed cards.
+8. The researcher signs in at `https://keys.combray.uni.nl/`, sets up a passkey, saves the recovery code and creates the project key. The key page then shows the **participant link** (`https://combray.uni.nl/p/willow/#k=…`). Use that link, with its `#k=` part, in invitations and on printed cards.
 9. Colleagues: the first researcher adds them on the key page and gives them access after comparing key codes.
 10. **Backups**: `combray-data` and `secrets/store-master.key` separately, and `combray-donation-keys` with retention no longer than `COMBRAY_KEY_BACKUP_RETENTION_DAYS` ([below](#backups)).
 11. **Run the manual passkey test** ([researcher-keys.md](researcher-keys.md#manual-test-checklist-before-the-pilot)) with the devices your researchers will use, and a synthetic donation: `node apps/keys/scripts/run.mjs synthetic-donation https://combray.uni.nl willow` from a checkout of the repository.
@@ -125,7 +125,7 @@ It prints a one-time link (valid for 72 hours) that the participant opens on the
 
 ## Development
 
-`just serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Sign-in links are written to `target/dev/outbox/`. Add yourself with `just researcher you@example.org example`, and send a synthetic donation with `just synthetic-donation http://localhost:8080 example`. `just e2e` runs the key page end to end with a virtual passkey.
+`just serve` (or `pnpm just serve`) builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Sign-in links are written to `target/dev/outbox/`. Add yourself with `just researcher you@example.org example`, and send a synthetic donation with `just synthetic-donation http://localhost:8080 example`. `just e2e` runs the key page end to end with a virtual passkey. For hot reload while working on the participant app, run `just dev` (http://localhost:5173) next to `just server`, which runs the same server without building first.
 
 ## Lab laptop
 

@@ -1,4 +1,5 @@
-# Common tasks. Install just: https://github.com/casey/just
+# Common tasks. `pnpm install` installs just: run recipes as `pnpm just <recipe>`, or as
+# `just <recipe>` with just installed (https://github.com/casey/just).
 
 default:
     @just --list
@@ -15,11 +16,15 @@ dev:
 # master key and sign-in mails under target/dev, which is not committed.
 dev_env := "COMBRAY_WEB_DIR=apps/web/dist COMBRAY_DATA_DIR=deploy/examples COMBRAY_BIND=127.0.0.1:8080 COMBRAY_DB=target/dev/combray.sqlite COMBRAY_STORE_MASTER_KEY_FILE=target/dev/store-master.key COMBRAY_RESEARCH_DB=target/dev/research.sqlite COMBRAY_DONATION_KEYS_DB=target/dev/donation-keys.sqlite COMBRAY_PUBLIC_URL=http://localhost:8080 COMBRAY_KEYS_URL=http://keys.localhost:8080 COMBRAY_MAIL_OUTBOX=target/dev/outbox"
 
-# Run the server: participant app and studio on http://localhost:8080, the key page on
-# http://keys.localhost:8080. Sign-in links are written to target/dev/outbox instead of mailed.
-# Donations go to deploy/examples/donations (ignored by git).
-serve: build-web build-keys
+# Serves whatever is in apps/web/dist and apps/keys/dist: participant app and studio on
+# http://localhost:8080, the key page on http://keys.localhost:8080. Sign-in links are written to
+# target/dev/outbox instead of mailed. Donations go to deploy/examples/donations (ignored by git).
+# Run the server without building first (the API for `just dev`, which passes /api to it)
+server:
     {{dev_env}} cargo run -p combray-server
+
+# Build the web client and key page, then run the server (http://localhost:8080)
+serve: build-web build-keys server
 
 # Add a researcher to the development server and a project: just researcher ada@uni.example example
 researcher email project:
