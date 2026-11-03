@@ -16,6 +16,11 @@ if (args.length > 0) {
 } else {
   const config = configFromEnv();
   const server = createServer(createApp(config));
+  server.on('error', (e: NodeJS.ErrnoException) => {
+    // For example EADDRINUSE: another process has the port.
+    log.error({ error_class: e.code ?? 'listen' }, 'could not listen');
+    process.exit(1);
+  });
   server.listen(config.bind.port, config.bind.host, () => {
     log.info({ addr: `${config.bind.host}:${config.bind.port}`, version: VERSION }, 'combray-server listening');
   });

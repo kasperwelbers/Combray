@@ -11,7 +11,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -120,17 +119,15 @@ export function send(port: number, r: RequestOptions): Promise<Response> {
   });
 }
 
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const s = createServer();
-    s.once('error', reject);
-    s.listen(0, '127.0.0.1', () => {
-      const address = s.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      s.close(() => resolve(port));
-    });
-  });
-}
+/**
+ * Ports for test servers: a range per test worker, below the operating system's ephemeral range
+ * (which it also hands out for outgoing connections, including this harness's own requests), so
+ * parallel test files never pick the same port. A port that is taken anyway is skipped.
+ */
+const PORTS_PER_WORKER = 400;
+const firstPort = 20_000 + (Number(process.env.VITEST_POOL_ID ?? 1) % 25) * PORTS_PER_WORKER;
+let nextPort = 0;
+const candidatePort = () => firstPort + (nextPort++ % PORTS_PER_WORKER);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -244,7 +241,13 @@ export class TestServer {
     child.stdout?.on('data', (d: Buffer) => (this.output += d.toString()));
     child.stderr?.on('data', (d: Buffer) => (this.output += d.toString()));
     for (let i = 0; i < 400; i++) {
-      if (child.exitCode !== null) throw new Error(`the server exited with ${child.exitCode}:\n${this.output}`);
+      if (child.exitCode !== null) throw new ServerExited(child.exitCode, this.output);
+      // Only this process's own "listening" line proves it has the port: another server on the
+      // same port would answer the health check too.
+      if (!this.output.includes('combray-server listening')) {
+        await sleep(25);
+        continue;
+      }
       try {
         const r = await send(this.port, { host: this.mainHost, path: '/api/v1/health' });
         if (r.status === 200) return;
@@ -356,14 +359,35 @@ export class TestServer {
  * Start a fresh server for the current test; it is stopped and its directory removed when the
  * test finishes. Every test gets its own, because rate limits live in the server's memory.
  */
+/** The server process exited while starting (for example because its port was taken). */
+export class ServerExited extends Error {
+  readonly code: number | null;
+  readonly output: string;
+  constructor(code: number | null, output: string) {
+    super(`the server exited with ${code}:\n${output}`);
+    this.code = code;
+    this.output = output;
+  }
+}
+
 export async function startServer(options: ServerOptions = {}): Promise<TestServer> {
-  const server = new TestServer(await freePort(), options);
-  onTestFinished(async () => {
-    await server.stop();
-    server.cleanUp();
-  });
-  await server.start();
-  return server;
+  for (let attempt = 0; ; attempt++) {
+    const server = new TestServer(candidatePort(), options);
+    try {
+      await server.start();
+    } catch (e) {
+      await server.stop();
+      server.cleanUp();
+      // Another process has this port: try the next one.
+      if (e instanceof ServerExited && e.output.includes('EADDRINUSE') && attempt < 20) continue;
+      throw e;
+    }
+    onTestFinished(async () => {
+      await server.stop();
+      server.cleanUp();
+    });
+    return server;
+  }
 }
 
 /** All `Set-Cookie` headers of a response. */
