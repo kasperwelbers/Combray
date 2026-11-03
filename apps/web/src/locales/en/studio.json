@@ -1,8 +1,8 @@
 {
   "title": "Researcher workspace",
-  "intro": "Load a data donation package from this platform (your own, or one of the synthetic examples), decide what happens to each part of it, and see what participants will see. Packages stay in this tab: they are not stored and not sent anywhere. Only the structure and your decisions are saved, to the project's draft.",
-  "exportsTitle": "Data donation packages",
-  "exportsIntro": "Add your own package (the zip or folder you downloaded from the platform) or try a synthetic example. You can add several, for example in different languages; their structure is combined.",
+  "intro": "Work out what participants see and are asked to donate from this platform: load a test package, decide what happens to each part of it, and check the preview.",
+  "exportsTitle": "Test packages",
+  "exportsIntro": "Data donation packages used only to work out the tree for this platform: your own (the zip or folder you downloaded from the platform) or a synthetic example. They stay in this browser tab: nothing is stored or sent, and closing the tab removes them. Only the tree and your decisions are saved, without any values. You can add several, for example in different languages; their structure is combined.",
   "filesTitle": "Advanced: importer files",
   "filesIntro": "Save this platform's tree as structure.json and importer.json, or open files saved earlier or shared by another project.",
   "open": "Open files",
@@ -71,7 +71,7 @@
   "mergeTogether_other": "Not merged: both parts are in {{count}} of your loaded packages, so they hold different data.",
   "previewTitle": "View as participant",
   "previewIntro": "The tables participants will see with your current decisions, filled with your own data donation package.",
-  "previewEmpty": "Add a data donation package to see the preview.",
+  "previewEmpty": "Add a test package to see the preview.",
   "noTables": "With these decisions, participants would see nothing yet.",
   "tables": "Tables",
   "unnamedTable": "Your data",
@@ -324,5 +324,18 @@
     "create": "Create project",
     "taken": "A project with this address exists. Choose another.",
     "invalid": "Use lowercase letters, digits and dashes only."
+  },
+  "values": {
+    "title": "Values in your test packages",
+    "noPackages": "Load a test package to see what this field holds.",
+    "notFound": "This field is not in the test packages you loaded.",
+    "summary_one": "Found {{count}} time, {{distinct}} different value.",
+    "summary_other": "Found {{count}} times, {{distinct}} different values.",
+    "empty_one": "{{count}} is empty.",
+    "empty_other": "{{count}} are empty.",
+    "times_one": "{{count}}×",
+    "times_other": "{{count}}×",
+    "more_one": "and {{count}} other value",
+    "more_other": "and {{count}} other values"
   }
 }

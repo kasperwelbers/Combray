@@ -11,6 +11,8 @@ import {
   projectTreeFromShape,
   setDecision,
   VALUE_COLUMN,
+  valuesAt,
+  mergeNodes,
   type ProjectNode,
 } from '../src';
 import { watchHistory } from './fixtures';
@@ -254,5 +256,21 @@ describe('outline', () => {
       ['text', 'tweets/[*]/text'],
     ]);
     expect(tweetsGroup.groups[0]!.fields.map((f) => f.name)).toEqual(['by', 'text']);
+  });
+});
+
+describe('valuesAt', () => {
+  it('finds the raw values at a project path, in every item', () => {
+    const tree = projectTreeFromShape(extractShape(tweets));
+    expect(valuesAt(tweets, tree, ['tweets', '[*]', 'text'])).toEqual(['Madeleines today', 'Rain again']);
+    expect(valuesAt(tweets, tree, ['tweets', '[*]', 'comments', '[*]', 'by'])).toEqual(['Marcel', 'Swann']);
+    expect(valuesAt(tweets, tree, ['user', 'name'])).toEqual(['Leonie']);
+    expect(valuesAt(tweets, tree, ['nope'])).toEqual([]);
+  });
+
+  it('follows merged nodes, under their new name', () => {
+    const tree = projectTreeFromShape(extractShape(tweets));
+    const merged = mergeNodes(tree, ['user', 'joined'], ['user', 'name']).tree;
+    expect(valuesAt(tweets, merged, ['user', 'name']).sort()).toEqual(['2020-01-01', 'Leonie']);
   });
 });

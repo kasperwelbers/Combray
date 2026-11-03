@@ -1575,3 +1575,32 @@ main.wide {
   justify-content: space-between;
   gap: 0.5rem 1rem;
 }
+
+/* A field's values in the researcher's test packages, next to its settings. */
+.node-side {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.field-values {
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+}
+
+.field-values h3 {
+  margin-top: 0;
+}
+
+.value-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.value-text {
+  overflow-wrap: anywhere;
+}

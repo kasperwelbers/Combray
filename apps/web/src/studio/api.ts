@@ -32,6 +32,18 @@ export interface PreviewTable {
   rows: PreviewRow[];
 }
 
+/** A field's values in the loaded test packages: a summary, for the tree editor. */
+export interface FieldValues {
+  /** How many times the field occurs (items that have it). */
+  total: number;
+  /** How many of those are empty (null or an empty text). */
+  empty: number;
+  /** How many different values there are. */
+  distinct: number;
+  /** The most common values, most common first. */
+  top: { value: string; count: number }[];
+}
+
 export interface StudioApi {
   addExport(
     uploads: Upload[],
@@ -40,6 +52,8 @@ export interface StudioApi {
   removeExport(id: number): Promise<void>;
   /** The derived tables of the loaded exports, with the first rows of each. */
   preview(tree: ProjectNode, rowLimit: number): Promise<PreviewTable[]>;
+  /** A field's values in the loaded test packages, summarised. */
+  fieldValues(tree: ProjectNode, path: string[], limit: number): Promise<FieldValues>;
   /** A chart over all rows of the loaded exports. Only counts and summaries come back. */
   chart(tree: ProjectNode, spec: ChartSpec): Promise<ChartData>;
 }

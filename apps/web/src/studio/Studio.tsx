@@ -29,7 +29,7 @@ import { examplePackages } from '@combray/importers';
 
 import { Dropzone } from '../components/Dropzone';
 import type { ImportProgress, Upload } from '../worker/api';
-import type { PreviewTable, StudioExport } from './api';
+import type { FieldValues as FieldValuesSummary, PreviewTable, StudioExport } from './api';
 import { addExport, studio } from './client';
 import { DecisionTree } from './DecisionTree';
 import {
@@ -45,11 +45,14 @@ import {
   type Shortcut,
 } from './model';
 import { download, loadView, VIEW_KEY } from './draft';
+import { FieldValues } from './FieldValues';
 import { NodePanel } from './NodePanel';
 import { Suggestions } from './Suggestions';
 
 const PREVIEW_ROWS = 25;
 const PREVIEW_DELAY_MS = 300;
+/** How many of a field's most common values the tree editor shows. */
+const FIELD_VALUES = 8;
 
 import { ChartBuilder } from './ChartBuilder';
 import { Preview } from './Preview';
@@ -88,6 +91,7 @@ export function Studio({ title, header, draft, pack }: { title?: string; header?
   const [message, setMessage] = useState<{ text: string; error?: boolean }>();
   const [preview, setPreview] = useState<PreviewTable[]>([]);
   const [suggestions, setSuggestions] = useState<MergeSuggestion[]>([]);
+  const [fieldValues, setFieldValues] = useState<FieldValuesSummary>();
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Save changes, not the tree as it was loaded (saving marks the draft as changed).
@@ -149,6 +153,23 @@ export function Studio({ title, header, draft, pack }: { title?: string; header?
     };
   }, [tree, exports]);
 
+  // What the selected field holds in the loaded test packages.
+  useEffect(() => {
+    setFieldValues(undefined);
+    const node = tree && selected && getNode(tree, selected);
+    if (!tree || !selected || !node || !isDecidable(node) || exports.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void studio.fieldValues(tree, selected, FIELD_VALUES).then((values) => {
+        if (!cancelled) setFieldValues(values);
+      });
+    }, PREVIEW_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [tree, selected, exports]);
+
   // Nodes that occur together in a loaded export are different nodes: never suggest merging them.
   const together = useCallback(
     (from: NodePath, into: NodePath) => (tree ? seenTogether(tree, [...shapes.values()], from, into) : 0),
@@ -175,8 +196,13 @@ export function Studio({ title, header, draft, pack }: { title?: string; header?
     if (uploads.length === 0) return;
     setMessage(undefined);
     setProgress({ step: 'looking' });
+    // Progress comes from the worker on its own channel, and can arrive after the result: once
+    // this upload is finished, late reports must not make the workspace look busy again.
+    let finished = false;
     try {
-      const { export: info, shape } = await addExport(uploads, setProgress);
+      const { export: info, shape } = await addExport(uploads, (p) => {
+        if (!finished) setProgress(p);
+      });
       setExports((e) => [...e, info]);
       setShapes((m) => new Map(m).set(info.id, shape));
       if (tree) {
@@ -194,6 +220,7 @@ export function Studio({ title, header, draft, pack }: { title?: string; header?
       const problem = error instanceof Error && ['too-many-files', 'too-big'].includes(error.message) ? error.message : undefined;
       setMessage({ text: problem ? t(`studio.problem.${problem}`) : t('import.failed'), error: true });
     } finally {
+      finished = true;
       setProgress(undefined);
     }
   }
@@ -448,17 +475,20 @@ export function Studio({ title, header, draft, pack }: { title?: string; header?
                 {...(selected ? { selected } : {})}
               />
               {selected && getNode(tree, selected) ? (
-                <NodePanel
-                  key={pathKey(selected)}
-                  tree={tree}
-                  path={selected}
-                  states={states}
-                  onDecide={decide}
-                  onDecideBelow={setBelow}
-                  onPatch={patch}
-                  onMerge={merge}
-                  onKeysAreData={keysAreData}
-                />
+                <div className="node-side">
+                  {isDecidable(getNode(tree, selected)!) && <FieldValues values={fieldValues} hasPackages={exports.length > 0} />}
+                  <NodePanel
+                    key={pathKey(selected)}
+                    tree={tree}
+                    path={selected}
+                    states={states}
+                    onDecide={decide}
+                    onDecideBelow={setBelow}
+                    onPatch={patch}
+                    onMerge={merge}
+                    onKeysAreData={keysAreData}
+                  />
+                </div>
               ) : (
                 <p className="meta">{t('studio.selectHelp')}</p>
               )}

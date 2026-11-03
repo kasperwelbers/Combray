@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /**
- * The studio worker: holds the researcher's own exports in memory while they set decisions,
- * and derives the participant view from them. Nothing here is stored or sent anywhere; closing
+ * The studio worker: holds the researcher's test packages in memory while they set decisions,
+ * shows what is in each field, and derives the participant view from them. Nothing here is stored or sent anywhere; closing
  * the tab drops it.
  */
 import {
@@ -15,6 +15,7 @@ import {
   normalizeTree,
   readSpot,
   runQuery,
+  valuesAt,
   type DerivedRow,
   type ProjectNode,
   type TableDef,
@@ -111,6 +112,28 @@ const api: StudioApi = {
       kept[i] = new Set(table.rows.map((r) => r.index));
     });
     return out;
+  },
+
+  async fieldValues(projectTree, path, limit) {
+    const counts = new Map<string, number>();
+    let total = 0;
+    let empty = 0;
+    for (const { tree } of exports.values()) {
+      for (const value of valuesAt(tree, projectTree, path)) {
+        total++;
+        const shown = text(value);
+        if (shown === null || shown === '') {
+          empty++;
+          continue;
+        }
+        counts.set(shown, (counts.get(shown) ?? 0) + 1);
+      }
+    }
+    const top = [...counts]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, limit)
+      .map(([value, count]) => ({ value, count }));
+    return { total, empty, distinct: counts.size, top };
   },
 
   async chart(projectTree, spec) {

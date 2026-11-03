@@ -335,6 +335,15 @@ function leafValue(node: TreeNode): unknown {
   }
 }
 
+/**
+ * The values in a tree at a project path, as they are in the file (before any conversion), for the
+ * studio's look at a field in the researcher's test packages. For a node whose keys are data
+ * (`{*}`), the keys are its values.
+ */
+export function valuesAt(tree: TreeNode, root: ProjectNode, path: NodePath): unknown[] {
+  return resolve(tree, root, path).map((node) => (isLeaf({ kind: node.kind }) ? leafValue(node) : node.name));
+}
+
 /** A value converted as its column says: transforms, then `as`. Unconverted columns pass through. */
 export function convertValue(value: unknown, column: Pick<ColumnDef, 'transform' | 'as' | 'format'>): unknown {
   if (!column.transform && !column.as) return value;
