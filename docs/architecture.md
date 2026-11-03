@@ -126,7 +126,7 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 | `POST /api/v1/donations/{d}/withdraw` | Web client | Withdraw a donation with its withdrawal token |
 | `POST /api/v1/assistant` | Web client | Optional AI helper proxy |
 
-**Projects in the web client.** Participants open `/{project}/`, with an optional participant id in the fragment (`#id=…`). Each project has its own encrypted store on the device, and `/` lists the projects with data on this computer ([ADR 0005](decisions/0005-projects-scope-stores.md)).
+**Projects in the web client.** Participants open `/p/{project}/` ([ADR 0008](decisions/0008-project-paths.md)), with an optional participant id in the fragment (`#id=…`). Each project has its own encrypted store on the device, and `/` lists the projects with data on this computer ([ADR 0005](decisions/0005-projects-scope-stores.md)).
 
 **Accounts and roles.** Server admins (university IT) manage researcher accounts and quotas; researchers own projects and can add collaborators; participants have only session tokens bound to one project. Researchers sign in with an email link and a passkey (built for the pilot, [researcher-keys.md](researcher-keys.md)); SSO via OIDC or SAML (e.g. SURFconext) can replace the email step later. For now the server operator adds researchers with a server command, and members add colleagues on the key page.
 

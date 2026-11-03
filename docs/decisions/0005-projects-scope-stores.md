@@ -1,6 +1,6 @@
 # ADR 0005: Projects scope local stores; participant ids and researcher-issued resets
 
-- **Status:** accepted
+- **Status:** accepted; the participant URL (decision 1) is amended by [ADR 0008](0008-project-paths.md) to `/p/{project}/`
 - **Date:** 2026-10-29
 - **Amends:** [ADR 0004](0004-server-held-store-keys.md)
 

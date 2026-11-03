@@ -156,7 +156,7 @@ describe.skipIf(!enabled)('key page', () => {
     await ada.page.getByRole('button', { name: 'Create the project key' }).click();
     const link = ada.page.locator('code.wrap');
     await link.waitFor();
-    expect(await link.textContent()).toMatch(new RegExp(`^${MAIN}/willow/#k=[A-Za-z0-9_-]{22}$`));
+    expect(await link.textContent()).toMatch(new RegExp(`^${MAIN}/p/willow/#k=[A-Za-z0-9_-]{22}$`));
     const config = await (await fetch(`${MAIN}/api/v1/p/willow/config`)).json();
     expect((await link.textContent())!.endsWith(config.donation_key.fingerprint)).toBe(true);
   }, 60_000);

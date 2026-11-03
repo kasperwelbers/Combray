@@ -7,15 +7,13 @@ use std::path::Path;
 use regex::Regex;
 use serde::Deserialize;
 
-/// Names that cannot be project ids, because the web client is served at `/{project}/`.
-const RESERVED: &[&str] = &["api", "assets", "studio"];
-
+/// Project ids are lowercase letters, digits and dashes. Participants open `/p/{project}/`, so no
+/// id clashes with the web client's own paths and none need to be reserved (ADR 0008).
 pub fn valid_project_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
         && id
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-        && !RESERVED.contains(&id)
 }
 
 /// Participant ids are pseudonymous codes from the researcher, never names or emails.
@@ -134,12 +132,13 @@ mod tests {
     }
 
     #[test]
-    fn reserves_names_used_by_the_web_client() {
+    fn checks_project_ids() {
         assert!(valid_project_id("willow"));
-        assert!(!valid_project_id("api"));
-        assert!(!valid_project_id("assets"));
-        assert!(!valid_project_id("studio"));
+        assert!(valid_project_id("studio-2"));
         assert!(!valid_project_id("Willow"));
+        assert!(!valid_project_id("../willow"));
+        assert!(!valid_project_id(""));
+        assert!(!valid_project_id(&"a".repeat(65)));
     }
 
     #[test]

@@ -130,7 +130,7 @@ fn reset_link(config: &Config, project: &str, participant: &str) -> std::io::Res
         .create_reset_token(project, participant)
         .map_err(|e| std::io::Error::other(format!("{e:?}")))?;
     let base = std::env::var("COMBRAY_PUBLIC_URL").unwrap_or_default();
-    println!("{}/{project}/#reset={token}", base.trim_end_matches('/'));
+    println!("{}/p/{project}/#reset={token}", base.trim_end_matches('/'));
     eprintln!(
         "Valid for {} hours, once. It works on the device that holds the participant's data.",
         combray_server::keys::RESET_TTL_SECS / 3600

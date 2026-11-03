@@ -99,7 +99,7 @@ A project has one X-Wing key pair. The first member to open the project on the k
 
 The server publishes the public key and fingerprint in the project config (`GET /api/v1/p/{id}/config`, field `donation_key`). Participants' browsers seal donation keys to it.
 
-**The participant link pins the key.** The key page shows the link to give participants: `https://combray…/{project}/#k=<fingerprint>`. The donate screen will check that the config's key has this fingerprint before sealing anything, so a server that swaps the project key is caught by every participant who arrived through the researcher's link. This stands in for signed configs during the pilot.
+**The participant link pins the key.** The key page shows the link to give participants: `https://combray…/p/{project}/#k=<fingerprint>`. The donate screen will check that the config's key has this fingerprint before sealing anything, so a server that swaps the project key is caught by every participant who arrived through the researcher's link. This stands in for signed configs during the pilot.
 
 ### Giving a colleague access
 

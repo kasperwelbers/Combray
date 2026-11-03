@@ -111,7 +111,7 @@ Built for the pilot; the full design is in [researcher-keys.md](researcher-keys.
 - **Each project has one project key** (X-Wing). Donations are sealed to it. The server keeps one sealed copy per member with access, and cannot open any of them.
 - **Access is granted browser to browser.** A member's key page seals the project key to a colleague's personal key, after both compare a key code derived from the colleague's public key.
 - **Decryption happens on the key page**, a dependency-free page on its own origin with a hash-pinned CSP, in memory only. It fetches the sealed donation keys on every use and never stores keys or plaintext ([key-design.md](key-design.md#5-analysing-fetch-on-use)).
-- **The participant link pins the project key**: `https://combray.uni.nl/willow/#k=<fingerprint>`. The fragment never reaches the server; the donate screen checks the config's key against it before sealing.
+- **The participant link pins the project key**: `https://combray.uni.nl/p/willow/#k=<fingerprint>`. The fragment never reaches the server; the donate screen checks the config's key against it before sealing.
 - **Signed project configs** (an Ed25519 key, perhaps with ML-DSA) are deferred. The fingerprint covers the key, which is what matters for confidentiality; signing would also cover the rest of the config.
 - **Key rotation** is not built. A new project key would mean a new project for now.
 

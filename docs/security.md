@@ -159,7 +159,7 @@ An earlier design also wrapped the DEK with a non-extractable "device key" store
 
 ### Projects and participants
 
-A server hosts many projects. A participant opens `https://combray.example.edu/{project}/`, and every store belongs to exactly one project. Project ids are lowercase letters, digits and dashes. `api` and `assets` are reserved, because the web client is served at those paths.
+A server hosts many projects. A participant opens `https://combray.example.edu/p/{project}/`, and every store belongs to exactly one project. Project ids are lowercase letters, digits and dashes. Because projects live under `/p/`, no id can collide with the web client's own paths, so none are reserved ([ADR 0008](decisions/0008-project-paths.md)).
 
 Each project config says how participants are identified (`participants.mode`):
 
@@ -169,7 +169,7 @@ Each project config says how participants are identified (`participants.mode`):
 | `optional` (default) | Anyone; a participant id from the link is kept when there is one | Only for participants with an id |
 | `required` | Only participants with an id that matches the project's pattern | Yes |
 
-- **Participant ids come in the link's fragment**: `/{project}/#id=P1234`. Browsers never send the fragment to the server, so the id does not end up in any proxy or access log. The client removes it from the address bar straight away, so it is not on screen for the next person. It is kept in the tab's `sessionStorage` until the store exists, so a reload does not lose it.
+- **Participant ids come in the link's fragment**: `/p/{project}/#id=P1234`. Browsers never send the fragment to the server, so the id does not end up in any proxy or access log. The client removes it from the address bar straight away, so it is not on screen for the next person. It is kept in the tab's `sessionStorage` until the store exists, so a reload does not lose it.
 - **The server enforces the policy** when a store is created. Ids are 1 to 64 characters from `A-Z a-z 0-9 . _ -`, and the whole id must match the project's `participants.pattern` (a regular expression, with Rust's `regex` crate, which runs in linear time). The pattern is never sent to clients. That gives the "allowed part of the id" check.
 - **Participant ids are pseudonyms.** Only the researchers know who is behind them, and the server stores them with the store record because a reset needs them. Ids must never be names, emails or student numbers.
 - **Email or phone instead of ids** would let participants identify themselves without a researcher, at the cost of the server holding contact details. We do not do this for now (see open questions).
@@ -179,7 +179,7 @@ Each project config says how participants are identified (`participants.mode`):
 Only for stores with a participant id. The researcher is in charge of the people in their project:
 
 1. The participant tells the researcher they forgot their password. The researcher checks who they are, in whatever way the study uses (in the lab, by their usual contact details).
-2. The researcher creates a reset link for that project and participant id. Until the researcher UI exists, this is a server command: `combray-server reset-link <project> <participant-id>`, which prints `https://…/{project}/#reset=<token>`.
+2. The researcher creates a reset link for that project and participant id. Until the researcher UI exists, this is a server command: `combray-server reset-link <project> <participant-id>`, which prints `https://…/p/{project}/#reset=<token>`.
 3. The participant opens the link **on the device that holds their data**, and chooses a new password. The server replaces the password hash, lifts any lockout, and returns the same KEK, so the existing data opens again. On a device without a store for that project, the client explains that the link has to be opened where the data is.
 
 The token is 32 random bytes in the link's fragment. The server stores only its SHA-256, together with the project, the participant id and an expiry of 72 hours. It works once, only for that participant's stores in that project, and is used up in the same transaction that checks it. Reset requests share the per-IP rate limit with unlock attempts.

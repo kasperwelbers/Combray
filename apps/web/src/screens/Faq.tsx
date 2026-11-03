@@ -3,7 +3,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { FaqSymbols, Scene, type SceneName } from '../components/FaqArt';
 
 /**
- * Questions and answers for participants, at `/{project}/faq`. Works with the store locked: it
+ * Questions and answers for participants, at `/p/{project}/faq`. Works with the store locked: it
  * needs no data. Answers about features that are not built yet are written, but stay hidden until
  * the feature ships, so participants never read about something they cannot do.
  */

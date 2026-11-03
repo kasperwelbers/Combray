@@ -2,7 +2,7 @@
 
 This document follows one participant's data from the moment it is loaded to the moment a researcher analyses it, and names every key on the way. It is the agreed plan ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The local store, donation sealing and storage, withdrawal, and the researchers' key page are built; the participant donate screen and the package export are not yet. How researchers sign in and hold their keys is in [researcher-keys.md](researcher-keys.md) ([ADR 0007](decisions/0007-browser-key-page.md)). [security.md](security.md) records the details of what is built, and [privacy-and-encryption.md](privacy-and-encryption.md) the threat model and constructions.
 
-For a version with pictures, see [the explainer for researchers](explainers/keys.html). Participants get the same story in the app, on the Questions page (`/{project}/faq`, `apps/web/src/screens/Faq.tsx`).
+For a version with pictures, see [the explainer for researchers](explainers/keys.html). Participants get the same story in the app, on the Questions page (`/p/{project}/faq`, `apps/web/src/screens/Faq.tsx`).
 
 ## In one paragraph
 

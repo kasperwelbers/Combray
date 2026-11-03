@@ -2,6 +2,7 @@ import { localize } from '@combray/core';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { projectPath } from '../route';
 import type { LocalProject } from '../worker/api';
 import { data } from '../worker/client';
 
@@ -24,7 +25,7 @@ export function Projects() {
         <ul className="project-list">
           {projects.map((p) => (
             <li key={p.id} className="card">
-              <a href={`/${p.id}/`}>
+              <a href={projectPath(p.id)}>
                 <strong>{p.name ? localize(p.name, i18n.language) : p.id}</strong>
               </a>
               {p.participantId && <span className="muted"> · {t('projects.as', { id: p.participantId })}</span>}

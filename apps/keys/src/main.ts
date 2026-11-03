@@ -343,7 +343,7 @@ async function projectSection(id: string): Promise<HTMLElement> {
   } else {
     try {
       const key = await vault.projectKey(project);
-      const link = `${site.public_url}/${id}/#k=${await fingerprint(key.publicKey)}`;
+      const link = `${site.public_url}/p/${id}/#k=${await fingerprint(key.publicKey)}`;
       body.push(
         h('h3', {}, 'Participant link'),
         h('p', {}, h('code', { class: 'wrap' }, link)),

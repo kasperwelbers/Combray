@@ -1,6 +1,7 @@
 /**
- * Where the participant is: the project overview at `/`, or a project at `/{project}/`, with its
- * questions and answers at `/{project}/faq`. The researcher workspace is at `/studio/`.
+ * Where the participant is: the project overview at `/`, or a project at `/p/{project}/`, with its
+ * questions and answers at `/p/{project}/faq`. The researcher workspace is at `/studio/`. Projects
+ * live under `/p/` so their ids never clash with the app's own pages (ADR 0008).
  *
  * The studio may carry a one-time sign-in code from the key page (`/studio/#handoff=…`), which
  * `studio/Account.tsx` reads and removes.
@@ -37,12 +38,14 @@ function remember(projectId: string, participantId: string): void {
 
 /** Parse a location. Pure, for tests; `readRoute` also cleans up the address bar. */
 export function parseRoute(pathname: string, hash: string): Route {
-  const [first, ...rest] = pathname.split('/').filter(Boolean);
+  const [first, projectId, ...rest] = pathname.split('/').filter(Boolean);
+  if (first === 'studio' && projectId === undefined) return { kind: 'studio' };
   const faq = rest.length === 1 && rest[0] === 'faq';
-  if (!first || (rest.length > 0 && !faq) || !PROJECT_ID.test(first)) return { kind: 'home' };
-  if (first === 'studio') return { kind: 'studio' };
+  if (first !== 'p' || !projectId || !PROJECT_ID.test(projectId) || (rest.length > 0 && !faq)) {
+    return { kind: 'home' };
+  }
   const params = new URLSearchParams(hash.replace(/^#/, ''));
-  const route: Route = { kind: 'project', projectId: first };
+  const route: Route = { kind: 'project', projectId };
   if (faq) route.page = 'faq';
   const id = params.get('id');
   if (id && PARTICIPANT_ID.test(id)) route.participantId = id;
@@ -53,7 +56,7 @@ export function parseRoute(pathname: string, hash: string): Route {
 
 /** The address of a project page. */
 export function projectPath(projectId: string, page?: 'faq'): string {
-  return page ? `/${projectId}/${page}` : `/${projectId}/`;
+  return page ? `/p/${projectId}/${page}` : `/p/${projectId}/`;
 }
 
 export function readRoute(): Route {

@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseRoute } from '../src/route';
+import { parseRoute, projectPath } from '../src/route';
 
 describe('parseRoute', () => {
   it('finds the project and the participant id or reset token in the fragment', () => {
     expect(parseRoute('/', '')).toEqual({ kind: 'home' });
-    expect(parseRoute('/willow/', '')).toEqual({ kind: 'project', projectId: 'willow' });
-    expect(parseRoute('/willow', '#id=P1234')).toEqual({
+    expect(parseRoute('/p/willow/', '')).toEqual({ kind: 'project', projectId: 'willow' });
+    expect(parseRoute('/p/willow', '#id=P1234')).toEqual({
       kind: 'project',
       projectId: 'willow',
       participantId: 'P1234',
     });
     const token = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
-    expect(parseRoute('/willow/', `#reset=${token}`)).toEqual({
+    expect(parseRoute('/p/willow/', `#reset=${token}`)).toEqual({
       kind: 'project',
       projectId: 'willow',
       resetToken: token,
@@ -20,8 +20,8 @@ describe('parseRoute', () => {
   });
 
   it('finds the questions and answers page', () => {
-    expect(parseRoute('/willow/faq', '')).toEqual({ kind: 'project', projectId: 'willow', page: 'faq' });
-    expect(parseRoute('/willow/faq/', '#id=P1')).toEqual({
+    expect(parseRoute('/p/willow/faq', '')).toEqual({ kind: 'project', projectId: 'willow', page: 'faq' });
+    expect(parseRoute('/p/willow/faq/', '#id=P1')).toEqual({
       kind: 'project',
       projectId: 'willow',
       page: 'faq',
@@ -35,9 +35,18 @@ describe('parseRoute', () => {
   });
 
   it('ignores malformed paths, ids and tokens', () => {
-    expect(parseRoute('/Willow/', '')).toEqual({ kind: 'home' });
-    expect(parseRoute('/willow/extra', '')).toEqual({ kind: 'home' });
-    expect(parseRoute('/willow/', '#id=<script>')).toEqual({ kind: 'project', projectId: 'willow' });
-    expect(parseRoute('/willow/', '#reset=short')).toEqual({ kind: 'project', projectId: 'willow' });
+    expect(parseRoute('/p/Willow/', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/p/willow/extra', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/p/willow/', '#id=<script>')).toEqual({ kind: 'project', projectId: 'willow' });
+    expect(parseRoute('/p/willow/', '#reset=short')).toEqual({ kind: 'project', projectId: 'willow' });
+    expect(parseRoute('/p/', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/studio/extra', '')).toEqual({ kind: 'home' });
+  });
+
+  it('only finds projects under /p/, so any id is free to use', () => {
+    expect(parseRoute('/willow/', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/p/studio/', '')).toEqual({ kind: 'project', projectId: 'studio' });
+    expect(projectPath('willow')).toBe('/p/willow/');
+    expect(projectPath('willow', 'faq')).toBe('/p/willow/faq');
   });
 });
