@@ -1,6 +1,6 @@
 # ADR 0006: Revocable donation keys, kept apart from donations
 
-- **Status:** accepted (not built yet)
+- **Status:** accepted, built; decisions 1 and 5 amended by [ADR 0007](0007-browser-key-page.md) (one project key with sealed member copies, sessions instead of access tokens)
 - **Date:** 2026-10-30
 - **Amends:** [privacy-and-encryption.md](../privacy-and-encryption.md#donation-encryption) (envelope format, withdrawal)
 

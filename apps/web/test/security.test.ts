@@ -47,7 +47,7 @@ describe('the Trusted Types policy', () => {
 
 /** Raw HTML and code-from-string APIs have no place in the client. Use React and parsers. */
 describe('client source', () => {
-  const roots = ['src', '../../packages/core/src', '../../packages/store/src'].map((r) => join(__dirname, '..', r));
+  const roots = ['src', '../../packages/core/src', '../../packages/store/src', '../../packages/seal/src', '../keys/src'].map((r) => join(__dirname, '..', r));
   const banned = /dangerouslySetInnerHTML|\.innerHTML|\.outerHTML|insertAdjacentHTML|document\.write|new Function\(|\beval\(/;
 
   function files(dir: string): string[] {

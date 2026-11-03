@@ -39,7 +39,7 @@ This different goal implies certain design principles. Also, after several itera
 - **Returning to sessions.** Participants can revisit the tool and their own data. This allows some design features that are impossible in a one-shot donation, such as longer running enrichment processes, and the ability to recover from small problems in the data extraction process. To support this, Combray stores data locally in the browser's IndexedDB, encrypted with a key that can only be recovered through a password login on a server. The server protects the data, but cannot see it.
 - **Easy to use.** Current tools are catered to technically skilled researchers. This is in part because of the complexity of designing efficient data extraction scripts that need to work the one time the participant uses the tool and a large number of participants. Scripts need to be robust for changes in data donation packages, and a small flaw can harm the primary goal of the study. When we shift the focus to a slower process, in studies where participants are assisted by researchers and/or expected to return to the tool, we need to anticipate less, and can recover from small problems. This enables a less complex approach to data extraction.
 - **Easy to deploy.** Researchers that want to do in-person data donation do not need to set up complex secure servers. Combray can be installed locally to avoid needing a server at all. For remote use, an end-to-end encryption design makes it possible for researchers to safely use a shared server set up by a university or research institute.
-- **End-to-end encryption.** Donated data is always encrypted by the client using a quantum-proof public key. The researcher creates the private key in a small local key tool, and is instructed how to store it securely.
+- **End-to-end encryption.** Donated data is always encrypted by the client using a quantum-proof public key. Researchers sign in with a passkey, which also unlocks their keys on a small, separate key page; the server only ever stores keys it cannot open. Nothing to install.
 - **Enrichment with consent.** Takeout data is often thin: a list of URLs or usernames. With the participant's consent, Combray can send a minimal, sanitised set of URLs (for example "the top 25 TikTok profiles I watched per month") to the server, which fetches public metadata such as titles and thumbnails so the data becomes something people recognise.
 - **One universal importer.** Every file (JSON, CSV, HTML, XML, and whole zip archives) becomes a tree. Importers are small declarative specs that mark which paths to show to the participant, and which paths we ask them to donate. When a file is opened in the client, the tree structure of donations is stored on the server as metadata (with user approval and sanitized to not leak personal data). Creating and maintaining importers then becomes a simple (UI-supported) process of deciding what to do with each path (ignore, show, donate), and when the structure of donation packages changes, the researcher just needs to decide what to do with the new paths. Name changes can be dealt with by adding aliases. Combined with a research design where donation takes place after multiple sessions, this makes it possible to maintain importers without needing to anticipate every possible change in the data donation packages.
 - **Trees, not just tables.** Data is presented as it is. Charts that need tables unfold the tree on demand, and all aggregation happens locally in web workers (in TypeScript, with Rust compiled to WebAssembly only for parts that turn out to be too slow). Basically, instead of dealing with the complicated process of flattening a tree to a table for every donation, we focus on dealing with the much more complicated process of how to create an intuitive UI for exploring and visualizing tree data. Basically, addressing the problem at the root instead of the leaves (pun very much intended).
@@ -48,20 +48,21 @@ This different goal implies certain design principles. Also, after several itera
 
 ## Planned architecture at a glance
 
-Combray is three modular parts. A university runs **one shared server**; any researcher, without programming, uses it from the browser plus a small **local key tool** on their own computer; participants only need a **browser**.
+Combray is three modular parts. A university runs **one shared server**; any researcher, without programming, uses it from the browser, with keys handled on a small, separate **key page** unlocked with a passkey; participants only need a **browser**.
 
 ```
- researcher's computer            university server                participant's browser
-┌─────────────────────┐ register ┌──────────────────────────┐ SPA, ┌──────────────────────────┐
-│ Researcher tools    ├─────────►│ Combray server           ├─────►│ Web client (React SPA)   │
-│ • create project    │ signed   │ • project registry       │config│ • import ─► tree         │
-│ • private key 🔑    │ config + │ • store keys for the     │◄─────┤ • encrypted IndexedDB    │
-│   (never leaves)    │ pub key  │   participants' local    │unlock│ • web workers            │
-│ • importers, views, │          │   encrypted stores       │      │ • explore and reflect    │
-│   questions         │◄─────────┤ • enrichment + cache     │◄─────┤ • consented URLs only    │
-│ • decrypt, export   │ cipher-  │ • donation storage       │◄─────┤ • donate: encrypted to   │
-│   (locally only)    │ text     │   (own disk storage)     │cipher│   the project public key │
-└─────────────────────┘          └──────────────────────────┘ text └──────────────────────────┘
+ researcher's browser             university server                participant's browser
+┌─────────────────────┐          ┌──────────────────────────┐ SPA, ┌──────────────────────────┐
+│ Studio              ├─────────►│ Combray server           ├─────►│ Web client (React SPA)   │
+│ • importers, views, │ project  │ • project registry       │config│ • import ─► tree         │
+│   questions         │ tree     │ • store keys for the     │◄─────┤ • encrypted IndexedDB    │
+├─────────────────────┤          │   participants' local    │unlock│ • web workers            │
+│ Key page (own site) │ public   │   encrypted stores       │      │ • explore and reflect    │
+│ • passkey unlocks   ├─────────►│ • keys sealed to         │◄─────┤ • consented URLs only    │
+│   your keys 🔑      │ keys     │   researchers only       │      │                          │
+│ • decrypt, export   │◄─────────┤ • enrichment + cache     │◄─────┤ • donate: encrypted to   │
+│   (in memory only)  │ cipher-  │ • donation storage       │cipher│   the project public key │
+└─────────────────────┘ text     └──────────────────────────┘ text └──────────────────────────┘
 ```
 
 The server never sees unencrypted donation data and never holds the key to decrypt it.

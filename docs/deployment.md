@@ -1,89 +1,117 @@
 # Deployment
 
-Combray has three components (see [architecture.md](architecture.md)): **Studio** on each researcher's computer, the **web client** in participants' browsers, and a shared **server**. The intended setup is that a university runs one server, and any researcher, with no programming experience, uses it from Studio.
+Combray has three parts (see [architecture.md](architecture.md)): the **web client** with the researcher studio, the **key page** where researchers hold their keys, and a shared **server** that serves both. The intended setup is that a university runs one server, and any researcher, with no programming experience, uses it from the browser.
 
 ## Targets
 
 | Target | How | Who |
 | --- | --- | --- |
 | **University server** | `docker compose up -d` on a VM, TLS through Caddy | University IT or research support, once, for all researchers |
-| **Researcher tool** | Download Combray Studio for Windows, macOS or Linux, double-click | Every researcher |
-| **Lab laptop** | One `combray-server` binary on the laptop, plus Studio | A lab without a university server, or offline sessions |
+| **Researchers** | A browser and a passkey (phone, laptop or security key) | Every researcher; nothing to install |
+| **Lab laptop** | `combray-server` on the laptop | A lab without a university server, or offline sessions (without researcher sign-in for now, see below) |
 
-## Combray Studio
+## Pilot checklist
 
-A single signed binary per platform. It starts a local web UI on `127.0.0.1` (random port, per-launch token) and opens it in the default browser. It keeps its own data folder (projects, encrypted private key files, downloaded donations, exports) in the user's documents or app-data directory, and never listens on the network. Updates are offered from inside Studio and verified against release signatures.
+For a first, small study on one VM. Each step is explained below.
 
-## Server as a single binary
-
-The `combray-server` binary (Rust, statically linked) embeds the built web client, so it has no runtime dependencies. It is multi-tenant: many researchers and projects on one installation. It stores state in its own data directory:
-
-```
-combray-data/
-├── combray.toml        config
-├── combray.sqlite      store key records (built); later researcher accounts, projects, sessions, receipts, enrichment cache
-├── projects/           project configs (signed in Phase 2) and platform packs
-├── donations/          encrypted envelopes (unless S3 is configured)
-```
-
-A project config's `uploads` lists its upload points; each names a platform pack, such as `google-takeout` or `tiktok`, whose project tree the client matches uploads against ([tree-decisions.md](tree-decisions.md#upload-points-and-the-nameless-root)). See `deploy/examples/projects/example.json`.
-
-No object storage is needed: donations and vault blobs live in this directory by default. S3 is an optional backend.
-
-The **store master key** (32 random bytes) from which every store's key is derived comes from a file outside the data directory (`COMBRAY_STORE_MASTER_KEY_FILE`, a Docker secret in the compose setup), so a backup of the data directory alone contains no usable keys. Back it up separately: losing it makes every participant's local store unreadable. See [security.md](security.md#store-keys).
+1. **Two host names** pointing at the VM, for example `combray.uni.nl` and `keys.combray.uni.nl`. The key page must have its own name: passkeys are bound to it, and it keeps keys away from the larger participant app ([researcher-keys.md](researcher-keys.md#two-addresses)).
+2. **An SMTP account** that may send from an address at the university, for researcher sign-in links.
+3. **Docker** with compose on the VM, ports 80 and 443 open.
+4. In `deploy/`: create `secrets/store-master.key`, the data folders and `.env` ([below](#docker-compose)).
+5. `docker compose up -d`, then check `https://combray.uni.nl/api/v1/health` and `https://keys.combray.uni.nl/`.
+6. **Check the key page** against the release: `curl -s https://keys.combray.uni.nl/ | sha256sum` must match `combray-keys.html.sha256` of the release you deployed.
+7. **Add the project** config in `combray-data/projects/{id}.json`, and the researchers:
+   ```sh
+   docker compose exec combray combray-server researcher add ada@uni.nl
+   docker compose exec combray combray-server project add-researcher willow ada@uni.nl
+   ```
+8. The researcher signs in at `https://keys.combray.uni.nl/`, sets up a passkey, saves the recovery code and creates the project key. The key page then shows the **participant link** (`https://combray.uni.nl/willow/#k=…`). Use that link, with its `#k=` part, in invitations and on printed cards.
+9. Colleagues: the first researcher adds them on the key page and gives them access after comparing key codes.
+10. **Backups**: `combray-data` and `secrets/store-master.key` separately, and `combray-donation-keys` with retention no longer than `COMBRAY_KEY_BACKUP_RETENTION_DAYS` ([below](#backups)).
+11. **Run the manual passkey test** ([researcher-keys.md](researcher-keys.md#manual-test-checklist-before-the-pilot)) with the devices your researchers will use, and a synthetic donation: `node apps/keys/scripts/run.mjs synthetic-donation https://combray.uni.nl willow` from a checkout of the repository.
 
 ## Docker compose
 
-A sketch of the default stack:
+The stack in `deploy/` has two services: `combray` (the server image: Rust server, built web client and key page) and `caddy` (TLS with automatic certificates, HSTS, no access logs). From `deploy/`, once:
 
-```yaml
-services:
-  combray:
-    image: ghcr.io/kasperwelbers/combray-server:latest
-    restart: unless-stopped
-    environment:
-      COMBRAY_PUBLIC_URL: https://combray.example.edu
-      COMBRAY_STORE_MASTER_KEY_FILE: /run/secrets/combray_store_master_key
-      # COMBRAY_S3_URL: s3://combray-donations
-    secrets: [combray_store_master_key]
-    volumes:
-      - ./combray-data:/data
-    read_only: true
-    cap_drop: [ALL]
-
-  caddy:
-    image: caddy:2
-    ports: ["80:80", "443:443"]
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-
-  # Optional services, enabled with compose profiles:
-  minio:           # S3-compatible storage for donations and vault   (profile: s3)
-  browser:         # headless Chromium for JavaScript-only enrichers (profile: browser)
-  llm:             # local model for the AI helper (llama.cpp/Ollama) (profile: ai)
-
-secrets:
-  combray_store_master_key:
-    file: ./secrets/store-master.key
-
-volumes:
-  caddy-data:
+```sh
+mkdir -p secrets combray-data combray-donation-keys && cp -r examples/projects combray-data/
+head -c 32 /dev/urandom > secrets/store-master.key && chmod 600 secrets/store-master.key
+cp env.example .env   # set COMBRAY_DOMAIN and the mail settings
+docker compose up -d
 ```
 
-`docker compose --profile s3 --profile ai up -d` adds the optional parts. The main image is built `FROM scratch` (or distroless) and runs as a non-root user with a read-only root filesystem.
+The Caddyfile serves `{$COMBRAY_DOMAIN}` and `keys.{$COMBRAY_DOMAIN}` and passes both to the server, which tells them apart by the `Host` header. Without `COMBRAY_DOMAIN`, Caddy serves `https://localhost` and `https://keys.localhost` with a local certificate.
 
-## A project, end to end
+The server container runs as a non-root user, with a read-only root filesystem, all capabilities dropped and `no-new-privileges`. The store master key comes in as a Docker secret.
 
-1. **IT** sets up the university server once and creates researcher accounts (or enables SSO).
-2. **The researcher** installs Studio and creates a project. Studio generates the key pair and walks them through saving the private key (encrypted key file, printed recovery sheet, a copy with the data steward).
-3. In Studio, they pick platform packs, importers, views and questions, and preview the participant experience.
-4. They connect Studio to the university server, log in, and register the project. Studio uploads the signed config and public key.
-5. Studio creates participant codes and printable cards with QR links (which carry the signing key fingerprint, see [privacy-and-encryption.md](privacy-and-encryption.md#key-management)).
-6. Sessions run in the lab: participants open the link in a browser.
-7. The researcher downloads encrypted donations in Studio and decrypts and exports them locally.
+### Settings
 
-Everything in Studio is also available as CLI commands (`combray project create`, `combray project register`, `combray donations decrypt`, and so on) for those who prefer scripts.
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `COMBRAY_PUBLIC_URL` | (none) | The participant app and studio, e.g. `https://combray.uni.nl` |
+| `COMBRAY_KEYS_URL` | (none) | The key page, e.g. `https://keys.combray.uni.nl`. Researcher sign-in and donations are on only when both URLs are set |
+| `COMBRAY_SMTP_URL` | (none) | `smtps://user:password@host:465`, or `smtp://user:password@host:587?tls=required` for STARTTLS |
+| `COMBRAY_MAIL_FROM` | (none) | `Combray <combray@uni.nl>` |
+| `COMBRAY_MAIL_OUTBOX` | (none) | Development only: write mails to this folder instead of sending them |
+| `COMBRAY_DONATION_KEYS_DB` | `{data}/donation-keys.sqlite` | Sealed donation keys; in compose, on its own volume |
+| `COMBRAY_RESEARCH_DB` | `{data}/research.sqlite` | Researcher accounts, passkeys, members, sealed project keys |
+| `COMBRAY_KEY_BACKUP_RETENTION_DAYS` | `30` | Told to participants as the time within which a withdrawal is complete |
+| `COMBRAY_MAX_DONATION_MB` | `64` | Largest donation the server accepts |
+| `COMBRAY_KEYS_PAGE` | `/app/keys/index.html` in the image | The built key page. The server reads it at start; restart after replacing it |
+| `COMBRAY_CLIENT_IP_HEADER` | (none) | `x-forwarded-for` behind Caddy, used only for rate limits |
+
+Without mail settings, the server starts, but researchers cannot sign in; it logs a warning.
+
+## The server's data
+
+```
+combray-data/
+├── combray.sqlite        store key records (no keys without the store master key)
+├── research.sqlite       researchers, passkeys, members, sealed project keys
+├── donations.sqlite      donation index and withdrawal tombstones
+├── donations/{project}/  encrypted donation envelopes
+└── projects/             project configs and platform packs
+combray-donation-keys/
+└── donation-keys.sqlite  sealed donation keys (its own volume)
+secrets/
+└── store-master.key      32 random bytes; every store key is derived from it
+```
+
+Nothing in these folders can be opened by the server: donations and their keys are sealed to project keys, which are sealed to researchers, whose keys are locked under their passkeys. A project config's `uploads` lists its upload points; each names a platform pack, such as `google-takeout` or `tiktok` ([tree-decisions.md](tree-decisions.md#upload-points-and-the-nameless-root)). See `deploy/examples/projects/example.json`.
+
+### Backups
+
+| What | How long | Why |
+| --- | --- | --- |
+| `combray-data` | As your institution likes | Only ciphertext and metadata |
+| `secrets/store-master.key` | Kept apart from `combray-data` | Losing it makes every participant's local store unreadable; together with the data it is what the server needs to release store keys |
+| `combray-donation-keys` | **No longer than `COMBRAY_KEY_BACKUP_RETENTION_DAYS`** | A withdrawn donation is gone for good only when no backup holds its key. Participants are told this number |
+
+On start, the server deletes every sealed key that has a withdrawal tombstone, so restoring an old key backup does not bring a withdrawn donation back ([key-design.md](key-design.md#6-withdrawing)).
+
+## Server commands
+
+Run with `docker compose exec combray combray-server …`:
+
+| Command | What it does |
+| --- | --- |
+| `researcher add <email>` | Let someone sign in as a researcher |
+| `researcher list` | List researchers, and whether they have set up a key |
+| `researcher remove <email>` | Remove a researcher, their passkeys, memberships and copies of project keys. Unlike removing a member on the key page, this does not stop at the last member with access: make sure a colleague has access first |
+| `researcher reset-key <email>` | For a researcher who lost both passkey and recovery code: removes their key and their copies of project keys, so they can set up a new key and be given access again |
+| `project add-researcher <project> <email>` | Put a researcher on a project (members can add colleagues on the key page too) |
+| `reset-link <project> <participant-id>` | A one-time password reset link for a participant ([below](#password-reset-links)) |
+
+## Checking what the server serves
+
+The key page is one file, built deterministically, with its script and style pinned by hash in its Content Security Policy. Each release publishes it as `combray-keys.html` with `combray-keys.html.sha256`. To check a server:
+
+```sh
+curl -s https://keys.combray.uni.nl/ | sha256sum
+```
+
+The hash must match the release. Researchers can do the same, or compare the version in the page footer. See [researcher-keys.md](researcher-keys.md#the-key-page).
 
 ## Password reset links
 
@@ -93,19 +121,27 @@ Until the researcher UI exists, the operator creates reset links on the research
 docker compose exec combray combray-server reset-link <project> <participant-id>
 ```
 
-It prints a one-time link (valid for 72 hours) that the participant opens on the computer that holds their data. Set `COMBRAY_PUBLIC_URL` to have it print a full URL. See [security.md](security.md#password-reset).
+It prints a one-time link (valid for 72 hours) that the participant opens on the computer that holds their data. See [security.md](security.md#password-reset).
 
-## Operations
+## Development
 
-- Health endpoint, structured logs without data values, Prometheus metrics (counts and timings only).
-- Backups: the data directory and the bucket contain only ciphertext and metadata; the store master key and project private keys are backed up separately.
-- Backups of the donation key database (planned, with donation storage) are kept no longer than `COMBRAY_KEY_BACKUP_RETENTION_DAYS` (30 by default), because a withdrawn donation is only gone for good once no backup holds its key. Participants are told this number. See [key-design.md](key-design.md#6-withdrawing).
-- Upgrades: database migrations run on startup; the binary refuses to start if a migration would lose data without an explicit flag.
-- Releases: signed binaries for Linux (x86_64, aarch64), macOS and Windows, and a multi-arch image on GHCR, with published SPA bundle hashes.
+`just serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Sign-in links are written to `target/dev/outbox/`. Add yourself with `just researcher you@example.org example`, and send a synthetic donation with `just synthetic-donation http://localhost:8080 example`. `just e2e` runs the key page end to end with a virtual passkey.
+
+## Lab laptop
+
+The server runs on a laptop as one binary (`cargo build --release -p combray-server`, or the Docker image). Researcher sign-in needs mail and two host names, which a laptop without a network usually does not have; for an offline lab the participant app works as before, and donations wait for a server. A design for offline sign-in is open.
+
+## Later
+
+- The server binary embeds the web client and key page, so a deployment runs exactly a released version.
+- A multi-arch image on GHCR with each release.
+- Institutional sign-in (SURFconext, OIDC) in place of the email link.
+- Health metrics (counts and timings only).
+- Database migrations with a refusal to start when one would lose data.
 
 ## Open questions
 
-- Do we need Windows lab laptops as a first-class target (likely yes in many universities), and should the binary install itself as a service there?
+- Do we need Windows lab laptops as a first-class target, and should the binary install itself as a service there?
 - Should the server have a small admin web UI for IT (accounts, quotas, health), or is a CLI enough? Recommendation: CLI first.
-- Should Studio be code-signed and notarised from the first release? Unsigned binaries trigger scary warnings on Windows and macOS, which matters for non-technical researchers. Recommendation: yes.
 - Is S3 needed in v1, or is the filesystem plus regular backups enough for most labs?
+- Offline sign-in for a lab laptop.

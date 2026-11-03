@@ -14,6 +14,8 @@ A shared **core** library (`packages/core`, TypeScript) implements the tree mode
 
 > **Update ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)):** the researcher tool is reduced to a small local tool that creates the key pair, signs project configs and decrypts donations. The rest of what this document calls Studio (configuring projects, participants, importers) can be a browser UI, because it never handles the private key.
 
+> **Update ([ADR 0007](decisions/0007-browser-key-page.md)):** there is no local tool any more. Researchers sign in with an email link and a passkey, and keys are handled on a **key page**: a small, dependency-free page that the server serves on its own origin, with keys locked under the researcher's passkey. The studio (`/studio/`) is the browser researcher UI and never handles keys. See [researcher-keys.md](researcher-keys.md). Sections below that describe a local Studio are kept as history.
+
 ```
   researcher's computer                 university VM                     participant's browser
  ┌──────────────────────┐          ┌──────────────────────────┐        ┌──────────────────────────┐
@@ -90,9 +92,9 @@ The server is intentionally small, and **multi-tenant**: one installation serves
 2. **Serve the web client** (embedded in the binary) and each project's signed config.
 3. **Store-key service** (built). Hold a key encryption key per participant store, released only for the store's password, with lockout and rate limits (see [security.md](security.md#store-keys)). These keys protect data that stays in the browser; they cannot decrypt donations.
 4. **Enrichment.** Accept batches of sanitised URLs, fetch public metadata quickly and politely, cache it without linking it to participants, stream results back (see [enrichment.md](enrichment.md)).
-5. **Donation storage.** Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers, and delete them on request. The sealed donation keys go into a separate key database with its own short backup retention, so deleting them withdraws every copy of a donation ([key-design.md](key-design.md)).
+5. **Donation storage** (built). Accept encrypted donation envelopes, verify size and format, store them, hand them to the project's researchers, and delete them on request. The sealed donation keys go into a separate key database with its own short backup retention, so deleting them withdraws every copy of a donation ([key-design.md](key-design.md)).
 6. **Optional AI proxy.** Forward helper requests (metadata only, see [ai-helper.md](ai-helper.md)) to a configured model, so API keys never reach the browser.
-7. **Optional private-key escrow** (later): store a copy of a project's private key encrypted under a researcher passkey (see [privacy-and-encryption.md](privacy-and-encryption.md#optional-passkey-protected-key-backup)).
+7. **Researcher accounts and keys** (built): email link and passkey sign-in, personal keys locked under the passkey, project keys sealed to members, and the key page on its own host name ([researcher-keys.md](researcher-keys.md)).
 
 Not the server's job: parsing DDPs, running importers, analysing data, and above all decrypting donations.
 
@@ -126,7 +128,7 @@ Language: **Rust** (axum + tokio), see [ADR 0001](decisions/0001-server-language
 
 **Projects in the web client.** Participants open `/{project}/`, with an optional participant id in the fragment (`#id=…`). Each project has its own encrypted store on the device, and `/` lists the projects with data on this computer ([ADR 0005](decisions/0005-projects-scope-stores.md)).
 
-**Accounts and roles.** Server admins (university IT) manage researcher accounts and quotas; researchers own projects and can add collaborators; participants have only session tokens bound to one project. Researcher login supports passkeys (WebAuthn) and, for universities, SSO via OIDC or SAML (e.g. SURFconext) as an option.
+**Accounts and roles.** Server admins (university IT) manage researcher accounts and quotas; researchers own projects and can add collaborators; participants have only session tokens bound to one project. Researchers sign in with an email link and a passkey (built for the pilot, [researcher-keys.md](researcher-keys.md)); SSO via OIDC or SAML (e.g. SURFconext) can replace the email step later. For now the server operator adds researchers with a server command, and members add colleagues on the key page.
 
 ## Monorepo layout
 
@@ -135,37 +137,36 @@ What exists now is marked with ✓; the rest is planned.
 ```
 combray/
 ├── apps/
-│   └── web/                  ✓ participant web client (React SPA, Vite)
+│   ├── web/                  ✓ participant web client and studio (React SPA, Vite)
+│   └── keys/                 ✓ key page: researcher keys and decryption (one HTML file)
 ├── packages/
 │   ├── core/                 ✓ tree model, parsers, paths, shapes (TypeScript)
 │   ├── store/                ✓ encrypted local IndexedDB store
 │   ├── ui/                   design system: tokens, components, illustrations
-│   ├── crypto/               donation crypto (HPKE), test vectors shared with Rust
+│   ├── seal/                 ✓ donation sealing, researcher and project keys (HPKE, X-Wing)
 │   └── viz/                  tree-aware visualisation components
 ├── crates/
-│   ├── combray-server/       ✓ shared server (axum)
-│   ├── combray-crypto/       envelope format, HPKE, signatures, key files
-│   └── combray-keys/         local key tool: key pairs, config signing, decryption
+│   └── combray-server/       ✓ shared server (axum): store keys, researcher accounts, donations
 ├── importers/                ✓ importer specs (YAML) + synthetic fixtures + expected output
 ├── plugins/                  example WASM plugins (anonymiser, classifier)
 ├── deploy/                   ✓ docker compose, Caddyfile, example project configs
 └── docs/
 ```
 
-Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, and a `justfile` with common tasks (`just dev`, `just test`, `just check`, `just build`, `just docker`). CI runs type checks, tests, clippy and a Docker build; later it publishes the server image and signed key-tool binaries.
+Tooling: pnpm workspaces for TypeScript, a Cargo workspace for Rust, and a `justfile` with common tasks (`just dev`, `just test`, `just check`, `just build`, `just docker`). CI runs type checks, tests, clippy and a Docker build; releases publish the key page with its SHA-256; later also the server image.
 
 ## Deployment shapes
 
-| Shape | Server | Studio | Notes |
+| Shape | Server | Researchers | Notes |
 | --- | --- | --- | --- |
-| **University server** | One docker compose stack on a university VM | Each researcher installs Studio | The main target: zero programming for researchers |
-| **Lab laptop** | `combray-server` runs on the same laptop | Same laptop or the researcher's own | Offline sessions; enrichment needs internet |
+| **University server** | One docker compose stack on a university VM | A browser and a passkey | The main target: zero programming for researchers |
+| **Lab laptop** | `combray-server` runs on the same laptop | Same laptop or the researcher's own | Offline sessions; enrichment needs internet; passkeys need the key host name on that laptop |
 
 See [deployment.md](deployment.md).
 
 ## Open questions
 
 - ~~Start the core in TypeScript and port to Rust, or start in Rust?~~ Decided: TypeScript first ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
-- ~~Studio as localhost binary first, Tauri later, or Tauri from the start?~~ Decided: a small local key tool, researcher UI in the browser ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
+- ~~Studio as localhost binary first, Tauri later, or Tauri from the start?~~ Decided: no local tool; researcher UI and key page in the browser ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md), [ADR 0007](decisions/0007-browser-key-page.md)).
 - Can several servers federate (a project registered on two servers), or is a project always bound to one server? Recommendation: one server per project.
 - Facilitator view: same app on a second device, synced through the server? That would mean the server relays encrypted UI state, which needs its own design.

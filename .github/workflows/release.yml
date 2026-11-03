@@ -1,0 +1,38 @@
+name: Release
+
+# Push a tag like v0.1.0 to publish the key page as one file with its SHA-256, so anyone can
+# check what a server serves: curl -s https://keys.combray.example.edu/ | sha256sum
+# (docs/researcher-keys.md#the-key-page).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  key-page:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @combray/keys test
+      - run: pnpm --filter @combray/keys build
+      - name: Prepare release files
+        run: |
+          mkdir release
+          cp apps/keys/dist/index.html release/combray-keys.html
+          (cd release && sha256sum combray-keys.html > combray-keys.html.sha256)
+          cat release/combray-keys.html.sha256
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/combray-keys.html release/combray-keys.html.sha256 \
+            --title "$GITHUB_REF_NAME" --prerelease \
+            --notes "Key page $GITHUB_REF_NAME. SHA-256: $(cut -d' ' -f1 release/combray-keys.html.sha256). Compare with: curl -s https://keys.<your-domain>/ | sha256sum"

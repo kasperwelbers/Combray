@@ -8,7 +8,7 @@ Privacy is the reason a participant can trust Combray with years of their search
 
 1. **Local by default.** Imported data lives in the participant's browser, encrypted at rest.
 2. **Explicit, specific consent for every outbound flow.** Enrichment, donation and structure metadata each have their own consent step with a preview of exactly what is sent. The AI helper never receives data at all, only structure metadata (see [ai-helper.md](ai-helper.md)).
-3. **End-to-end encryption for donations.** Donations are encrypted in the browser to the project's public key, whose private key exists only in the researcher's local Studio. The server stores ciphertext and cannot read it.
+3. **End-to-end encryption for donations.** Donations are encrypted in the browser to the project's public key, whose private key the server only ever holds sealed to the project's researchers. It is opened only on the key page, in the researcher's browser ([researcher-keys.md](researcher-keys.md)). The server stores ciphertext and cannot read it.
 4. **Separation of keys and data.** No single machine or credential holds both the encrypted data and the key to open it.
 5. **Minimal server knowledge.** The server learns as little as possible about who requested what, and keeps even less.
 6. **Post-quantum by default for long-lived secrets.** Donations may be stored for ten years or more, so "harvest now, decrypt later" is a real concern. Donation encryption uses a hybrid classical plus post-quantum KEM.
@@ -19,14 +19,16 @@ Privacy is the reason a participant can trust Combray with years of their search
 | --- | --- | --- | --- |
 | Next user of a shared lab machine | Opens the browser after the participant left | Local data | Encrypted store; key released by the server only for the participant's password; auto-lock and explicit end-of-session wipe |
 | Someone with a copy of the disk | Stolen laptop, backup image | Local data | Data key wrapped by a server-held key that is never written to the device; password guessing only online, under a lockout |
-| Curious or compromised server operator | Admin of the shared university server browses its storage | Donations, vault copies | End-to-end encryption; private key only in the researcher's Studio; vault needs a participant secret too |
+| Curious or compromised server operator | Admin of the shared university server browses its storage | Donations, vault copies | End-to-end encryption; project key stored only sealed to researchers' personal keys, which are locked under their passkeys; vault needs a participant secret too |
 | Compromised storage | Stolen server disk or leaked S3 credentials | Donations, vault copies | Ciphertext only; store keys kept separately under a store master key |
 | Network attacker | Café Wi-Fi in browser mode | Everything in transit | TLS everywhere; payloads already encrypted |
 | Future quantum adversary | Records ciphertext now, decrypts in 2040 | Donations | Hybrid X25519 + ML-KEM-768 (X-Wing) |
 | Malicious importer or plugin | A shared importer script tries to exfiltrate data | Local data | QuickJS and WASM sandboxes without network or DOM access |
 | AI model provider | Hosted model logs prompts | Local data | The helper only ever receives structure metadata; instructions run locally |
 | Enrichment observer | Server or its logs link a participant to the URLs they watched | Behavioural profile | Consent-scoped, sanitised URL batches; unlinkable cache; no URL logging (see [enrichment.md](enrichment.md)) |
-| Substituted project key | Server or attacker swaps the public key in a project config | Donations | Configs signed in Studio; signing key fingerprint in the participant link's URL fragment; fingerprint shown to staff and participant |
+| Substituted project key | Server or attacker swaps the public key in a project config | Donations | Project key fingerprint in the participant link's URL fragment (`#k=`), checked before sealing; signed configs later |
+| Substituted researcher key | Server slips in its own public key when a colleague is given access | Donations | Both researchers compare a key code before the project key is sealed to the colleague |
+| Malicious page from the server | Server serves a key page that leaks keys | Project keys | Key page on its own origin, a single hash-pinned file with a published release hash; an active, visible attack, not ruled out |
 
 Out of scope, stated honestly: malware running as the participant on the same machine while the store is unlocked; a compromised server that serves malicious JavaScript to the browser (an inherent limit of web apps; see "Code integrity" below for mitigations); participants who screenshot or retype their own data.
 
@@ -82,51 +84,40 @@ Donations use **HPKE** (RFC 9180, base mode) with:
 
 - **KEM:** X-Wing, the hybrid of X25519 and ML-KEM-768 (`draft-connolly-cfrg-xwing-kem`). Secure as long as either component holds.
 - **KDF:** HKDF-SHA-256
-- **AEAD:** AES-256-GCM (ChaCha20-Poly1305 as an alternative where hardware AES is unavailable)
+- **AEAD:** AES-256-GCM
 
-HPKE seals a fresh random per-donation content key, separately for each researcher public key. The sealed keys are stored on the server apart from the envelope, so withdrawing a donation only has to delete them ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The HPKE `info` binds the project id and donation id. The payload itself is encrypted in chunks with that content key using a STREAM-style construction (counter-based nonces and a final-chunk flag), so large donations can be encrypted and uploaded in a worker without holding everything in memory, and truncation is detected.
+HPKE seals a fresh random per-donation key to the **project key**. The sealed key is stored on the server apart from the envelope, so withdrawing a donation only has to delete it ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The HPKE `info` binds the project id and donation id, and the envelope header hash is its additional data. The payload is encrypted in chunks with the donation key, STREAM-style (counter nonces and a last-chunk flag), so reordering, dropping or truncating chunks is detected.
 
-Candidate libraries (to confirm in a spike, with shared test vectors between client and Rust):
-
-- Browser: `hpke-js` (`@hpke/core` with `@hpke/hybridkem-x-wing`), or `@noble/post-quantum` with `@noble/curves`. WebCrypto supports AES-GCM and HKDF natively and X25519 in current browsers; ML-KEM is not yet universally available in WebCrypto, so it comes from audited JavaScript or from our Rust core in WASM.
-- Rust: `libcrux-ml-kem` (formally verified) or RustCrypto `ml-kem`, `x25519-dalek`, and an X-Wing combiner (`x-wing` crate or our own thin wrapper over the draft, reviewed).
+Libraries: `@hpke/core` with `@hpke/hybridkem-x-wing` in `packages/seal`, used by both the participant client and the key page. There is no Rust implementation; the server never opens anything. WebCrypto provides AES-GCM, HKDF and SHA-256.
 
 ### Envelope format
 
 ```
-CombrayDonation v1
-├─ header (authenticated, not encrypted)
-│   ├─ version, project_id, donation_id, key_ids (fingerprints of project public keys)
-│   ├─ chunk_size, chunk_count
-│   └─ created_at (rounded to the day)
-├─ chunk 0..n  AEAD(content_key, nonce_i, data_i, aad = H(header) || i || is_last)
-└─ (padding to a size bucket, to hide exact donation size)
+"CMBRDON1" | u32 header length | header (JSON) | chunk* (u32 length | AES-256-GCM ciphertext)
+
+header: { v, project, donation, key (project key fingerprint), chunkBytes, chunks, created (day) }
+chunk i: nonce = 11-byte big-endian i || last flag; aad = SHA-256(magic || header)
 ```
 
-The sealed keys travel next to the envelope, not in it: one record per recipient key, `{donation_id, key_id, hpke_enc, sealed_content_key}`, kept in the server's key database.
+The sealed donation key travels next to the envelope, never in it, and the server keeps it in its own database. Exact constructions are in [security.md](security.md#donation-envelope). Size padding is not done yet.
 
-Decrypted, the payload is a manifest plus data: selected datasets and items, answers to questions, annotations, consent receipts, importer ids and versions, client version, and (if consented) structure shapes.
+Decrypted, the payload is `{ format: "combray-donation/1", tables: [{ id, name, columns, rows }], answers }`. Consent receipts, importer versions and annotations are to be added with the donate screen.
 
 ### Key management
 
-The project key pair is created and held in **Combray Studio**, the researcher tool on the researcher's own computer (see [architecture.md](architecture.md#combray-studio-researcher-tool)). The shared server only ever receives the public key.
+Built for the pilot; the full design is in [researcher-keys.md](researcher-keys.md) ([ADR 0007](decisions/0007-browser-key-page.md)). It replaces the local key tool and the passkey-backup idea that used to be here.
 
-- **Creation.** Studio generates an X-Wing key pair for encryption and an Ed25519 key pair (optionally hybrid with ML-DSA-65) for signing project configs.
-- **The researcher is responsible for the private key**, and Studio makes that easy to do well:
-  - an encrypted key file (passphrase, Argon2id plus AEAD, age-style), saved where the researcher chooses;
-  - a printable **recovery sheet** (the key as words or a QR code) to keep in a locked drawer or with the data steward;
-  - suggestions per situation: university-managed encrypted storage, a second copy with a co-investigator, never in email or shared drives in plain form;
-  - Studio refuses to register the project until the researcher has confirmed at least one backup, and can test a backup by decrypting a test envelope.
-- **Decryption happens only on the researcher's machine**, in the key tool or an analysis package (R, later Python). They may keep ciphertext locally, but fetch the sealed keys from the server every time and never store keys or plaintext ([key-design.md](key-design.md#5-analysing-fetch-on-use)).
-- **Signed project configs.** Each config, including the public key, is signed in Studio. The web client verifies the signature before encrypting anything. Because one university server hosts many projects, the client needs a trust anchor the server cannot change: the participant link carries the signing key fingerprint in the URL fragment (`https://combray.uni.nl/p/willow#k=7F3A91C2…`), which browsers never send to the server. Printed participant cards carry the same link as a QR code. The donation screen also shows a short fingerprint ("encrypted for project Willow, key 7F3A-91C2") that lab staff can check against Studio.
-- **Key rotation.** A project can list several public keys; new donations use the newest. Studio keeps old private keys to decrypt older donations.
-- **Collaborators.** A project can have several researcher keys; donations are encrypted to all of them (one HPKE encapsulation per recipient), so a team does not need to share one private key. Each researcher has their own revocable access token for fetching sealed keys.
+- **Each researcher has a personal key** (X-Wing), made in their browser on the key page. The server keeps its public key, and the private key only locked under the researcher's passkey (WebAuthn PRF) and, offline, as a recovery code the researcher saves.
+- **Each project has one project key** (X-Wing). Donations are sealed to it. The server keeps one sealed copy per member with access, and cannot open any of them.
+- **Access is granted browser to browser.** A member's key page seals the project key to a colleague's personal key, after both compare a key code derived from the colleague's public key.
+- **Decryption happens on the key page**, a dependency-free page on its own origin with a hash-pinned CSP, in memory only. It fetches the sealed donation keys on every use and never stores keys or plaintext ([key-design.md](key-design.md#5-analysing-fetch-on-use)).
+- **The participant link pins the project key**: `https://combray.uni.nl/willow/#k=<fingerprint>`. The fragment never reaches the server; the donate screen checks the config's key against it before sealing.
+- **Signed project configs** (an Ed25519 key, perhaps with ML-DSA) are deferred. The fingerprint covers the key, which is what matters for confidentiality; signing would also cover the rest of the config.
+- **Key rotation** is not built. A new project key would mean a new project for now.
 
-### Optional: passkey-protected key backup
+### Why a passkey can hold the key safely
 
-Later, a researcher may opt in to storing a copy of the private key on the server, encrypted under a key derived from a **passkey** (WebAuthn with the PRF extension, which gives a per-credential secret only the authenticator can produce). The server then holds a blob it cannot open; the researcher can recover the key on a new computer with their passkey.
-
-The catch is where the PRF secret is evaluated. If the passkey ceremony runs in a page served by the shared server, that page's JavaScript sees the secret, and a compromised server could take it. The ceremony must therefore run in Studio, not in server-served code, which raises questions about which relying-party ID the passkey is bound to and whether synced passkeys work for it. This needs a design spike before it is offered.
+The worry with keys behind a passkey in a web page was that the page sees the PRF secret, so a compromised server could serve a page that takes it. That is still true, and it is the general limit of every web-based end-to-end encrypted service. What changed is how far the page is narrowed: it runs on its own origin that the participant app and studio cannot reach, it is one file whose script and style are pinned by hash in its CSP, and its release hash is published so anyone can check what a server serves. The passkey's relying party is the key host, so passkeys cannot be used from the main site at all. See [researcher-keys.md](researcher-keys.md#why-not-a-local-tool-and-why-not-keys-on-the-server) for the weighing against a local tool.
 
 ## Server-side data minimisation
 
@@ -147,7 +138,8 @@ Not a substitute for a DPIA, but Combray should ship with: a data flow descripti
 
 - ~~Is the device key plus server secret combination worth its complexity?~~ Decided: server key only ([ADR 0004](decisions/0004-server-held-store-keys.md)).
 - Should participants be able to unlock with a QR code on a card (scan with the lab webcam) instead of typing a code?
-- Is the passkey-protected key backup worth offering, given that the passkey ceremony must run in Studio rather than in server-served code?
+- ~~Is the passkey-protected key backup worth offering?~~ Decided: passkeys hold researcher keys, on a separate key page ([ADR 0007](decisions/0007-browser-key-page.md)).
+- How do the R and Python packages get the personal key, since they cannot use a passkey? A device key added from the key page is the likely answer.
 - Do we want a hybrid signature (Ed25519 + ML-DSA) on project configs from v1, or Ed25519 only and upgrade later? Signatures are verified at use time, so the quantum risk is lower than for encryption.
 - Who reviews the crypto design? A university security group, or an external audit once the format is stable?
 - Size bucket padding: what granularity is acceptable given storage costs?

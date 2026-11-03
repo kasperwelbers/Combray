@@ -1,6 +1,6 @@
 [package]
 name = "combray-server"
-description = "The shared Combray server: serves the web client and project configs"
+description = "The shared Combray server: web client, project configs, store keys, researcher sign-in and donations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -23,9 +23,12 @@ getrandom = "0.4.3"
 subtle = "2.6.1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 regex = "1.13.1"
+webauthn-rs = "0.6"
+lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "builder", "tokio1", "tokio1-native-tls", "hostname"] }
+url = "2.5.8"
+tower = { version = "0.5", features = ["util"] }
 
 [dev-dependencies]
-tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 tempfile = "3"
 

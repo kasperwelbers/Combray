@@ -10,11 +10,13 @@ Combray is a data donation tool for qualitative, lab-supported research. Partici
 
 ## Layout
 
-See [docs/architecture.md](docs/architecture.md#monorepo-layout). Three separately deployable components ([ADR 0002](docs/decisions/0002-modular-components.md), amended by [ADR 0003](docs/decisions/0003-typescript-core-and-key-tool.md)): a small **local key tool** for researchers (key pairs, config signing, decryption; the private key never leaves it), the **web client** for participants (plus, later, a browser researcher UI), and a shared, multi-tenant **Combray server** (store keys, enrichment, encrypted donation storage).
+See [docs/architecture.md](docs/architecture.md#monorepo-layout). Separately deployable components ([ADR 0002](docs/decisions/0002-modular-components.md), amended by [ADR 0003](docs/decisions/0003-typescript-core-and-key-tool.md) and [ADR 0007](docs/decisions/0007-browser-key-page.md)): the **web client** for participants, with the researcher studio; the **key page**, a small dependency-free page on its own origin where researchers sign in with a passkey, hold their keys and decrypt donations ([docs/researcher-keys.md](docs/researcher-keys.md)); and a shared, multi-tenant **Combray server** (store keys, researcher accounts, enrichment, encrypted donation storage).
 
-- `apps/web` participant web client: React + TypeScript SPA (Vite). All parsing, encryption and querying run in `src/worker/data.worker.ts`. The researcher workspace is `src/studio/` (served at `/studio/`).
+- `apps/web` participant web client: React + TypeScript SPA (Vite). All parsing, encryption and querying run in `src/worker/data.worker.ts`. The researcher workspace is `src/studio/` (served at `/studio/`); it never handles keys.
+- `apps/keys` the key page: one HTML file, no framework, hash-pinned CSP. Keys in memory only.
 - `packages/core` tree model, parsers, path language, shape extraction (TypeScript; Rust/WASM only for measured bottlenecks)
 - `packages/store` encrypted IndexedDB store (WebCrypto); keys from the server's key service ([ADR 0004](docs/decisions/0004-server-held-store-keys.md))
+- `packages/seal` donation envelopes and researcher/project keys (HPKE with X-Wing)
 - `importers` platform packs: importer specs (YAML) with synthetic fixtures; format in [docs/importer-spec.md](docs/importer-spec.md)
 - `crates/combray-server` the server (Rust, axum)
 - `deploy/` docker compose, Caddyfile, example project configs
@@ -29,7 +31,9 @@ just install   # pnpm install
 just dev       # web client on http://localhost:5173
 just test      # TypeScript and Rust tests
 just check     # type checks, rustfmt, clippy
-just serve     # build the web client and run the server on http://127.0.0.1:8080
+just serve     # build the web client and key page, run the server on http://localhost:8080
+               # (key page on http://keys.localhost:8080, sign-in mails in target/dev/outbox)
+just e2e       # key page end to end in Chromium with a virtual passkey
 just docker    # build the server image
 ```
 
@@ -40,13 +44,13 @@ Without just: `pnpm -r test`, `pnpm -r typecheck`, `cargo test --workspace`, `ca
 These apply to every change, however small.
 
 1. **No participant data leaves the browser without explicit, specific consent.** That includes enrichment requests, telemetry and error reports. If a new feature needs to send anything, it must go through the consent layer described in [docs/privacy-and-encryption.md](docs/privacy-and-encryption.md).
-2. **Donations are encrypted client-side to the project's public key.** The server must never need, and never receive, plaintext donation data or the researcher's private key. Only the local key tool, on the researcher's machine, decrypts.
+2. **Donations are encrypted client-side to the project's public key.** The server must never need, and never receive, plaintext donation data, an unsealed project key, a researcher's master secret or a passkey's PRF output. Only the key page decrypts, in memory. The participant app and the studio never handle keys.
 3. **Never log data values.** Server logs may contain request counts, timings and error classes, never URLs, usernames, file contents, or paths from a participant's tree. Client console logging of data is debug-only and stripped from production builds.
 4. **Schema metadata contains structure only.** Keys, types, HTML tag/id/class, bucketed counts. No values, and dictionary-like keys (usernames, dates used as keys) are collapsed. See [docs/universal-importer.md](docs/universal-importer.md#structure-metadata).
 5. **No real participant data in the repo.** Fixtures are synthetic. Do not commit real takeout files, even your own.
 6. **Sandboxed code stays sandboxed.** QuickJS importer scripts and WASM plugins get no network, no DOM, and bounded memory and time. Do not add host functions that break this without a design discussion.
 7. **The AI helper never sees participant data.** It receives only structure metadata and declared-safe local results, and returns instructions that run locally. See [docs/ai-helper.md](docs/ai-helper.md).
-8. **Crypto uses vetted libraries and documented constructions only.** No home-made primitives. Changes to `combray-crypto`, `packages/store/src/crypto.ts`, the server's key service (`crates/combray-server/src/keys.rs`) or other crypto need a note in the PR on what changed and why, and an update to [docs/security.md](docs/security.md).
+8. **Crypto uses vetted libraries and documented constructions only.** No home-made primitives. Changes to `packages/seal`, `packages/store/src/crypto.ts`, the key page (`apps/keys`), researcher sign-in (`accounts.rs`, `research.rs`), the server's key service (`crates/combray-server/src/keys.rs`) or other crypto need a note in the PR on what changed and why, and an update to [docs/security.md](docs/security.md).
 9. **Data is never rendered as HTML.** No `innerHTML`, `dangerouslySetInnerHTML`, `eval` or `new Function` (a test enforces this); links from data go through `safeHref`. The CSP enforces Trusted Types; do not weaken it. See [docs/security.md](docs/security.md#xss-and-code-integrity).
 
 ## Conventions

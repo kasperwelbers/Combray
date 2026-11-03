@@ -22,6 +22,32 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
       - run: pnpm --filter @combray/web build
+      # The key page must build to the same bytes every time, so its release hash can be checked.
+      - name: Build the key page twice and compare
+        run: |
+          pnpm --filter @combray/keys build
+          first=$(cat apps/keys/dist/index.html.sha256)
+          rm -rf apps/keys/dist
+          pnpm --filter @combray/keys build
+          test "$first" = "$(cat apps/keys/dist/index.html.sha256)"
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @combray/keys exec playwright install --with-deps chromium
+      - run: pnpm --filter @combray/web build
+      - run: pnpm --filter @combray/keys build
+      - run: cargo build --locked -p combray-server
+      - run: pnpm --filter @combray/keys e2e
 
   server:
     runs-on: ubuntu-latest

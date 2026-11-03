@@ -1,14 +1,17 @@
-# Combray server: serves the web client, project configs and the store key service.
-# See docs/deployment.md. From this directory, once:
+# Combray server: the web client and studio, project configs, the store key service, researcher
+# sign-in, the key page and donation storage. See docs/deployment.md. From this directory, once:
 #
-#   mkdir -p secrets combray-data && cp -r examples/projects combray-data/
+#   mkdir -p secrets combray-data combray-donation-keys && cp -r examples/projects combray-data/
 #   head -c 32 /dev/urandom > secrets/store-master.key && chmod 600 secrets/store-master.key
+#   cp env.example .env     # then fill in the domain and mail settings
 #
-# Back up secrets/store-master.key separately from combray-data. Then:
+# Back up secrets/store-master.key separately from combray-data, and combray-donation-keys with
+# short retention (COMBRAY_KEY_BACKUP_RETENTION_DAYS). Then:
 #
-#   COMBRAY_DOMAIN=combray.example.edu docker compose up -d
+#   docker compose up -d
 #
-# Without COMBRAY_DOMAIN, Caddy serves https://localhost with a local certificate.
+# DNS needs both combray.example.edu and keys.combray.example.edu. Without COMBRAY_DOMAIN,
+# Caddy serves https://localhost and https://keys.localhost with a local certificate.
 services:
   combray:
     build:
@@ -20,13 +23,24 @@ services:
       RUST_LOG: info
       # Caddy sets this; its last entry is the real client IP, used only for rate limiting.
       COMBRAY_CLIENT_IP_HEADER: x-forwarded-for
-      # Used by `combray-server reset-link` to print full links.
+      # The participant app and studio, and the key page on its own host name. Researcher
+      # sign-in and donations are on when both are set.
       COMBRAY_PUBLIC_URL: https://${COMBRAY_DOMAIN:-localhost}
+      COMBRAY_KEYS_URL: https://keys.${COMBRAY_DOMAIN:-localhost}
+      # Sign-in links go out by SMTP, e.g. smtps://user:password@smtp.uni.nl:465 (see .env).
+      COMBRAY_SMTP_URL: ${COMBRAY_SMTP_URL:-}
+      COMBRAY_MAIL_FROM: ${COMBRAY_MAIL_FROM:-}
+      # Sealed donation keys on their own volume, so they can be backed up differently.
+      COMBRAY_DONATION_KEYS_DB: /donation-keys/donation-keys.sqlite
+      COMBRAY_KEY_BACKUP_RETENTION_DAYS: ${COMBRAY_KEY_BACKUP_RETENTION_DAYS:-30}
+      COMBRAY_MAX_DONATION_MB: ${COMBRAY_MAX_DONATION_MB:-64}
     secrets: [combray_store_master_key]
     volumes:
       # Project configs in ./combray-data/projects/{id}.json; store key records in
       # ./combray-data/combray.sqlite (no keys in it without the store master key).
       - ./combray-data:/data
+      # Sealed donation keys only. Deleting a key here is what withdraws a donation.
+      - ./combray-donation-keys:/donation-keys
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

@@ -2,6 +2,9 @@
  * Where the participant is: the project overview at `/`, or a project at `/{project}/`, with its
  * questions and answers at `/{project}/faq`. The researcher workspace is at `/studio/`.
  *
+ * The studio may carry a one-time sign-in code from the key page (`/studio/#handoff=…`), which
+ * `studio/Account.tsx` reads and removes.
+ *
  * A study link can carry a participant id (`#id=P1234`) or a password reset token
  * (`#reset=…`) in the fragment, which browsers never send to the server, so they stay out of
  * every log. Both are removed from the address bar right away; the participant id is kept for

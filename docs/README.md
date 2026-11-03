@@ -5,9 +5,10 @@ These documents describe what Combray should become and why. They are written to
 Suggested reading order:
 
 1. [vision.md](vision.md): who it is for and the principles everything else follows from
-2. [architecture.md](architecture.md): the three components (Studio, web client, server) and the monorepo
+2. [architecture.md](architecture.md): the components (web client with studio, key page, server) and the monorepo
 3. [privacy-and-encryption.md](privacy-and-encryption.md): threat model and crypto
    - [security.md](security.md): every security choice that is implemented, and why
+   - [researcher-keys.md](researcher-keys.md): researcher sign-in, passkeys, project keys and the key page (built for the pilot)
    - [key-design.md](key-design.md): every key from loading data to analysis and withdrawal, with an [explainer for researchers](explainers/keys.html); participants read the in-app Questions page
 4. [universal-importer.md](universal-importer.md): files as trees, importer specs
    - [tree-decisions.md](tree-decisions.md): importers as decisions on the tree, derived tables, HTML, aliases (design)
@@ -17,12 +18,12 @@ Suggested reading order:
 6. [visualization.md](visualization.md): presenting data and prompting reflection
 7. [plugins.md](plugins.md): local WASM modules and QuickJS
 8. [ai-helper.md](ai-helper.md): the assistant
-9. [deployment.md](deployment.md): docker compose and binary
+9. [deployment.md](deployment.md): docker compose, and the checklist for a pilot
 10. [design-identity.md](design-identity.md): the warm look and feel
 11. [translation.md](translation.md): how participant-facing text is translated, by people or with AI
 12. [roadmap.md](roadmap.md) and [open-questions.md](open-questions.md)
 
-Decision records live in [decisions/](decisions/): [0001 server language](decisions/0001-server-language.md), [0002 modular components](decisions/0002-modular-components.md), [0003 TypeScript core and key tool](decisions/0003-typescript-core-and-key-tool.md), [0004 server-held store keys](decisions/0004-server-held-store-keys.md), [0005 projects scope stores](decisions/0005-projects-scope-stores.md) and [0006 revocable donation keys](decisions/0006-revocable-donation-keys.md).
+Decision records live in [decisions/](decisions/): [0001 server language](decisions/0001-server-language.md), [0002 modular components](decisions/0002-modular-components.md), [0003 TypeScript core and key tool](decisions/0003-typescript-core-and-key-tool.md), [0004 server-held store keys](decisions/0004-server-held-store-keys.md), [0005 projects scope stores](decisions/0005-projects-scope-stores.md) [0006 revocable donation keys](decisions/0006-revocable-donation-keys.md) and [0007 browser key page](decisions/0007-browser-key-page.md).
 
 ## Glossary
 
@@ -35,8 +36,9 @@ Decision records live in [decisions/](decisions/): [0001 server language](decisi
 | **Importer** | A declarative spec that selects paths from a tree and converts them into a dataset. Successor of the "recipe". |
 | **Dataset** | The result of running an importer: a tree (often a list of records) stored encrypted in the browser. |
 | **Enrichment** | Fetching public metadata (title, thumbnail, description) for URLs in a dataset, via the server, with consent. |
-| **Project** | A study as configured in Studio and registered on a server: importers, views, questions, donation pipeline, plus the project public key. |
-| **Studio** | Combray Studio, the researcher tool that runs on the researcher's own computer and holds the project private key. |
+| **Project** | A study as configured in the studio and registered on a server: importers, views, questions, donation pipeline, plus the project public key. |
+| **Studio** | The researcher workspace at `/studio/`, in the browser. It never handles keys. |
+| **Key page** | The small page on its own address where researchers sign in with a passkey, hold their keys, give colleagues access and open donations ([researcher-keys.md](researcher-keys.md)). |
 | **Server** | A Combray server, typically one per university, shared by many researchers and projects. |
 | **Session** | One participant's sitting, usually with lab staff present. A participant may have several sessions (diary use). |
 | **Probe** | A visualisation paired with a question or reflection prompt. |

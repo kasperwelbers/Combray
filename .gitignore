@@ -12,3 +12,8 @@ deploy/secrets/
 combray-store-master.key
 # Screenshots from local visual checks
 shots/
+# SMTP password and domain for docker compose
+deploy/.env
+# Donations from `just serve` (synthetic only)
+deploy/examples/donations/
+deploy/examples/donations.sqlite*

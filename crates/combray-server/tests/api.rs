@@ -60,6 +60,7 @@ fn fixture() -> Fixture {
             creates: 3,
             window: Duration::from_secs(600),
         },
+        research: None,
     };
     Fixture {
         app: app(config.clone()).unwrap(),

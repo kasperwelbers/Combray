@@ -1,0 +1,23 @@
+{
+  "name": "@combray/seal",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hpke/core": "^1.9.0",
+    "@hpke/hybridkem-x-wing": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
