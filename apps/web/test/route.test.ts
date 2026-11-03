@@ -42,7 +42,8 @@ describe('parseRoute', () => {
     expect(parseRoute('/p/willow/extra', '')).toEqual({ kind: 'home' });
     expect(parseRoute('/p/willow/', '#id=<script>')).toEqual({ kind: 'project', projectId: 'willow' });
     expect(parseRoute('/p/willow/', '#reset=short')).toEqual({ kind: 'project', projectId: 'willow' });
-    expect(parseRoute('/p/', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/p/', '')).toEqual({ kind: 'studies' });
+    expect(parseRoute('/p', '')).toEqual({ kind: 'studies' });
     expect(parseRoute('/studio/extra', '')).toEqual({ kind: 'home' });
   });
 

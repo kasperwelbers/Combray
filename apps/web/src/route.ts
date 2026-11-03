@@ -1,11 +1,12 @@
 /**
- * Where the participant is: the project overview at `/`, or a project at `/p/{project}/`, with its
- * questions and answers at `/p/{project}/faq`. The researcher workspace is at `/studio/` (sign-in
+ * Where the visitor is: the landing page at `/`, which explains Combray and leads to the two areas;
+ * the participant area at `/p/` (the studies with data on this computer), a project at
+ * `/p/{project}/`, with its questions and answers at `/p/{project}/faq`. The researcher workspace is at `/studio/` (sign-in
  * and the researcher's projects) and `/studio/p/{project}/` (one project's workspace). Projects
  * live under `/p/` so their ids never clash with the app's own pages (ADR 0008).
  *
  * The studio may carry a one-time sign-in code from the key page (`/studio/#handoff=…`), which
- * `studio/Account.tsx` reads and removes.
+ * `studio/StudioApp.tsx` reads and removes.
  *
  * A study link can carry a participant id (`#id=P1234`) or a password reset token
  * (`#reset=…`) in the fragment, which browsers never send to the server, so they stay out of
@@ -15,6 +16,7 @@
 
 export type Route =
   | { kind: 'home' }
+  | { kind: 'studies' }
   | { kind: 'studio'; projectId?: string }
   | { kind: 'project'; projectId: string; participantId?: string; resetToken?: string; page?: 'faq' };
 
@@ -46,6 +48,7 @@ export function parseRoute(pathname: string, hash: string): Route {
     if (projectId === 'p' && id && PROJECT_ID.test(id) && more.length === 0) return { kind: 'studio', projectId: id };
     return { kind: 'home' };
   }
+  if (first === 'p' && projectId === undefined) return { kind: 'studies' };
   const faq = rest.length === 1 && rest[0] === 'faq';
   if (first !== 'p' || !projectId || !PROJECT_ID.test(projectId) || (rest.length > 0 && !faq)) {
     return { kind: 'home' };
@@ -59,6 +62,9 @@ export function parseRoute(pathname: string, hash: string): Route {
   if (reset && /^[A-Za-z0-9_-]{20,100}$/.test(reset)) route.resetToken = reset;
   return route;
 }
+
+/** The participant area: the studies with data on this computer. */
+export const STUDIES_PATH = '/p/';
 
 /** The address of a project page. */
 export function projectPath(projectId: string, page?: 'faq'): string {
@@ -83,6 +89,8 @@ export function readRoute(): Route {
     // Keep the fragment: the studio reads a handoff code from the key page there.
     const path = studioPath(route.projectId);
     if (location.pathname !== path) history.replaceState(null, '', path + location.hash);
+  } else if (route.kind === 'studies') {
+    if (location.pathname !== STUDIES_PATH) history.replaceState(null, '', STUDIES_PATH);
   } else if (location.pathname !== '/') {
     history.replaceState(null, '', '/');
   }

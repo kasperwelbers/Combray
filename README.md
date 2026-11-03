@@ -36,7 +36,8 @@ Or build everything and let the server serve it: `pnpm serve` (http://localhost:
 
 | Path | What it is |
 | --- | --- |
-| `/` | Participant home: studies with data on this computer |
+| `/` | Landing page: what Combray is, with the way in for participants and researchers |
+| `/p/` | Participant area: studies with data on this computer |
 | `/p/example/` | Example study (participant id optional) |
 | `/p/willow/#id=W-1234` | Example study that requires a participant id |
 | `/studio/` | Researcher workspace |

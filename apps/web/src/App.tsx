@@ -6,10 +6,11 @@ import { Madeleine, Skyline } from './components/Madeleine';
 import { useIdleLock } from './components/useIdleLock';
 import i18n, { LANGUAGES } from './i18n';
 import { uploadPoints } from './projectConfig';
-import { projectPath, readRoute } from './route';
+import { projectPath, readRoute, STUDIES_PATH } from './route';
 import { Explore } from './screens/Explore';
 import { Faq } from './screens/Faq';
 import { Home } from './screens/Home';
+import { Landing } from './screens/Landing';
 import { Lock } from './screens/Lock';
 import { Notice } from './screens/Notice';
 import { Projects } from './screens/Projects';
@@ -71,6 +72,13 @@ export function App() {
   }
   if (route.kind === 'home') {
     return (
+      <Shell home="/">
+        <Landing />
+      </Shell>
+    );
+  }
+  if (route.kind === 'studies') {
+    return (
       <Shell>
         <Projects />
       </Shell>
@@ -100,15 +108,20 @@ interface ShellProps {
   wide?: boolean;
   /** The researcher workspace: English only, so no language menu, and no participant footer. */
   studio?: boolean;
+  /**
+   * Where the logo leads. Participants go back to their studies, not to the landing page, so the
+   * way in for researchers never appears in the middle of a study.
+   */
+  home?: string;
   children: ReactNode;
 }
 
-function Shell({ project, actions, wide, studio = false, children }: ShellProps) {
+function Shell({ project, actions, wide, studio = false, home = STUDIES_PATH, children }: ShellProps) {
   const { t, i18n } = useTranslation();
   return (
     <div className="shell">
       <header className="topbar">
-        <a className="brand" href={studio ? '/studio/' : '/'}>
+        <a className="brand" href={studio ? '/studio/' : home}>
           <Madeleine />
           Combray
           {project?.name && <span className="brand-project">{localize(project.name, i18n.language)}</span>}

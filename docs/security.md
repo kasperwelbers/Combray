@@ -67,7 +67,7 @@ IndexedDB is used as a key-value store for encrypted blobs. It is never queried 
 
 A file is one logical blob, but it is encrypted in slices because WebCrypto's AES-GCM has no streaming interface. Encrypting a 2 GB Takeout in one call would need the plaintext and ciphertext in memory at once, and some browsers (Safari in particular) handle very large single IndexedDB values badly. Slices keep peak memory small and let us move them to OPFS later without changing the encryption.
 
-There is one store per project on each device, in its own IndexedDB database named `combray-{project id}`. A password, and the key it releases, only ever covers one project. The overview page at `/` lists the projects that have a store on this device by reading these databases locally, without asking the server.
+There is one store per project on each device, in its own IndexedDB database named `combray-{project id}`. A password, and the key it releases, only ever covers one project. The overview page at `/p/` lists the projects that have a store on this device by reading these databases locally, without asking the server.
 
 Object stores (format version 2):
 

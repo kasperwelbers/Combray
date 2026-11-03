@@ -1426,3 +1426,47 @@ main.wide {
   font-weight: 600;
   font-size: 1.1rem;
 }
+
+/* The landing page: what Combray is, and the two ways in. */
+.landing {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.landing-intro {
+  max-width: 40rem;
+  margin: 1rem auto 2rem;
+  text-align: center;
+}
+
+.landing-intro .madeleine {
+  display: block;
+  margin: 0 auto 1rem;
+}
+
+.landing-intro .lead {
+  font-size: 1.15rem;
+}
+
+.landing-steps {
+  text-align: left;
+  display: grid;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.landing-ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.landing-ways .card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.landing-ways .card .button {
+  margin-top: auto;
+}

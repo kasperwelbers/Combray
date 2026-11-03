@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { Madeleine } from '../components/Madeleine';
+import { STUDIES_PATH } from '../route';
 
 export type NoticeKind = 'not-found' | 'unreachable' | 'needs-id' | 'reset-no-store';
 
@@ -13,7 +14,7 @@ export function Notice({ kind }: { kind: NoticeKind }) {
       <h1>{t(`notice.${kind}.title`)}</h1>
       <p>{t(`notice.${kind}.text`)}</p>
       <p>
-        <a href="/">{t('projects.all')}</a>
+        <a href={STUDIES_PATH}>{t('projects.all')}</a>
       </p>
     </div>
   );
