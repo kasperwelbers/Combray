@@ -1,0 +1,443 @@
+import { localize, parseImporterFile, parseStructureFile, type Localized } from '@combray/core';
+import { packs } from '@combray/importers';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { STUDIO_TABS, studioPath, type StudioTab } from '../route';
+import { fromFiles, toFiles } from './model';
+import { ApiFailure, projectApi, type Donations, type Draft, type Member, type PlatformDraft, type ProjectDetails } from './projectApi';
+import { Studio, type DraftStore } from './Studio';
+
+const english = (text: Localized | undefined): string => (text === undefined ? '' : localize(text, 'en'));
+
+/**
+ * One project in the researcher workspace, in tabs: details, information and consent, the data
+ * explorer (per platform: data donation packages and the tree editor), researchers and donations.
+ * Everything is saved to the project's draft on the server; participants see it once a researcher
+ * publishes it on the key page.
+ */
+export function Project({ projectId, tab: initialTab, account, keysUrl }: { projectId: string; tab?: StudioTab; account: ReactNode; keysUrl?: string }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const [draft, setDraft] = useState<Draft>();
+  const [failed, setFailed] = useState(false);
+  const [tab, setTab] = useState<StudioTab>(initialTab ?? 'details');
+
+  const refresh = useCallback(() => {
+    void projectApi.draft(projectId).then(setDraft, () => setFailed(true));
+  }, [projectId]);
+  useEffect(refresh, [refresh]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const segment = location.pathname.split('/').filter(Boolean)[3];
+      setTab((STUDIO_TABS as readonly string[]).includes(segment ?? '') ? (segment as StudioTab) : 'details');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  function open(next: StudioTab) {
+    if (next === tab) return;
+    history.pushState(null, '', studioPath(projectId, next));
+    setTab(next);
+  }
+
+  if (failed) {
+    return (
+      <div className="studio">
+        <h1>{t('studio.projectNotFound')}</h1>
+        {account}
+        <p>
+          <a href={studioPath()}>{t('studio.allProjects')}</a>
+        </p>
+      </div>
+    );
+  }
+  if (!draft) return null;
+
+  return (
+    <div className="studio">
+      <p className="meta">
+        <a href={studioPath()}>{t('studio.allProjects')}</a>
+      </p>
+      <h1>{english(draft.details.name) || draft.id}</h1>
+      {account}
+      <PublishBar draft={draft} keysUrl={keysUrl} />
+      <nav className="tabs" aria-label={t('studio.project.tabsLabel')}>
+        {STUDIO_TABS.map((key) => (
+          <a
+            key={key}
+            href={studioPath(projectId, key)}
+            className="tab"
+            aria-current={key === tab ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              open(key);
+            }}
+          >
+            {t(`studio.project.tab.${key}`)}
+          </a>
+        ))}
+      </nav>
+      <div className="tab-panel">
+        {tab === 'details' && <DetailsTab draft={draft} onSaved={refresh} />}
+        {tab === 'consent' && <ConsentTab />}
+        {tab === 'data' && <DataExplorer draft={draft} onChanged={refresh} />}
+        {tab === 'researchers' && <ResearchersTab projectId={projectId} keysUrl={keysUrl} />}
+        {tab === 'donations' && <DonationsTab projectId={projectId} />}
+      </div>
+    </div>
+  );
+}
+
+function PublishBar({ draft, keysUrl }: { draft: Draft; keysUrl?: string }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  return (
+    <p className={`message${draft.unpublished_changes ? '' : ' quiet-message'}`}>
+      {draft.published
+        ? t('studio.project.published', { version: draft.published.version, date: new Date(draft.published.at * 1000).toLocaleDateString('en-GB') })
+        : t('studio.project.notPublished')}{' '}
+      {!draft.published && keysUrl && <a href={keysUrl}>{t('studio.project.publishOnKeyPage')}</a>}
+      {draft.published && draft.unpublished_changes && (
+        <>
+          {t('studio.project.unpublished')}{' '}
+          {keysUrl && <a href={keysUrl}>{t('studio.project.publishOnKeyPage')}</a>}
+        </>
+      )}
+    </p>
+  );
+}
+
+// Details.
+
+function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const d = draft.details;
+  const text = (value: Localized | undefined, language: string) => (typeof value === 'string' ? (language === 'en' ? value : '') : (value?.[language] ?? ''));
+  const [nameEn, setNameEn] = useState(text(d.name, 'en'));
+  const [nameNl, setNameNl] = useState(text(d.name, 'nl'));
+  const [descEn, setDescEn] = useState(text(d.description, 'en'));
+  const [descNl, setDescNl] = useState(text(d.description, 'nl'));
+  const [mode, setMode] = useState(d.participants.mode);
+  const [pattern, setPattern] = useState(d.participants.pattern ?? '');
+  const [status, setStatus] = useState<{ text: string; error?: boolean }>();
+
+  const both = (en: string, nl: string): Localized | undefined => {
+    const value: Record<string, string> = {};
+    if (en.trim()) value.en = en.trim();
+    if (nl.trim()) value.nl = nl.trim();
+    return Object.keys(value).length > 0 ? value : undefined;
+  };
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    const name = both(nameEn, nameNl);
+    if (!name) return setStatus({ text: t('studio.project.nameRequired'), error: true });
+    const description = both(descEn, descNl);
+    const details: ProjectDetails = {
+      name,
+      ...(description ? { description } : {}),
+      participants: { mode, ...(mode !== 'anonymous' && pattern.trim() ? { pattern: pattern.trim() } : {}) },
+    };
+    try {
+      await projectApi.saveDetails(draft.id, details);
+      setStatus({ text: t('studio.project.saved') });
+      onSaved();
+    } catch (error) {
+      setStatus({ text: error instanceof ApiFailure && error.status === 400 ? t('studio.project.detailsInvalid') : t('studio.project.saveFailed'), error: true });
+    }
+  }
+
+  return (
+    <form className="card project-form" onSubmit={(e) => void save(e)}>
+      <h2>{t('studio.project.tab.details')}</h2>
+      <p className="meta">{t('studio.project.detailsIntro', { id: draft.id })}</p>
+      <fieldset>
+        <legend>{t('studio.project.name')}</legend>
+        <label className="field">
+          English
+          <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+        </label>
+        <label className="field">
+          Nederlands
+          <input value={nameNl} onChange={(e) => setNameNl(e.target.value)} />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>{t('studio.project.description')}</legend>
+        <p className="meta">{t('studio.project.descriptionHelp')}</p>
+        <label className="field">
+          English
+          <textarea rows={3} value={descEn} onChange={(e) => setDescEn(e.target.value)} />
+        </label>
+        <label className="field">
+          Nederlands
+          <textarea rows={3} value={descNl} onChange={(e) => setDescNl(e.target.value)} />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>{t('studio.project.participants')}</legend>
+        <label className="field">
+          {t('studio.project.mode')}
+          <select value={mode} onChange={(e) => setMode(e.target.value as ProjectDetails['participants']['mode'])}>
+            {(['anonymous', 'optional', 'required'] as const).map((m) => (
+              <option key={m} value={m}>
+                {t(`studio.project.modes.${m}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {mode !== 'anonymous' && (
+          <label className="field">
+            {t('studio.project.pattern')}
+            <input value={pattern} placeholder="P[0-9]{4}" onChange={(e) => setPattern(e.target.value)} />
+            <span className="meta">{t('studio.project.patternHelp')}</span>
+          </label>
+        )}
+      </fieldset>
+      {status && (
+        <p className={`message${status.error ? ' error' : ''}`} role={status.error ? 'alert' : 'status'}>
+          {status.text}
+        </p>
+      )}
+      <button className="button" type="submit">
+        {t('studio.project.saveDetails')}
+      </button>
+    </form>
+  );
+}
+
+// Information and consent.
+
+function ConsentTab() {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  return (
+    <section className="card">
+      <h2>{t('studio.project.tab.consent')}</h2>
+      <p>{t('studio.project.consentSoon')}</p>
+    </section>
+  );
+}
+
+// The data explorer.
+
+function DataExplorer({ draft, onChanged }: { draft: Draft; onChanged: () => void }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const [selected, setSelected] = useState<string | undefined>(draft.platforms[0]?.id);
+  const [message, setMessage] = useState<{ text: string; error?: boolean }>();
+  const available = packs.filter((p) => !draft.platforms.some((x) => x.id === p.id));
+
+  async function addPlatform(packId: string) {
+    const pack = packs.find((p) => p.id === packId);
+    if (!pack) return;
+    try {
+      await projectApi.savePlatform(draft.id, pack.id, { name: pack.name, pack: pack.id, structure: pack.structure, importer: pack.importer });
+      setSelected(pack.id);
+      onChanged();
+    } catch {
+      setMessage({ text: t('studio.project.saveFailed'), error: true });
+    }
+  }
+
+  async function removePlatform(id: string) {
+    if (!window.confirm(t('studio.project.confirmRemovePlatform'))) return;
+    await projectApi.removePlatform(draft.id, id).catch(() => undefined);
+    setSelected(draft.platforms.find((p) => p.id !== id)?.id);
+    onChanged();
+  }
+
+  return (
+    <div>
+      <section className="card">
+        <h2>{t('studio.project.platformsTitle')}</h2>
+        <p className="meta">{t('studio.project.platformsIntro')}</p>
+        {draft.platforms.length > 0 && (
+          <div className="segmented platform-choice" role="group" aria-label={t('studio.project.platformsTitle')}>
+            {draft.platforms.map((p) => (
+              <button key={p.id} type="button" className="seg" aria-pressed={p.id === selected} onClick={() => setSelected(p.id)}>
+                {english(p.name)}
+              </button>
+            ))}
+          </div>
+        )}
+        {available.length > 0 && (
+          <label className="field add-platform">
+            {t('studio.project.addPlatform')}
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) void addPlatform(e.target.value);
+              }}
+            >
+              <option value="">{t('studio.project.choosePlatform')}</option>
+              {available.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {english(p.name)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {message && (
+          <p className={`message${message.error ? ' error' : ''}`} role="alert">
+            {message.text}
+          </p>
+        )}
+      </section>
+      {selected && draft.platforms.some((p) => p.id === selected) ? (
+        <PlatformEditor key={selected} projectId={draft.id} platformId={selected} onSaved={onChanged} onRemove={() => void removePlatform(selected)} />
+      ) : (
+        draft.platforms.length === 0 && <p className="meta">{t('studio.project.noPlatforms')}</p>
+      )}
+    </div>
+  );
+}
+
+const SAVE_DELAY_MS = 800;
+
+/** One platform: its tree loaded from the draft and saved back shortly after every change. */
+function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectId: string; platformId: string; onSaved: () => void; onRemove: () => void }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const [platform, setPlatform] = useState<PlatformDraft | 'failed'>();
+  const [saving, setSaving] = useState<'saving' | 'saved' | 'failed'>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const latest = useRef<() => Promise<void>>(undefined);
+
+  useEffect(() => {
+    void projectApi.platform(projectId, platformId).then(setPlatform, () => setPlatform('failed'));
+  }, [projectId, platformId]);
+
+  // Save what is waiting when the editor closes (another platform, another tab).
+  useEffect(
+    () => () => {
+      if (timer.current) {
+        clearTimeout(timer.current);
+        void latest.current?.();
+      }
+    },
+    [],
+  );
+
+  const store = useMemo((): DraftStore | 'unreadable' | undefined => {
+    if (!platform || platform === 'failed') return undefined;
+    let initial: DraftStore['initial'] = { pending: [] };
+    if (platform.structure && platform.importer) {
+      try {
+        initial = fromFiles(parseStructureFile(platform.structure), parseImporterFile(platform.importer));
+      } catch {
+        return 'unreadable';
+      }
+    }
+    return {
+      initial,
+      save(tree, pending) {
+        const files = tree ? toFiles(tree, pending) : undefined;
+        latest.current = async () => {
+          setSaving('saving');
+          try {
+            await projectApi.savePlatform(projectId, platformId, {
+              name: platform.name,
+              ...(platform.pack ? { pack: platform.pack } : {}),
+              ...(files ? { structure: files.structure, importer: files.importer } : {}),
+            });
+            setSaving('saved');
+            onSaved();
+          } catch {
+            setSaving('failed');
+          }
+        };
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => {
+          timer.current = undefined;
+          void latest.current?.();
+        }, SAVE_DELAY_MS);
+      },
+    };
+  }, [platform, projectId, platformId, onSaved]);
+
+  if (platform === 'failed' || store === 'unreadable') return <p className="message error">{t('studio.project.platformFailed')}</p>;
+  if (!platform || !store) return null;
+  return (
+    <div className="platform-editor">
+      <div className="platform-bar">
+        <h2>{english(platform.name)}</h2>
+        <span className="meta" role="status">
+          {saving ? t(`studio.project.save.${saving}`) : ''}
+        </span>
+        <button type="button" className="link-button" onClick={onRemove}>
+          {t('studio.project.removePlatform')}
+        </button>
+      </div>
+      <Studio draft={store} {...(platform.pack ? { pack: platform.pack } : {})} />
+    </div>
+  );
+}
+
+// Researchers.
+
+function ResearchersTab({ projectId, keysUrl }: { projectId: string; keysUrl?: string }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const [members, setMembers] = useState<Member[]>();
+  useEffect(() => {
+    void projectApi.members(projectId).then(setMembers, () => setMembers([]));
+  }, [projectId]);
+  return (
+    <section className="card">
+      <h2>{t('studio.project.tab.researchers')}</h2>
+      {members && (
+        <ul className="member-list">
+          {members.map((m) => (
+            <li key={m.researcher_id}>
+              <span>{m.email}</span>
+              <span className="meta">
+                {m.has_access ? t('studio.project.hasAccess') : m.public_key ? t('studio.project.waitingForAccess') : t('studio.project.noKeyYet')}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="meta">
+        {t('studio.project.researchersHelp')} {keysUrl && <a href={keysUrl}>{t('studio.openKeyPage')}</a>}
+      </p>
+    </section>
+  );
+}
+
+// Donations.
+
+function DonationsTab({ projectId }: { projectId: string }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const [donations, setDonations] = useState<Donations | 'failed'>();
+  useEffect(() => {
+    void projectApi.donations(projectId).then(setDonations, () => setDonations('failed'));
+  }, [projectId]);
+  if (donations === 'failed') return <p className="message error">{t('studio.project.donationsFailed')}</p>;
+  if (!donations) return null;
+  const byDay = new Map<string, number>();
+  for (const d of donations.donations) byDay.set(d.day, (byDay.get(d.day) ?? 0) + 1);
+  return (
+    <section className="card">
+      <h2>{t('studio.project.tab.donations')}</h2>
+      <p>{t('studio.project.donationCounts', { count: donations.donations.length, withdrawn: donations.withdrawn.length })}</p>
+      {byDay.size > 0 && (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>{t('studio.project.day')}</th>
+              <th>{t('studio.project.donationsOnDay')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...byDay].map(([day, n]) => (
+              <tr key={day}>
+                <td>{day}</td>
+                <td>{n}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="meta">{t('studio.project.donationsHelp')}</p>
+    </section>
+  );
+}

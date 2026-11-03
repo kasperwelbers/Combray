@@ -65,7 +65,7 @@ export function App() {
     return (
       <Shell wide studio>
         <Suspense fallback={null}>
-          <StudioApp projectId={route.projectId} />
+          <StudioApp {...(route.projectId ? { projectId: route.projectId } : {})} {...(route.tab ? { tab: route.tab } : {})} />
         </Suspense>
       </Shell>
     );

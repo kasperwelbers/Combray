@@ -11,5 +11,7 @@ export const importers: ImporterSpec[] = Object.keys(sources)
   .sort()
   .map((path) => parseSpec(sources[path]!));
 
+export { examplePackages } from './examples';
+export type { ExamplePackage } from './examples';
 export { packs, packTree, PACK_IDS } from './packs';
 export type { PlatformPack } from './packs';

@@ -12,6 +12,7 @@ import {
 } from '@combray/core';
 
 import type { TreeView } from './DecisionTree';
+import type { DraftStore } from './Studio';
 import { fromFiles, toFiles } from './model';
 
 const DRAFT_KEY = 'combray:studio:draft';
@@ -64,3 +65,8 @@ export function download(name: string, content: unknown): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+
+/** The workspace's draft kept in this browser: for servers without researcher accounts. */
+export function localDraft(): DraftStore {
+  return { initial: loadDraft(), save: (tree, pending) => saveDraft(undefined, tree, pending) };
+}

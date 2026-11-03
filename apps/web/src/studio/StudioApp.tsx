@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { studioPath } from '../route';
+import { studioPath, type StudioTab } from '../route';
+import { localDraft } from './draft';
+import { Project } from './Project';
+import { ApiFailure, projectApi } from './projectApi';
 import { Studio } from './Studio';
 
 /**
@@ -86,7 +89,7 @@ async function load(handoff?: string): Promise<State> {
   return { kind: 'signed-in', site, email: me.email, projects: list?.projects ?? [] };
 }
 
-export function StudioApp({ projectId }: { projectId?: string }) {
+export function StudioApp({ projectId, tab }: { projectId?: string; tab?: StudioTab }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [state, setState] = useState<State>({ kind: 'loading' });
 
@@ -103,7 +106,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
   }, []);
 
   if (state.kind === 'loading') return null;
-  if (state.kind === 'local') return <Studio />;
+  if (state.kind === 'local') return <Studio title={t('studio.title')} draft={localDraft()} />;
   if (state.kind === 'signed-out') {
     return (
       <SignIn
@@ -147,6 +150,7 @@ export function StudioApp({ projectId }: { projectId?: string }) {
             ))}
           </ul>
         )}
+        <NewProject />
         <p className="meta">
           {t('studio.keysElsewhere')}{' '}
           {state.site.keys_url && <a href={state.site.keys_url}>{t('studio.openKeyPage')}</a>}
@@ -155,31 +159,77 @@ export function StudioApp({ projectId }: { projectId?: string }) {
     );
   }
 
-  const project = state.projects.find((p) => p.id === projectId);
-  if (!project) {
-    return (
-      <div className="studio">
-        <h1>{t('studio.projectNotFound')}</h1>
-        {account}
-        <p>
-          <a href={studioPath()}>{t('studio.allProjects')}</a>
-        </p>
-      </div>
-    );
+  return <Project projectId={projectId} {...(tab ? { tab } : {})} account={account} {...(state.site.keys_url ? { keysUrl: state.site.keys_url } : {})} />;
+}
+
+/** Create a project: the researcher becomes its first member, and goes on to its details. */
+function NewProject() {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const [name, setName] = useState('');
+  const [id, setId] = useState('');
+  const [idEdited, setIdEdited] = useState(false);
+  const [error, setError] = useState<string>();
+  const slug = (text: string) =>
+    text
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64);
+
+  async function create(e: FormEvent) {
+    e.preventDefault();
+    setError(undefined);
+    try {
+      await projectApi.create(id, name.trim());
+      location.assign(studioPath(id, 'details'));
+    } catch (failure) {
+      setError(
+        failure instanceof ApiFailure && failure.status === 409
+          ? t('studio.newProject.taken')
+          : failure instanceof ApiFailure && failure.status === 400
+            ? t('studio.newProject.invalid')
+            : t('studio.project.saveFailed'),
+      );
+    }
   }
+
   return (
-    <Studio
-      projectId={project.id}
-      title={projectName(project)}
-      header={
-        <>
-          <p className="meta">
-            <a href={studioPath()}>{t('studio.allProjects')}</a>
-          </p>
-          {account}
-        </>
-      }
-    />
+    <form className="card project-form" onSubmit={(e) => void create(e)}>
+      <h2>{t('studio.newProject.title')}</h2>
+      <label className="field">
+        {t('studio.newProject.name')}
+        <input
+          required
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (!idEdited) setId(slug(e.target.value));
+          }}
+        />
+      </label>
+      <label className="field">
+        {t('studio.newProject.id')}
+        <input
+          required
+          pattern="[a-z0-9\-]{1,64}"
+          value={id}
+          onChange={(e) => {
+            setId(e.target.value);
+            setIdEdited(true);
+          }}
+        />
+        <span className="meta">{t('studio.newProject.idHelp', { path: `/p/${id || '…'}/` })}</span>
+      </label>
+      {error && (
+        <p className="message error" role="alert">
+          {error}
+        </p>
+      )}
+      <button className="button" type="submit">
+        {t('studio.newProject.create')}
+      </button>
+    </form>
   );
 }
 

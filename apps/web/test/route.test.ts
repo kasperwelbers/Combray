@@ -35,6 +35,8 @@ describe('parseRoute', () => {
     expect(parseRoute('/studio/p/willow/', '')).toEqual({ kind: 'studio', projectId: 'willow' });
     expect(parseRoute('/studio/p/Willow/', '')).toEqual({ kind: 'home' });
     expect(parseRoute('/studio/p/willow/extra', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/studio/p/willow/data/', '')).toEqual({ kind: 'studio', projectId: 'willow', tab: 'data' });
+    expect(parseRoute('/studio/p/willow/data/more', '')).toEqual({ kind: 'home' });
   });
 
   it('ignores malformed paths, ids and tokens', () => {

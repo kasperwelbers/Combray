@@ -25,6 +25,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { examplePackages } from '@combray/importers';
+
 import { Dropzone } from '../components/Dropzone';
 import type { ImportProgress, Upload } from '../worker/api';
 import type { PreviewTable, StudioExport } from './api';
@@ -42,7 +44,7 @@ import {
   type NodePatch,
   type Shortcut,
 } from './model';
-import { download, loadDraft, loadView, saveDraft, VIEW_KEY } from './draft';
+import { download, loadView, VIEW_KEY } from './draft';
 import { NodePanel } from './NodePanel';
 import { Suggestions } from './Suggestions';
 
@@ -58,15 +60,21 @@ const samePair = (a: Pick<MergeSuggestion, 'from' | 'into'>, b: Pick<MergeSugges
 /** Ancestors of a path, to open them in the tree. */
 const ancestorsOf = (path: NodePath) => path.slice(0, -1).map((_, i) => pathKey(path.slice(0, i + 1)));
 
+/** Where the tree being edited is kept: the project's draft on the server, or this browser. */
+export interface DraftStore {
+  initial: { tree?: ProjectNode; pending: ImporterEntry[] };
+  save(tree: ProjectNode | undefined, pending: ImporterEntry[]): void;
+}
+
 /**
- * The workspace for one project: load your own exports, decide per node what happens to it, and
- * see the result as participants would. Exports stay in the studio worker's memory; only the
- * project tree (structure and settings) is kept as a draft in this browser, per project.
- * `StudioApp` decides who gets here.
+ * The tree editor for one platform: load data donation packages (your own, or a synthetic example),
+ * decide per node what happens to it, and see the result as participants would. Packages stay in
+ * the studio worker's memory and are dropped when this closes; only the project tree (structure
+ * and settings) is saved, through `draft`.
  */
-export function Studio({ projectId, title, header }: { projectId?: string; title?: string; header?: ReactNode }) {
+export function Studio({ title, header, draft, pack }: { title?: string; header?: ReactNode; draft: DraftStore; pack?: string }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const [initial] = useState(() => loadDraft(projectId));
+  const [initial] = useState(() => draft.initial);
   const [tree, setTree] = useState<ProjectNode | undefined>(initial.tree);
   const [pending, setPending] = useState<ImporterEntry[]>(initial.pending);
   const [exports, setExports] = useState<StudioExport[]>([]);
@@ -82,7 +90,43 @@ export function Studio({ projectId, title, header }: { projectId?: string; title
   const [suggestions, setSuggestions] = useState<MergeSuggestion[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => saveDraft(projectId, tree, pending), [projectId, tree, pending]);
+  // Save changes, not the tree as it was loaded (saving marks the draft as changed).
+  const loaded = useRef(true);
+  const store = useRef(draft);
+  useEffect(() => {
+    if (loaded.current) {
+      loaded.current = false;
+      return;
+    }
+    store.current.save(tree, pending);
+  }, [tree, pending]);
+
+  // The packages loaded here belong to this platform: drop them from the worker when it closes.
+  const loadedIds = useRef<number[]>([]);
+  useEffect(() => {
+    loadedIds.current = exports.map((e) => e.id);
+  }, [exports]);
+  useEffect(
+    () => () => {
+      for (const id of loadedIds.current) void studio.removeExport(id);
+    },
+    [],
+  );
+
+  const examples = useMemo(() => examplePackages.filter((e) => !pack || e.pack === pack), [pack]);
+  const [loadingExample, setLoadingExample] = useState<string>();
+
+  async function addExample(id: string) {
+    const example = examples.find((e) => e.id === id);
+    if (!example) return;
+    setLoadingExample(id);
+    try {
+      const files = await example.load();
+      await addFiles(files.map((f) => ({ file: new File([f.text], f.path.split('/').pop() ?? f.path), path: f.path })));
+    } finally {
+      setLoadingExample(undefined);
+    }
+  }
   useEffect(() => {
     try {
       localStorage.setItem(VIEW_KEY, JSON.stringify({ view, hideIgnored }));
@@ -286,7 +330,7 @@ export function Studio({ projectId, title, header }: { projectId?: string; title
 
   return (
     <div className="studio">
-      <h1>{title ?? t('studio.title')}</h1>
+      {title && <h1>{title}</h1>}
       {header}
       <p>{t('studio.intro')}</p>
 
@@ -295,6 +339,20 @@ export function Studio({ projectId, title, header }: { projectId?: string; title
           <h2 id="studio-exports">{t('studio.exportsTitle')}</h2>
           <p className="meta">{t('studio.exportsIntro')}</p>
           <Dropzone busy={busy} onFiles={addFiles} />
+          {examples.length > 0 && (
+            <div className="examples">
+              <p className="meta">{t('studio.examplesIntro')}</p>
+              <ul className="example-list">
+                {examples.map((e) => (
+                  <li key={e.id}>
+                    <button type="button" className="button quiet" disabled={busy} onClick={() => void addExample(e.id)}>
+                      {loadingExample === e.id ? t('studio.examplesLoading') : e.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {exports.length > 0 && (
             <ul className="export-list">
               {exports.map((e) => (
@@ -311,33 +369,6 @@ export function Studio({ projectId, title, header }: { projectId?: string; title
           )}
         </section>
 
-        <section className="card" aria-labelledby="studio-files">
-          <h2 id="studio-files">{t('studio.filesTitle')}</h2>
-          <p className="meta">{t('studio.filesIntro')}</p>
-          <div className="actions">
-            <button className="button quiet" type="button" onClick={() => fileInput.current?.click()}>
-              {t('studio.open')}
-            </button>
-            <button className="button" type="button" disabled={!tree} onClick={saveFiles}>
-              {t('studio.save')}
-            </button>
-            <button className="button danger" type="button" disabled={!tree} onClick={startOver}>
-              {t('studio.startOver')}
-            </button>
-          </div>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/json,.json"
-            multiple
-            hidden
-            onChange={(e) => {
-              void openFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
-          {pending.length > 0 && <p className="meta">{t('studio.pending', { count: pending.length })}</p>}
-        </section>
       </div>
 
       <div aria-live="polite">
@@ -447,6 +478,34 @@ export function Studio({ projectId, title, header }: { projectId?: string; title
           </section>
         </>
       )}
+
+        <details className="card studio-advanced">
+          <summary>{t('studio.filesTitle')}</summary>
+          <p className="meta">{t('studio.filesIntro')}</p>
+          <div className="actions">
+            <button className="button quiet" type="button" onClick={() => fileInput.current?.click()}>
+              {t('studio.open')}
+            </button>
+            <button className="button" type="button" disabled={!tree} onClick={saveFiles}>
+              {t('studio.save')}
+            </button>
+            <button className="button danger" type="button" disabled={!tree} onClick={startOver}>
+              {t('studio.startOver')}
+            </button>
+          </div>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json,.json"
+            multiple
+            hidden
+            onChange={(e) => {
+              void openFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          {pending.length > 0 && <p className="meta">{t('studio.pending', { count: pending.length })}</p>}
+        </details>
     </div>
   );
 }

@@ -17,10 +17,15 @@
 export type Route =
   | { kind: 'home' }
   | { kind: 'studies' }
-  | { kind: 'studio'; projectId?: string }
+  | { kind: 'studio'; projectId?: string; tab?: StudioTab }
   | { kind: 'project'; projectId: string; participantId?: string; resetToken?: string; page?: 'faq' };
 
 const PROJECT_ID = /^[a-z0-9-]{1,64}$/;
+
+/** The tabs of a project in the researcher workspace (`/studio/p/{project}/{tab}/`). */
+export const STUDIO_TABS = ['details', 'consent', 'data', 'researchers', 'donations'] as const;
+export type StudioTab = (typeof STUDIO_TABS)[number];
+const isTab = (s: string | undefined): s is StudioTab => (STUDIO_TABS as readonly string[]).includes(s ?? '');
 const PARTICIPANT_ID = /^[A-Za-z0-9._-]{1,64}$/;
 
 function remembered(projectId: string): string | undefined {
@@ -44,9 +49,10 @@ export function parseRoute(pathname: string, hash: string): Route {
   const [first, projectId, ...rest] = pathname.split('/').filter(Boolean);
   if (first === 'studio') {
     if (projectId === undefined) return { kind: 'studio' };
-    const [id, ...more] = rest;
-    if (projectId === 'p' && id && PROJECT_ID.test(id) && more.length === 0) return { kind: 'studio', projectId: id };
-    return { kind: 'home' };
+    const [id, tab, ...more] = rest;
+    if (projectId !== 'p' || !id || !PROJECT_ID.test(id) || more.length > 0) return { kind: 'home' };
+    if (tab === undefined) return { kind: 'studio', projectId: id };
+    return isTab(tab) ? { kind: 'studio', projectId: id, tab } : { kind: 'home' };
   }
   if (first === 'p' && projectId === undefined) return { kind: 'studies' };
   const faq = rest.length === 1 && rest[0] === 'faq';
@@ -71,9 +77,10 @@ export function projectPath(projectId: string, page?: 'faq'): string {
   return page ? `/p/${projectId}/${page}` : `/p/${projectId}/`;
 }
 
-/** The address of the researcher workspace, or of one project in it. */
-export function studioPath(projectId?: string): string {
-  return projectId ? `/studio/p/${projectId}/` : '/studio/';
+/** The address of the researcher workspace, of one project in it, or of one of its tabs. */
+export function studioPath(projectId?: string, tab?: StudioTab): string {
+  if (!projectId) return '/studio/';
+  return tab ? `/studio/p/${projectId}/${tab}/` : `/studio/p/${projectId}/`;
 }
 
 export function readRoute(): Route {
@@ -87,7 +94,7 @@ export function readRoute(): Route {
     }
   } else if (route.kind === 'studio') {
     // Keep the fragment: the studio reads a handoff code from the key page there.
-    const path = studioPath(route.projectId);
+    const path = studioPath(route.projectId, route.tab);
     if (location.pathname !== path) history.replaceState(null, '', path + location.hash);
   } else if (route.kind === 'studies') {
     if (location.pathname !== STUDIES_PATH) history.replaceState(null, '', STUDIES_PATH);

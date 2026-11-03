@@ -423,11 +423,38 @@ async function signOut() {
   signInScreen();
 }
 
+/**
+ * Publishing: the draft researchers edit in the studio becomes what participants see and are asked
+ * to donate. Only here, with the passkey: a studio session (an email code alone) cannot do it.
+ */
+async function publishBlock(id: string, refresh: () => Promise<void>): Promise<HTMLElement> {
+  let draft: { published: { version: number; at: number } | null; unpublished_changes: boolean };
+  try {
+    draft = await api.get(`/projects/${id}/draft`);
+  } catch {
+    return h('p', { class: 'meta' }, 'The draft could not be loaded.');
+  }
+  const status = draft.published
+    ? `Published: version ${draft.published.version}, ${new Date(draft.published.at * 1000).toLocaleDateString('en-GB')}.`
+    : 'Not published yet: participants cannot open this project.';
+  if (!draft.unpublished_changes) return h('p', { class: 'meta' }, status);
+  return h(
+    'div',
+    { class: 'notice' },
+    h('p', {}, status, ' The draft has changes participants do not see yet. Check them in the studio, then publish.'),
+    action(draft.published ? 'Publish the changes' : 'Publish the project', async () => {
+      await api.post(`/projects/${id}/publish`);
+      await refresh();
+    }),
+  );
+}
+
 async function projectSection(id: string): Promise<HTMLElement> {
   const project = await api.get<Project>(`/projects/${id}`);
   const name = projectName(project.name, id);
   const body: (Node | string)[] = [h('h2', {}, name), h('p', { class: 'meta' }, `Project id: ${id}`)];
   const refresh = async () => section.replaceWith(await projectSection(id));
+  body.push(await publishBlock(id, refresh));
 
   if (!project.key) {
     body.push(

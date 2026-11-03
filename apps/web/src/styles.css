@@ -1470,3 +1470,108 @@ main.wide {
 .landing-ways .card .button {
   margin-top: auto;
 }
+
+/* A project in the researcher workspace: tabs, forms, platforms. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1.5px solid var(--line);
+  margin: 1.5rem 0 1rem;
+}
+
+.tab {
+  padding: 0.6em 1em;
+  border-radius: 10px 10px 0 0;
+  color: var(--ink-soft);
+  text-decoration: none;
+  margin-bottom: -1.5px;
+  border: 1.5px solid transparent;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-current='page'] {
+  color: var(--ink);
+  background: var(--paper);
+  border-color: var(--line);
+  border-bottom-color: var(--paper);
+  font-weight: 600;
+}
+
+.quiet-message {
+  border-left-color: var(--line);
+}
+
+.project-form {
+  max-width: 44rem;
+}
+
+.project-form fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.project-form legend {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.project-form .field textarea,
+.project-form .field select {
+  width: 100%;
+}
+
+.platform-choice {
+  margin: 0.75rem 0;
+}
+
+.add-platform {
+  max-width: 20rem;
+}
+
+.platform-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.platform-bar h2 {
+  margin: 0;
+}
+
+.example-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.studio-advanced {
+  margin-top: 2rem;
+}
+
+.studio-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.member-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.member-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
