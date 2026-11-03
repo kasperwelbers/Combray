@@ -8,7 +8,9 @@ Combray has three parts (see [architecture.md](architecture.md)): the **web clie
 | --- | --- | --- |
 | **University server** | `docker compose up -d` on a VM, TLS through Caddy | University IT or research support, once, for all researchers |
 | **Researchers** | A browser and a passkey (phone, laptop or security key) | Every researcher; nothing to install |
-| **Lab laptop** | `combray-server` on the laptop | A lab without a university server, or offline sessions (without researcher sign-in for now, see below) |
+| **Lab or institute server** | The same `docker compose up -d` on a small VM or host | A lab or institute without a shared university server |
+
+Combray is server first ([ADR 0011](decisions/0011-server-first.md)): there is no offline or laptop mode. Running it on your own machine is for development ([below](#development)).
 
 ## Pilot checklist
 
@@ -128,21 +130,14 @@ It prints a one-time link (valid for 72 hours) that the participant opens on the
 
 `pnpm serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Its settings are in `deploy/dev.env`; databases, the store master key and sign-in mails go to `.dev/`. Sign-in mails (with the code) are written to `.dev/outbox/`, and the pages say so. Add yourself first with `pnpm researcher example you@example.org`, and send a synthetic donation with `pnpm synthetic-donation http://localhost:8080 example`. `pnpm e2e` runs the key page end to end with a virtual passkey. For hot reload, use `pnpm dev`: the web client on http://localhost:5173 next to the same server, which then treats :5173 as the main site (`deploy/dev-hot.env`), so studio sign-in works there too.
 
-## Lab laptop
-
-The server runs on a laptop with Node (`pnpm install`, then `node apps/server/src/main.ts` with the settings above), or as the Docker image. Researcher sign-in needs mail and two host names, which a laptop without a network usually does not have; for an offline lab the participant app works as before, and donations wait for a server. A design for offline sign-in is open.
-
 ## Later
 
 - A released image pins the web client and key page, so a deployment runs exactly a released version.
 - A multi-arch image on GHCR with each release.
 - Institutional sign-in (SURFconext, OIDC) in place of the email code.
 - Health metrics (counts and timings only).
-- Database migrations with a refusal to start when one would lose data.
 
 ## Open questions
 
-- Do we need Windows lab laptops as a first-class target, and should the binary install itself as a service there?
 - Should the server have a small admin web UI for IT (accounts, quotas, health), or is a CLI enough? Recommendation: CLI first.
 - Is S3 needed in v1, or is the filesystem plus regular backups enough for most labs?
-- Offline sign-in for a lab laptop.

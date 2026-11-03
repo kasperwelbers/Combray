@@ -37,6 +37,7 @@ Goal: a researcher with no programming experience creates a project, registers i
 - Donation flow: preview, exclusions, consent receipts, probes and answers, the `#k=` key check, a receipt with the withdrawal token.
 - [x] Researcher workspace with path decisions (ignore, show, donate) on the tree, derived tables, aliases and HTML normalisation ([tree-decisions.md](tree-decisions.md#implementation-plan)). Upload points, the participant view of derived tables (collections, other data, nested tables), "Read as" conversions, row filters, merge suggestions, Google Takeout and TikTok as project trees, and [finding the export in an upload](tree-decisions.md#finding-the-export-in-an-upload) (one uploader per platform, name patterns, required parts, skipping new parts, names first with fixed limits). [ ] The consent flow for new structure metadata ([security.md](security.md#structure-metadata-and-consent), with shared structures and merge checks from [structure-versions.md](structure-versions.md)) and missing-field requests; lifters.
 - [x] Docker image and compose file; deployment guide for a pilot with two host names ([deployment.md](deployment.md#pilot-checklist)).
+- [ ] **Next: a hosted pilot.** One server with two host names, running a first study. Server first ([ADR 0011](decisions/0011-server-first.md)), so this comes before features that only matter locally.
 - External review of the crypto design.
 
 ## Phase 3: enrichment

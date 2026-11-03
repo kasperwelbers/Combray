@@ -8,7 +8,7 @@ Combray is built from three separately deployable parts, so that a university ca
 | --- | --- | --- | --- |
 | **Combray Studio** (researcher tool) | Each researcher | Their own computer | Create projects, generate and hold the project's private key, configure importers, views and questions, register the project on a server, download and decrypt donations |
 | **Web client** | Participants (with lab staff) | Any modern browser | Import, store encrypted, explore, reflect, enrich with consent, donate encrypted |
-| **Combray server** | A university, a lab, or one researcher | A VM, a lab laptop, or a container host | Host projects and the web client, hold the symmetric keys for participants' local stores, enrich URLs, store encrypted donations |
+| **Combray server** | A university, an institute, or a lab | A VM or container host | Host projects and the web client, hold the symmetric keys for participants' local stores, enrich URLs, store encrypted donations |
 
 A shared **core** library (`packages/core`, TypeScript) implements the tree model, parsers, path language and shape extraction, and runs in a web worker in the browser. A WASM layer is only added for hot paths once measurements show it is needed ([ADR 0003](decisions/0003-typescript-core-and-key-tool.md)).
 
@@ -69,7 +69,7 @@ Power users get the same functions as a CLI (`combray project create`, `combray 
 | Svelte / SolidJS | Smaller bundles, fine-grained reactivity | Smaller ecosystem, fewer contributors know it |
 | Next.js / Remix | Routing and SSR conveniences | SSR is the opposite of what we want; implies a Node server |
 
-Recommendation: **React SPA with Vite**, installable as a PWA so a lab laptop keeps a known version and can work offline. Studio's UI is a second app in the same monorepo sharing the UI kit and core bindings.
+Recommendation: **React SPA with Vite**, installable as a PWA so a lab computer keeps a known version (working offline is not a goal: [ADR 0011](decisions/0011-server-first.md)). Studio's UI is a second app in the same monorepo sharing the UI kit and core bindings.
 
 **State and storage.** UI state in a small store (Zustand or React context; no Redux). Persistent data lives in IndexedDB, encrypted per record with a data key that is unwrapped with a key from the server's store-key service (see [security.md](security.md#local-store)). Each uploaded file is kept as one encrypted blob (in 4 MiB slices), next to chunked caches of the parsed tree, so data can be decrypted into workers without one huge allocation. IndexedDB is only a blob store, never queried by content. OPFS is an option for large files, with the same encryption.
 
@@ -159,7 +159,9 @@ Tooling: pnpm workspaces, and root `package.json` scripts for common tasks (`pnp
 | Shape | Server | Researchers | Notes |
 | --- | --- | --- | --- |
 | **University server** | One docker compose stack on a university VM | A browser and a passkey | The main target: zero programming for researchers |
-| **Lab laptop** | `combray-server` runs on the same laptop | Same laptop or the researcher's own | Offline sessions; enrichment needs internet; passkeys need the key host name on that laptop |
+| **Lab or institute server** | The same stack on a small VM or host | A browser and a passkey | For a lab without a shared university server |
+
+Combray is server first ([ADR 0011](decisions/0011-server-first.md)): there is no mode without a server. Running it on your own machine is for development.
 
 See [deployment.md](deployment.md).
 

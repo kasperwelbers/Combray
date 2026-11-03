@@ -21,9 +21,9 @@ The name comes from the fictional village in Proust's *In Search of Lost Time*. 
 
 1. **Participants.** Not necessarily technical. Usually sitting in a lab or interview room with a researcher or research assistant. May come back for several sessions.
 2. **Lab staff and interviewers.** Guide the session, help with downloads, and use visualisations as interview prompts. Need a "facilitator" view that is quick to operate.
-3. **Researchers.** Use Combray Studio on their own computer to configure projects, pick or write importers, choose visualisations and questions, and decrypt donations. Many have no programming experience, and Studio must not require any.
+3. **Researchers.** Use the studio in their browser to configure projects, pick or write importers, choose visualisations and questions, and open donations on the key page. Many have no programming experience, and the studio must not require any.
 4. **Importer authors.** Often the same researchers. Need an easy way to describe how to read a new or changed DDP format.
-5. **IT and research support.** Run one shared Combray server for the whole university (or a lab laptop). Need it to be boring to install and easy to audit.
+5. **IT and research support.** Run one shared Combray server for the whole university or institute (or a lab runs its own). Need it to be boring to install and easy to audit. Combray is server first ([ADR 0011](decisions/0011-server-first.md)).
 
 ## Research scenarios
 
