@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Madeleine, Skyline } from './components/Madeleine';
 import { useIdleLock } from './components/useIdleLock';
-import { LANGUAGES } from './i18n';
+import i18n, { LANGUAGES } from './i18n';
 import { uploadPoints } from './projectConfig';
 import { projectPath, readRoute } from './route';
 import { Explore } from './screens/Explore';
@@ -23,7 +23,12 @@ const IDLE_MINUTES = 15;
 const Studio = lazy(() => import('./studio/Studio').then((m) => ({ default: m.Studio })));
 
 export function App() {
-  const [route] = useState(readRoute);
+  const [route] = useState(() => {
+    const found = readRoute();
+    // The researcher workspace is English only, including the shared components it shows.
+    if (found.kind === 'studio') void i18n.changeLanguage('en');
+    return found;
+  });
   const [project, setProject] = useState<ProjectInfo | 'not-found' | 'unreachable'>();
 
   // A study link opened while the app is already open only changes the fragment: start over.
@@ -57,7 +62,7 @@ export function App() {
 
   if (route.kind === 'studio') {
     return (
-      <Shell wide>
+      <Shell wide languages={false}>
         <Suspense fallback={null}>
           <Studio />
         </Suspense>
@@ -93,10 +98,12 @@ interface ShellProps {
   project?: ProjectInfo;
   actions?: ReactNode;
   wide?: boolean;
+  /** Show the language menu (not in the English-only researcher workspace). */
+  languages?: boolean;
   children: ReactNode;
 }
 
-function Shell({ project, actions, wide, children }: ShellProps) {
+function Shell({ project, actions, wide, languages = true, children }: ShellProps) {
   const { t, i18n } = useTranslation();
   return (
     <div className="shell">
@@ -107,16 +114,18 @@ function Shell({ project, actions, wide, children }: ShellProps) {
           {project?.name && <span className="brand-project">{localize(project.name, i18n.language)}</span>}
         </a>
         <div className="topbar-actions">
-          <label>
-            <span className="visually-hidden">{t('app.language')}</span>
-            <select value={i18n.resolvedLanguage} onChange={(e) => void i18n.changeLanguage(e.target.value)}>
-              {LANGUAGES.map((l) => (
-                <option key={l} value={l}>
-                  {l === 'nl' ? 'Nederlands' : 'English'}
-                </option>
-              ))}
-            </select>
-          </label>
+          {languages && (
+            <label>
+              <span className="visually-hidden">{t('app.language')}</span>
+              <select value={i18n.resolvedLanguage} onChange={(e) => void i18n.changeLanguage(e.target.value)}>
+                {LANGUAGES.map((l) => (
+                  <option key={l} value={l}>
+                    {l === 'nl' ? 'Nederlands' : 'English'}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {actions}
         </div>
       </header>
