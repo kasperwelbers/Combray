@@ -1,6 +1,6 @@
 # Plan: stories, free exploration and what researchers learn
 
-Status: **plan, for discussion** (written 2026-11-05 with Kasper). Only the donate step (phase 0) is being built now. The rest is for discussion with more people before we build it. It brings together ideas that were spread over [visualization.md](../visualization.md) (views, probes), [exploration.md](../exploration.md) (saved views, the chart builder for participants) and [ai-helper.md](../ai-helper.md).
+Status: **plan, for discussion** (written 2026-11-05 with Kasper). The donate step (phase 0) and a first version of stories (see [What is built](#what-is-built-the-first-version)) exist. The rest is for discussion with more people before we build it. It brings together ideas that were spread over [visualization.md](../visualization.md) (views, probes), [exploration.md](../exploration.md) (saved views, the chart builder for participants) and [ai-helper.md](../ai-helper.md).
 
 ## The idea in one paragraph
 
@@ -52,6 +52,29 @@ Answers are kept in the encrypted local store and go into the donation, shown in
 ### Donating summaries instead of rows
 
 Summaries are also a good way to donate less. A researcher who only needs "searches per week" can ask for that summary instead of every search. This is data minimisation that participants can easily understand, and the preview shows the numbers. We should make it possible to mark a summary `donate` like a column.
+
+## What is built: the first version
+
+A first version of phase 1, simpler than the design above where that let us start sooner:
+
+- **Blocks**: text, a **data view**, and a **question**. A slide has up to six. Instead of named summaries, a data view is one of four questions people ask about their own data, each with the chart that is easiest to read without a research background:
+
+  | The question | View | Chart | Values for the sentence |
+  | --- | --- | --- | --- |
+  | How much did I …? | `amount` | One big number, counted up, with the period and "about N a day" | `{count}`, `{per_day}`, `{days}` |
+  | Who or what did I … most? | `top` | Ranked horizontal bars, labelled directly, the first one darker | `{top}`, `{top_count}` |
+  | How did my … change over time? | `over-time` | Columns per month (or week or day for short periods), the busiest one darker with its count | `{peak}`, `{peak_count}` |
+  | When do I …? | `rhythm` | Columns per hour of the day or day of the week, in the participant's time zone | `{peak}`, `{peak_count}` |
+
+  A view refers to a table (and a column, for `top`) by its id, on one platform. Each has a **sentence** that is the slide's message ("Your busiest time was {peak}."), and optionally one for when the participant has no data. Slides whose views all have nothing to show are skipped, with their questions.
+- **Questions**: open text, buttons to choose from, or a number with bounds; optional unless marked required. The question id is the answer's column in the donation. Choice answers are stored as the option's English text.
+- **Answers** are kept in the encrypted local store, listed in the donation review (where participants can remove them) and sent with the questions as the participant read them (`answers` and `questions` in the payload; `answers.csv` and `questions.csv` on the key page).
+- **The studio's Story tab** builds slides from templates for the four questions plus "just a question", with pickers for tables and columns from the project's platforms, English and Dutch fields, and a preview with made-up numbers.
+- **The player**: progress segments as in "Wrapped" stories, Back and Next (and the arrow keys), short slide transitions that respect `prefers-reduced-motion`, focus on each new slide's heading, and charts with a hidden table for screen readers. Participants open it from a "Your story" card once they have added data, and it ends with the way to the donation.
+
+Why these charts. Bar and line charts are the ones most people read correctly; scatter plots, box plots, histograms and stacked percentages are often misread by non-experts, so we leave them out of stories ([Nussbaumer Knaflic on chart types many audiences cannot read](https://www.goodreads.com/author_blog_posts/25350587-basic-chart-types-that-many-audiences-don-t-know-how-to-read); [a study of visualization literacy in the general public](https://arxiv.org/pdf/2310.01935)). One message per slide, a title that says the takeaway, direct labels instead of legends, and comparisons that make numbers tangible ("about 12 a day") follow the same advice.
+
+Not yet: previews on the test packages, memory and table blocks, questions per item of a top list, donating summaries, the story starting on its own after the first upload, and a story version in the donation (the questions as read cover the main need).
 
 ## Free exploration
 

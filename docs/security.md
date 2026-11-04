@@ -271,6 +271,8 @@ What we do instead:
 
 ### Visualisations
 
+The story's views (an amount, top values, counts over time, by hour or weekday) are computed in the data worker from the participant's own tables (`apps/web/src/worker/story.ts`); only counts reach the page, and nothing is sent. They are drawn with HTML and CSS by React, so labels are text. A story comes from the project config: the server stores it as researchers wrote it (an object with slides, at most 256 KB), and every device checks it block by block (`parseStory` in `packages/core`) before using it. Text in slides is plain text, split into paragraphs, never HTML; values in sentences (`{count}`) are filled in as text.
+
 Vega compiles expressions with `new Function`, which our CSP forbids. If we adopt Vega or Vega-Lite, it must run with `vega-interpreter`, never by adding `'unsafe-eval'`.
 
 ## Researcher sign-in and keys
@@ -342,6 +344,7 @@ header = { v: 1, project, donation, key, chunkBytes, chunks, created }
 - **The key is checked before sealing.** The public key must match the fingerprint the server gives and, when the participant came in through a study link with `#k=`, that fingerprint. The fingerprint from the link is kept in `localStorage` per project, so a later visit without the link is still checked; a participant who never had the link trusts the server's config (see [researcher-keys.md](researcher-keys.md#limits)).
 - Sealing happens in the data worker (`apps/web/src/worker/donate.ts`), with the same `packages/seal` code the key page uses to open. Only the sealed envelope and sealed key are sent.
 - **Consent goes with the data.** The study's information and statements come from the same fresh config, are part of the settings that must not change before sending, and the donation records them as the participant read them, with the statement that they reviewed what is shared. They are plain text, shown as paragraphs, never HTML.
+- **Answers go with the data, after the same review.** Answers to the story's questions are kept in the encrypted local store (an `answers` dataset), listed in the review with a way to remove each, and sent with the questions as the participant read them. The story is part of the settings that must not change between review and sending.
 - **The receipt** (donation id and withdrawal token) is kept in the encrypted local store, so the participant can withdraw from the same page, and shown as a code to keep: with the id, researchers can withdraw a donation on a participant's request even when the local store is gone.
 
 ### The key page
@@ -436,6 +439,7 @@ A project's platform keeps the test packages researchers add in the studio (`tes
 | Recovery code (the master secret) as the only fallback | Server-side recovery; a second passkey only | The server must not be able to recover keys; a printed code survives losing every device |
 | `#k=` key fingerprint in the participant link | Signed configs now | Pins the key, which is what confidentiality needs, without a signing key to manage in the pilot |
 | Donations matched afresh at donation time, refused if the settings changed since the review | Storing the donation when the upload is read | Settings the researcher fixes during a session apply, and what is sent is always what the participant reviewed |
+| Stories checked on the participant's device, stored as written on the server | A full schema check on the server too | One check, in `packages/core`, used by the studio and the participant app; the server keeps a size limit and the shape it needs (a list of slides) |
 
 ## Open questions
 

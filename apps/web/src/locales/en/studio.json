@@ -217,6 +217,7 @@
       "details": "Details",
       "consent": "Information & consent",
       "data": "Data explorer",
+      "story": "Story",
       "researchers": "Researchers",
       "donations": "Donations"
     },
@@ -487,5 +488,89 @@
     "row": "Select {{name}}",
     "clear": "Clear selection"
   },
-  "badRegex": "That is not a valid regular expression."
+  "badRegex": "That is not a valid regular expression.",
+  "story": {
+    "intro": "The story walks participants through their own data, a slide at a time, before they decide what to share. Each slide shows one thing about their data, in a sentence and a chart, and can ask about it. Everything is worked out on the participant's device: you never see their data, only their answers, and only when they share them. Slides about data a participant did not add are skipped. Participants see the story once you publish the project.",
+    "noTables": "Add a platform in the data explorer first: the story shows the tables of your platforms.",
+    "loadFailed": "The story could not be loaded.",
+    "addSlide": "Add a slide",
+    "template": {
+      "amount": "How much did I …?",
+      "top": "Who or what did I … most?",
+      "over-time": "How did my … change over time?",
+      "rhythm": "When do I …?",
+      "question": "Just a question"
+    },
+    "templateHelp": {
+      "amount": "One big number, with how much that is a day.",
+      "top": "Ranked bars of the most frequent values of a column.",
+      "over-time": "Columns per month, week or day.",
+      "rhythm": "Columns per hour of the day or day of the week.",
+      "question": "An open question, buttons to choose from, or a number."
+    },
+    "viewHelp": {
+      "amount": "Counts the rows of the table: one big number, and how much that is a day between the first and last date.",
+      "top": "Ranks the values of a column, most frequent first. List columns count each item.",
+      "over-time": "Counts rows per month (or per week or day for shorter periods), with the busiest one highlighted. Needs a date.",
+      "rhythm": "Counts rows per hour of the day or day of the week, in the participant's own time zone. Needs a date with a time."
+    },
+    "slide": "Slide {{n}}",
+    "title": "Title (optional)",
+    "titleHelp": "A short heading above the slide.",
+    "preview": "Preview",
+    "edit": "Edit",
+    "previewNote": "With made-up numbers: participants see their own.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "removeSlide": "Remove slide",
+    "confirmRemoveSlide": "Remove this slide?",
+    "removeBlock": "Remove",
+    "addBlock": "Add:",
+    "block": {
+      "text": "Text",
+      "data": "Data view",
+      "question": "Question"
+    },
+    "incomplete": "incomplete: participants will not see it",
+    "text": "Text",
+    "table": "Table",
+    "chooseTable": "Choose a table",
+    "view": "Shown as",
+    "column": "Column",
+    "chooseColumn": "Choose a column",
+    "howMany": "How many",
+    "date": "Date",
+    "tableDate": "The table's date ({{name}})",
+    "noDate": "Choose a date column",
+    "by": "Per",
+    "byHour": "Hour of the day",
+    "byWeekday": "Day of the week",
+    "sentence": "Sentence",
+    "sentenceHelp": "What the view shows, in one sentence, with values in braces: {{values}}. It is the slide's message, so say the one thing that matters. Mind the tone: numbers about someone's life can sting.",
+    "emptyTitle": "When a participant has no data for this",
+    "empty": "Sentence without data",
+    "emptyHelp": "Shown instead of the view. Without it, the slide is skipped when none of its views has data.",
+    "kind": "Kind",
+    "kinds": {
+      "open": "Open answer",
+      "choice": "Buttons to choose from",
+      "number": "A number"
+    },
+    "answerId": "Answer name",
+    "answerIdHelp": "The answer's column in the donation: letters, digits, - and _. Keep it when you change the wording, so answers stay together.",
+    "prompt": "Question",
+    "options": "Options",
+    "optionsHelp": "The answer is stored as the option's English text.",
+    "option": "Option {{n}}",
+    "removeOption": "Remove option",
+    "addOption": "Add an option",
+    "min": "Lowest",
+    "max": "Highest",
+    "required": "Participants must answer before they can go on",
+    "save": "Save the story",
+    "saved": "Saved. Participants see it once you publish the project.",
+    "unsaved": "Unsaved changes",
+    "invalid": "The story could not be saved: it is too long.",
+    "unknownTable": "This table is not in the project's platforms now, so participants will not see this view. Choose another table, or add the platform in the data explorer."
+  }
 }

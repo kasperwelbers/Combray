@@ -1,6 +1,8 @@
-import { parseStory, type DataBlock } from '@combray/core';
+import { deriveTables, parseStory, type DataBlock } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
+import { storyTables } from '../src/studio/StoryEditor';
+import { pointProject } from '../src/worker/derived';
 import { donatedAnswers } from '../src/worker/donate';
 import { storyView } from '../src/worker/story';
 
@@ -84,5 +86,19 @@ describe('answers in a donation', () => {
       { id: 'why', prompt: 'Why?' },
     ]);
     expect(donatedAnswers(undefined, { often: 'Often' }, 'en')).toEqual({ answers: {}, questions: [] });
+  });
+});
+
+describe('tables for the story editor', () => {
+  it('are the tables of a platform with their columns, nested ones too, and their dates', () => {
+    const project = pointProject({ id: 'takeout', pack: 'google-takeout' })!;
+    const tables = storyTables('takeout', 'Google Takeout', deriveTables(project.tree));
+    const history = tables.find((t) => t.id === 'youtube-watch-history')!;
+    expect(history.platform).toBe('takeout');
+    expect(history.columns.map((c) => c.id)).toEqual(expect.arrayContaining(['video', 'time', 'channels/channel']));
+    expect(history.date).toBe('time');
+    // Nested tables are not tables of their own here: their columns are in their parent's.
+    expect(tables.some((t) => t.id === 'channels')).toBe(false);
+    expect(new Set(tables.map((t) => t.id)).size).toBe(tables.length);
   });
 });

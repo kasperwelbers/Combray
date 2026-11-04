@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { STUDIO_TABS, studioPath, type StudioTab } from '../route';
 import { fromFiles, toFiles } from './model';
+import { both, textIn } from './text';
 import {
   ApiFailure,
   projectApi,
@@ -15,6 +16,7 @@ import {
   type ProjectDetails,
   type ProjectInfo,
 } from './projectApi';
+import { StoryEditor } from './StoryEditor';
 import { Studio, type DraftStore } from './Studio';
 
 const english = (text: Localized | undefined): string => (text === undefined ? '' : localize(text, 'en'));
@@ -95,6 +97,7 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
         {tab === 'details' && <DetailsTab draft={draft} onSaved={refresh} />}
         {tab === 'consent' && <ConsentTab draft={draft} onSaved={refresh} />}
         {tab === 'data' && <DataExplorer draft={draft} onChanged={refresh} />}
+        {tab === 'story' && <StoryEditor draft={draft} />}
         {tab === 'researchers' && <ResearchersTab projectId={projectId} keysUrl={keysUrl} />}
         {tab === 'donations' && <DonationsTab projectId={projectId} />}
       </div>
@@ -192,18 +195,6 @@ function PublishBar({ draft, keysUrl }: { draft: Draft; keysUrl?: string }) {
 }
 
 // Details.
-
-/** The text of a localized value in one language (a plain string counts as English). */
-const textIn = (value: Localized | undefined, language: string) =>
-  typeof value === 'string' ? (language === 'en' ? value : '') : (value?.[language] ?? '');
-
-/** English and Dutch text as one value, without empty languages; undefined when both are empty. */
-const both = (en: string, nl: string): Localized | undefined => {
-  const value: Record<string, string> = {};
-  if (en.trim()) value.en = en.trim();
-  if (nl.trim()) value.nl = nl.trim();
-  return Object.keys(value).length > 0 ? value : undefined;
-};
 
 function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
   const { t } = useTranslation(undefined, { lng: 'en' });

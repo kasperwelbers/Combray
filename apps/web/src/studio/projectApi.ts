@@ -92,6 +92,9 @@ export const projectApi = {
   create: (id: string, name: Localized) => call<{ id: string }>('POST', '/projects', { id, name }),
   draft: (id: string) => call<Draft>('GET', `${project(id)}/draft`),
   saveDetails: (id: string, details: ProjectDetails) => call<void>('PUT', `${project(id)}/draft/details`, details),
+  /** The draft's story, as stored (participants' devices check it block by block); `null` for none. */
+  story: (id: string) => call<{ story: unknown }>('GET', `${project(id)}/draft/story`).then((r) => r.story),
+  saveStory: (id: string, story: unknown) => call<void>('PUT', `${project(id)}/draft/story`, { story }),
   platform: (id: string, platform: string) => call<PlatformDraft>('GET', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
   savePlatform: (id: string, platform: string, value: { name: Localized; pack?: string; structure?: unknown; importer?: unknown }) =>
     call<void>('PUT', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`, value),

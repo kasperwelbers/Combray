@@ -26,7 +26,7 @@ export type Route =
 const PROJECT_ID = /^[a-z0-9-]{1,64}$/;
 
 /** The tabs of a project in the researcher workspace (`/studio/p/{project}/{tab}/`). */
-export const STUDIO_TABS = ['details', 'consent', 'data', 'researchers', 'donations'] as const;
+export const STUDIO_TABS = ['details', 'consent', 'data', 'story', 'researchers', 'donations'] as const;
 export type StudioTab = (typeof STUDIO_TABS)[number];
 const isTab = (s: string | undefined): s is StudioTab => (STUDIO_TABS as readonly string[]).includes(s ?? '');
 const PARTICIPANT_ID = /^[A-Za-z0-9._-]{1,64}$/;
