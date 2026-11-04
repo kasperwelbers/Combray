@@ -15,6 +15,8 @@ interface Props {
   points?: UploadPoint[];
   onChanged: () => Promise<void>;
   onOpenTable: (table: TableSummary) => void;
+  /** Open the donation. Offered once something the study asks for has been added. */
+  onDonate: () => void;
 }
 
 /** Tables the project shows or asks for come first, the ones it asks for before the others. */
@@ -42,7 +44,7 @@ function TableButton({ table, onOpen, path }: { table: TableSummary; onOpen: (t:
   );
 }
 
-export function Home({ datasets, points, onChanged, onOpenTable }: Props) {
+export function Home({ datasets, points, onChanged, onOpenTable, onDonate }: Props) {
   const { t, i18n } = useTranslation();
   const [busy, setBusy] = useState(false);
 
@@ -61,6 +63,16 @@ export function Home({ datasets, points, onChanged, onOpenTable }: Props) {
           <ImportCard key={point?.id ?? ''} point={point} disabled={busy} onBusy={setBusy} onDone={onChanged} />
         ))}
       </div>
+
+      {datasets.some((d) => d.tables.some((table) => table.derived?.requested)) && (
+        <section className="card donate-call" aria-labelledby="donate-call-title">
+          <h2 id="donate-call-title">{t('donate.open')}</h2>
+          <p>{t('donate.openIntro')}</p>
+          <button type="button" className="button" onClick={onDonate}>
+            {t('donate.openButton')}
+          </button>
+        </section>
+      )}
 
       <section aria-labelledby="datasets-title" style={{ marginTop: '2.5rem' }}>
         <h2 id="datasets-title">{t('home.title')}</h2>

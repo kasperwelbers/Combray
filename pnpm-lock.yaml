@@ -73,6 +73,9 @@ importers:
       '@combray/importers':
         specifier: workspace:*
         version: link:../../importers
+      '@combray/seal':
+        specifier: workspace:*
+        version: link:../../packages/seal
       '@combray/store':
         specifier: workspace:*
         version: link:../../packages/store

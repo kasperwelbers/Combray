@@ -1,6 +1,6 @@
 # Security
 
-This document records every security choice in Combray that exists in code today, why we made it, and what it does not protect against. [privacy-and-encryption.md](privacy-and-encryption.md) describes the wider design. Donation sealing, storage and withdrawal, and researcher sign-in and keys, are built for the pilot; the participant donate screen is not yet. Where the two overlap, this document describes what is implemented. [key-design.md](key-design.md) walks through every key, built and planned, in one place.
+This document records every security choice in Combray that exists in code today, why we made it, and what it does not protect against. [privacy-and-encryption.md](privacy-and-encryption.md) describes the wider design. Donation sealing, storage and withdrawal, the participant donate screen, and researcher sign-in and keys are built for the pilot. Where the two overlap, this document describes what is implemented. [key-design.md](key-design.md) walks through every key, built and planned, in one place.
 
 Changing anything in the local store, the store key service, `packages/seal`, researcher sign-in, the key page, the Content Security Policy or the server's handling of requests means updating this document in the same change. Decisions that are hard to reverse also get an ADR. The store key design is [ADR 0004](decisions/0004-server-held-store-keys.md); researcher keys are [ADR 0007](decisions/0007-browser-key-page.md).
 
@@ -336,6 +336,13 @@ header = { v: 1, project, donation, key, chunkBytes, chunks, created }
 - Sealed donation keys are served only to a member with access, on the key site, in batches of at most 500, with `no-store`. The server logs the count of keys served, never ids.
 - **What is inside** (`combray-donation/1`, `packages/seal/src/payload.ts`): the values the participant donates in long format, one entry per value with its table, row, field, the path where it was in their files and its value as read; the value as it was in the file too where the researcher asked for it (`raw`). Paths use keys, `[i]` for list items and `{i}` for keys that are data (usernames, dates used as keys), so a key that is data is never in a path: it is donated only as a key column the researcher asks for. Donations carry the data as matched, not processed tables, so a later change to the configuration cannot make them unreadable ([ADR 0012](decisions/0012-names-and-matches.md)). The key page checks every entry's types (`decodePayload`) before using it, and pivots the values into tables in memory.
 
+### The donate screen
+
+- **What is sent is what was reviewed.** The data worker matches the stored uploads afresh with the study's current settings (fetched with `no-store`) and shows every value that would be sent, per table. Participants leave rows out one by one or by text ("everything with 'doctor'"); a row nested in a left-out row goes with it. The left-out rows are kept by key (upload, table and the row's path) in the encrypted local store. Before sealing, the worker fetches the settings again and refuses with "changed" if they differ from the reviewed ones, so a server cannot slip in a field after the review.
+- **The key is checked before sealing.** The public key must match the fingerprint the server gives and, when the participant came in through a study link with `#k=`, that fingerprint. The fingerprint from the link is kept in `localStorage` per project, so a later visit without the link is still checked; a participant who never had the link trusts the server's config (see [researcher-keys.md](researcher-keys.md#limits)).
+- Sealing happens in the data worker (`apps/web/src/worker/donate.ts`), with the same `packages/seal` code the key page uses to open. Only the sealed envelope and sealed key are sent.
+- **The receipt** (donation id and withdrawal token) is kept in the encrypted local store, so the participant can withdraw from the same page, and shown as a code to keep: with the id, researchers can withdraw a donation on a participant's request even when the local store is gone.
+
 ### The key page
 
 - One HTML file, built deterministically (`apps/keys/build.mjs`). The script and style are inline and unminified; the CSP in a `<meta>` tag and the identical header pin them by SHA-256. Nothing else can run or load: `default-src 'none'`, `connect-src 'self'`, `form-action 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`, Trusted Types with no policies.
@@ -427,6 +434,7 @@ A project's platform keeps the test packages researchers add in the studio (`tes
 | One project key with sealed member copies, granted after comparing key codes | Seal each donation to every researcher | Colleagues can be added without touching donations; the code comparison stops a server-substituted key |
 | Recovery code (the master secret) as the only fallback | Server-side recovery; a second passkey only | The server must not be able to recover keys; a printed code survives losing every device |
 | `#k=` key fingerprint in the participant link | Signed configs now | Pins the key, which is what confidentiality needs, without a signing key to manage in the pilot |
+| Donations matched afresh at donation time, refused if the settings changed since the review | Storing the donation when the upload is read | Settings the researcher fixes during a session apply, and what is sent is always what the participant reviewed |
 
 ## Open questions
 

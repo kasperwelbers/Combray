@@ -22,6 +22,8 @@ export interface SourceManifest {
   nodeCount: number;
   fileCount: number;
   shape: Shape;
+  /** The upload point it was imported through (missing on imports from before donations). */
+  point?: string;
 }
 
 /**
@@ -109,7 +111,27 @@ export interface FileManifest {
   size: number;
 }
 
-export type DatasetManifest = SourceManifest | TableManifest | FileManifest;
+/** Rows the participant left out of their donation, by `DonationRow.key`. Encrypted. */
+export interface LeftOutManifest {
+  type: 'left-out';
+}
+
+/** A donation that was sent, with what is needed to withdraw it. Encrypted. */
+export interface DonationManifest {
+  type: 'donation';
+  /** The donation id the server knows it by. */
+  donation: string;
+  /** The withdrawal token: with the id, it withdraws the donation. */
+  token: string;
+  /** When it was sent, ISO time. */
+  sent: string;
+  rows: number;
+  /** Names of the tables in it, as the participant saw them. */
+  tables: Localized[];
+  withdrawn?: string;
+}
+
+export type DatasetManifest = SourceManifest | TableManifest | FileManifest | LeftOutManifest | DonationManifest;
 
 export interface TableSummary {
   id: string;
@@ -264,6 +286,61 @@ export type UnlockResult =
   | { status: 'store-gone' }
   | KeyServiceProblem;
 
+/** A table of the donation, as the participant reviews it. */
+export interface DonationTable {
+  id: string;
+  name: Localized;
+  fields: { id: string; name: Localized }[];
+  /** For a nested table: the table its rows are in. */
+  parent?: string;
+  rowCount: number;
+  leftOut: number;
+}
+
+/** What a donation would hold right now. */
+export interface DonationOverview {
+  tables: DonationTable[];
+  /** Rows in the donation, and rows left out. */
+  rows: number;
+  leftOut: number;
+}
+
+/** A row of the donation, for review. */
+export interface DonationRow {
+  /** Stable while the uploads and the study's settings stay the same. */
+  key: string;
+  cells: Record<string, string[]>;
+  leftOut: boolean;
+  /** Left out because the row it is in was. */
+  withParent: boolean;
+}
+
+export type DonationProblem =
+  /** Nothing the study asks for is in the uploads, or everything was left out. */
+  | 'nothing'
+  /** The study has no key to encrypt donations to yet. */
+  | 'no-key'
+  /** The key is not the one in the link the participant came in through. */
+  | 'wrong-key'
+  /** The study's settings changed since the review: the participant should look again. */
+  | 'changed'
+  | 'too-big'
+  | 'unreachable'
+  | 'failed';
+
+export type DonateResult = { status: 'done'; receipt: DonationReceipt } | { status: DonationProblem };
+
+export interface DonationReceipt {
+  id: string;
+  donation: string;
+  /** The code that withdraws it: the donation id and the token, for the participant to keep. */
+  code: string;
+  sent: string;
+  rows: number;
+  tables: Localized[];
+  withdrawn?: string;
+}
+
 /** The data worker's API. All parsing, encryption and querying happen behind it. */
 export interface DataApi {
   /** Projects with a store on this device. Read locally; the server is not asked. */
@@ -299,4 +376,26 @@ export interface DataApi {
   getRows(tableId: string, filter: RowFilter, offset: number, limit: number): Promise<Page<Row>>;
   getTimeline(tableId: string, filter: RowFilter, unit?: TimeUnit): Promise<Timeline>;
   getTopItems(tableId: string, field: string, filter: RowFilter, limit: number): Promise<TopItems>;
+  /**
+   * What a donation would hold: the fields the study asks for, from every upload, with the
+   * study's current settings (fetched fresh). `unreachable` when the settings cannot be fetched.
+   */
+  donationOverview(): Promise<DonationOverview | 'unreachable'>;
+  /** Rows of a table in the donation; with a query, only rows that contain it. */
+  donationRows(tableId: string, query: string, offset: number, limit: number): Promise<Page<DonationRow>>;
+  /** Leave rows out of the donation, or put them back. Remembered on this device. */
+  leaveOut(keys: string[], out: boolean): Promise<DonationOverview>;
+  /** Leave out every row of a table (or of all tables) that contains the text. Returns how many. */
+  leaveOutMatching(tableId: string | undefined, query: string): Promise<{ count: number; overview: DonationOverview }>;
+  /** Put every left-out row back. */
+  putBackAll(): Promise<DonationOverview>;
+  /**
+   * Encrypt the reviewed donation to the study's key and send it. `pin` is the key fingerprint
+   * from the study link, if there was one; the key must match it.
+   */
+  donate(pin: string | undefined): Promise<DonateResult>;
+  /** Donations sent from this device, newest first. */
+  donations(): Promise<DonationReceipt[]>;
+  /** Withdraw a donation: the server forgets its key, so nobody can open it any more. */
+  withdraw(id: string): Promise<'done' | 'unreachable' | 'failed'>;
 }

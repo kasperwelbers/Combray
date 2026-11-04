@@ -51,6 +51,8 @@ export interface PointProject {
 }
 
 const projects = new Map<string, PointProject>();
+/** The study's own configurations, by upload point, with the files they were read from. */
+const own = new Map<string, { files: string; project: PointProject }>();
 
 function project(config: ProjectConfig, seen: Shape): PointProject {
   return { config, seen, tree: buildTree(config, seen).tree };
@@ -62,17 +64,19 @@ function project(config: ProjectConfig, seen: Shape): PointProject {
  */
 export function pointProject(point: UploadPoint): PointProject | undefined {
   if (point.structure !== undefined && point.importer !== undefined) {
-    const key = `project:${point.id}`;
-    if (!projects.has(key)) {
+    // Read again when the study's settings changed since (they are fetched fresh to donate).
+    const files = JSON.stringify([point.structure, point.importer]);
+    if (own.get(point.id)?.files !== files) {
       try {
         const importer = parseImporterFile(point.importer);
-        projects.set(key, project(configOf(importer), parseStructureFile(point.structure).root));
+        own.set(point.id, { files, project: project(configOf(importer), parseStructureFile(point.structure).root) });
       } catch {
         // A configuration the client cannot read: fall back to the pack, if there is one.
+        own.delete(point.id);
       }
     }
-    const own = projects.get(key);
-    if (own) return own;
+    const found = own.get(point.id);
+    if (found) return found.project;
   }
   const pack = packs.find((p) => p.id === point.pack);
   if (!pack) return undefined;

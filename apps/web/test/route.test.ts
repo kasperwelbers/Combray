@@ -19,6 +19,13 @@ describe('parseRoute', () => {
     });
   });
 
+  it('finds the fingerprint of the study key, and ignores anything else in its place', () => {
+    const k = 'AbCdEfGhIjKlMnOpQrStUv';
+    expect(parseRoute('/p/willow/', `#id=P1&k=${k}`)).toEqual({ kind: 'project', projectId: 'willow', participantId: 'P1', keyPin: k });
+    expect(parseRoute('/p/willow/', '#k=short')).toEqual({ kind: 'project', projectId: 'willow' });
+    expect(parseRoute('/p/willow/', `#k=${k}<x>`)).toEqual({ kind: 'project', projectId: 'willow' });
+  });
+
   it('finds the questions and answers page', () => {
     expect(parseRoute('/p/willow/faq', '')).toEqual({ kind: 'project', projectId: 'willow', page: 'faq' });
     expect(parseRoute('/p/willow/faq/', '#id=P1')).toEqual({

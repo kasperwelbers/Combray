@@ -876,8 +876,8 @@ main.wide {
 
 .field textarea,
 .field select,
-.alias-form input,
-.alias-form select {
+.inline-form input,
+.inline-form select {
   padding: 0.5em 0.7em;
   border-radius: 10px;
   border: 1.5px solid var(--line);
@@ -886,26 +886,26 @@ main.wide {
   font: inherit;
 }
 
-.alias-list {
+.item-list {
   list-style: none;
   padding: 0;
   margin: 0 0 0.5rem;
 }
 
-.alias-list li {
+.item-list li {
   display: flex;
   gap: 0.5rem;
   align-items: baseline;
 }
 
-.alias-form {
+.inline-form {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
 
-.alias-form .check {
+.inline-form .check {
   margin: 0;
 }
 
@@ -1991,4 +1991,76 @@ main.wide {
 /* Parts nobody has configured yet: like undecided rows, with their name a little quieter. */
 .virtual > .decision-line .decision-name {
   font-style: italic;
+}
+
+/* Donating: the review of what is shared, and the receipt. */
+.donate-call {
+  margin-top: 2rem;
+}
+
+.donate-tables {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 2rem;
+}
+
+.donate-table summary {
+  cursor: pointer;
+}
+
+.donate-table .search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.preview-table tr.left-out td {
+  color: var(--ink-soft);
+  text-decoration: line-through;
+}
+
+.preview-table tr.left-out td:last-child {
+  text-decoration: none;
+}
+
+.leave-out {
+  margin: 1.25rem 0 0.5rem;
+}
+
+.leave-out-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.leave-out-row input {
+  flex: 1 1 16rem;
+  padding: 0.55em 0.8em;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  color: inherit;
+}
+
+.consent {
+  margin-top: 1.5rem;
+}
+
+.receipt-code code,
+.receipts code {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.receipt-code code {
+  display: block;
+  padding: 0.6em 0.8em;
+  border-radius: 10px;
+  background: var(--paper-deep);
+}
+
+.receipts {
+  margin-top: 2.5rem;
 }

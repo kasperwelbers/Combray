@@ -79,7 +79,7 @@ export function RowFilters({
     <div className="panel-group">
       <SectionHead title={t('studio.filterTitle')} help={t('studio.filterHelp')} />
       {filters.length > 0 && (
-        <ul className="alias-list">
+        <ul className="item-list">
           {filters.map((f, i) => (
             <li key={`${JSON.stringify(f)}:${i}`}>
               <span>{describe(f, nameOf(f.column), t)}</span>

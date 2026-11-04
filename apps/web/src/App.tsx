@@ -8,6 +8,7 @@ import i18n, { LANGUAGES } from './i18n';
 import { saveLanguage } from './language';
 import { uploadPoints } from './projectConfig';
 import { projectPath, readRoute, STUDIES_PATH } from './route';
+import { Donate } from './screens/Donate';
 import { Faq } from './screens/Faq';
 import { Home } from './screens/Home';
 import { Landing } from './screens/Landing';
@@ -97,6 +98,7 @@ export function App() {
       project={project}
       {...(route.participantId ? { participantId: route.participantId } : {})}
       {...(route.resetToken ? { resetToken: route.resetToken } : {})}
+      {...(route.keyPin ? { keyPin: route.keyPin } : {})}
       {...(route.page ? { page: route.page } : {})}
     />
   );
@@ -159,10 +161,12 @@ interface ProjectAppProps {
   project: ProjectInfo;
   participantId?: string;
   resetToken?: string;
+  /** The study key's fingerprint from the study link: donations are only sealed to that key. */
+  keyPin?: string;
   page?: 'faq';
 }
 
-function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProps) {
+function ProjectApp({ project, participantId, resetToken, keyPin, page }: ProjectAppProps) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<StoreStatus>();
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
@@ -170,6 +174,7 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
   const [notice, setNotice] = useState<string>();
   const [reset, setReset] = useState(resetToken);
   const [faq, setFaq] = useState(page === 'faq');
+  const [donating, setDonating] = useState(false);
 
   // The questions page is a pushed history entry, so the browser's back button closes it without
   // reloading, which would lock the store.
@@ -205,6 +210,7 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
     async (message?: string) => {
       await data.lock();
       setTable(undefined);
+      setDonating(false);
       setNotice(message);
       await refresh();
     },
@@ -284,6 +290,8 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
             onDeleteAll={deleteAll}
           />
         )
+      ) : donating ? (
+        <Donate {...(keyPin ? { keyPin } : {})} onBack={() => setDonating(false)} />
       ) : table ? (
         <Views table={table} onBack={() => setTable(undefined)} />
       ) : (
@@ -294,6 +302,10 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
             {...(project.uploads ? { points: project.uploads } : {})}
             onChanged={refresh}
             onOpenTable={setTable}
+            onDonate={() => {
+              setDonating(true);
+              window.scrollTo(0, 0);
+            }}
           />
           <p style={{ marginTop: '3rem' }}>
             <button className="link-button" type="button" onClick={deleteAllConfirmed}>

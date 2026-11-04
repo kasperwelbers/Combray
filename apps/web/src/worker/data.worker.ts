@@ -21,6 +21,7 @@ import {
   type ReadSpot,
   type Row,
   type TreeNode,
+  unflatten,
   type UploadListing,
 } from '@combray/core';
 import { importers } from '@combray/importers';
@@ -30,6 +31,8 @@ import * as Comlink from 'comlink';
 import type {
   DataApi,
   DatasetManifest,
+  DonationManifest,
+  DonationReceipt,
   FileManifest,
   DatasetSummary,
   ImportProgress,
@@ -42,6 +45,7 @@ import type {
   UploadPoint,
 } from './api';
 import { deriveImport, pointProject } from './derived';
+import { fetchSettings, Review, sendDonation, uploadDonation, withdrawDonation } from './donate';
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
@@ -56,6 +60,17 @@ const cache = new Map<string, FlatNode[]>();
 const tableCache = new Map<string, { manifest: TableManifest; rows: Row[] }>();
 // An import waiting for the participant to choose where in the upload their export is.
 let pending: { listing: UploadListing; point: UploadPoint; choose: (ids: number[]) => Promise<Located> } | undefined;
+// The donation being reviewed, and the rows left out of it (kept encrypted in the store).
+let review: Review | undefined;
+let leftOut: { id?: string; keys: Set<string> } | undefined;
+
+/** Forget everything kept in memory: on lock, and when switching projects. */
+function forget(): void {
+  cache.clear();
+  tableCache.clear();
+  review = undefined;
+  leftOut = undefined;
+}
 
 async function getStore(): Promise<LocalStore<DatasetManifest>> {
   if (!projectId) throw new Error('no project open');
@@ -161,6 +176,7 @@ async function storeSource(
   read: ReadSpot,
   onProgress: (p: ImportProgress) => void,
   findTables: (s: LocalStore<DatasetManifest>, sourceId: string, importedAt: string) => Promise<TableSummary[]>,
+  point?: UploadPoint,
 ): Promise<ImportResult> {
   const s = await unlockedStore();
   const nodes = flatten(read.tree);
@@ -174,10 +190,12 @@ async function storeSource(
     nodeCount: nodes.length,
     fileCount: countFiles(nodes),
     shape: extractShape(read.tree),
+    ...(point ? { point: point.id } : {}),
   };
   onProgress({ step: 'encrypting' });
   const id = await s.putDataset(manifest, nodes);
   cache.set(id, nodes);
+  review = undefined;
   // Keep the raw files that were read too, one encrypted blob each, so better importers can
   // read them later. Files outside the root, or skipped in it, are never kept.
   for (const { path, bytes } of read.files) {
@@ -235,7 +253,66 @@ async function finish(
   if (located.status !== 'found') return { status: located.status };
   const { root } = located;
   const derived = deriveImport(root, pointProject(point)!, point);
-  return storeSource(listing, root, onProgress, (s, id, importedAt) => storeDerived(s, id, importedAt, derived));
+  return storeSource(listing, root, onProgress, (s, id, importedAt) => storeDerived(s, id, importedAt, derived), point);
+}
+
+/** The upload point a source was imported through: in its manifest, or (older) its tables'. */
+function pointOf(id: string, manifest: SourceManifest, datasets: { id: string; manifest: DatasetManifest }[]): string | undefined {
+  if (manifest.point) return manifest.point;
+  const table = datasets.find((d) => d.manifest.type === 'table' && d.manifest.sourceId === id)?.manifest as TableManifest | undefined;
+  const importer = table?.importer.id;
+  return importer?.includes(':') ? importer.slice(0, importer.lastIndexOf(':')) : undefined;
+}
+
+/** The donation of every upload made through the study's upload points, with its settings now. */
+async function buildReview(): Promise<Review | 'unreachable'> {
+  const study = await fetchSettings(projectId!);
+  if (!study) return 'unreachable';
+  if (review?.settings === study.settings) return review;
+  const datasets = await (await unlockedStore()).listDatasets();
+  const parts = [];
+  for (const d of datasets) {
+    if (d.manifest.type !== 'source') continue;
+    const pointId = pointOf(d.id, d.manifest, datasets);
+    const point = study.points.find((p) => p.id === pointId);
+    const project = point && pointProject(point);
+    if (project) parts.push(uploadDonation(d.id, unflatten(await nodesOf(d.id)), project));
+  }
+  review = new Review(parts, study.settings);
+  return review;
+}
+
+function reviewing(): Review {
+  if (!review) throw new Error('no donation is being reviewed');
+  return review;
+}
+
+async function leftOutKeys(): Promise<Set<string>> {
+  if (leftOut) return leftOut.keys;
+  const s = await unlockedStore();
+  const stored = (await s.listDatasets()).find((d) => d.manifest.type === 'left-out');
+  leftOut = { ...(stored ? { id: stored.id } : {}), keys: new Set(stored ? await s.getItems<string>(stored.id) : []) };
+  return leftOut.keys;
+}
+
+async function saveLeftOut(keys: Set<string>): Promise<void> {
+  const s = await unlockedStore();
+  const old = leftOut?.id;
+  const id = await s.putDataset({ type: 'left-out' }, [...keys]);
+  if (old) await s.deleteDataset(old);
+  leftOut = { id, keys };
+}
+
+function receiptOf(id: string, m: DonationManifest): DonationReceipt {
+  return {
+    id,
+    donation: m.donation,
+    code: `${m.donation}.${m.token}`,
+    sent: m.sent,
+    rows: m.rows,
+    tables: m.tables,
+    ...(m.withdrawn ? { withdrawn: m.withdrawn } : {}),
+  };
 }
 
 const api: DataApi = {
@@ -258,8 +335,7 @@ const api: DataApi = {
 
   async openProject(id) {
     if (id === projectId) return;
-    cache.clear();
-    tableCache.clear();
+    forget();
     store?.close();
     store = undefined;
     projectId = id;
@@ -312,14 +388,12 @@ const api: DataApi = {
   },
 
   async lock() {
-    cache.clear();
-    tableCache.clear();
+    forget();
     (await getStore()).lock();
   },
 
   async destroy() {
-    cache.clear();
-    tableCache.clear();
+    forget();
     const s = await getStore();
     // Crypto-shred first: once the server forgets the KEK, even a copy of this disk is useless.
     if (s.storeId && s.deleteToken) await deleteServerStore(s.storeId, s.deleteToken);
@@ -373,13 +447,14 @@ const api: DataApi = {
     const s = await unlockedStore();
     // Deleting a source also deletes its files and the tables found in it.
     for (const d of await s.listDatasets()) {
-      if (d.manifest.type !== 'source' && d.manifest.sourceId === id) {
+      if ((d.manifest.type === 'table' || d.manifest.type === 'file') && d.manifest.sourceId === id) {
         tableCache.delete(d.id);
         await s.deleteDataset(d.id);
       }
     }
     cache.delete(id);
     tableCache.delete(id);
+    review = undefined;
     await s.deleteDataset(id);
   },
 
@@ -418,6 +493,84 @@ const api: DataApi = {
     // Word lists leave out the most common words.
     const words = all.some((r) => Array.isArray(r[field]));
     return topItems(all, field, manifest.display.date, filter, limit, words ? STOPWORDS : undefined);
+  },
+
+  async donationOverview() {
+    const r = await buildReview();
+    if (r === 'unreachable') return r;
+    return r.overview(await leftOutKeys());
+  },
+
+  async donationRows(tableId, query, offset, limit) {
+    return reviewing().rows(tableId, query, offset, limit, await leftOutKeys());
+  },
+
+  async leaveOut(keys, out) {
+    const next = new Set(await leftOutKeys());
+    for (const key of keys) {
+      if (out) next.add(key);
+      else next.delete(key);
+    }
+    await saveLeftOut(next);
+    return reviewing().overview(next);
+  },
+
+  async leaveOutMatching(tableId, query) {
+    const r = reviewing();
+    const next = new Set(await leftOutKeys());
+    const keys = r.matching(tableId, query).filter((k) => !next.has(k));
+    for (const key of keys) next.add(key);
+    if (keys.length > 0) await saveLeftOut(next);
+    return { count: keys.length, overview: r.overview(next) };
+  },
+
+  async putBackAll() {
+    await saveLeftOut(new Set());
+    return reviewing().overview(new Set());
+  },
+
+  async donate(pin) {
+    const study = await fetchSettings(projectId!);
+    if (!study) return { status: 'unreachable' };
+    // What is sent must be what the participant reviewed.
+    if (!review || review.settings !== study.settings) {
+      review = undefined;
+      return { status: 'changed' };
+    }
+    const keys = await leftOutKeys();
+    const content = review.donated(keys);
+    if (content.values.length === 0) return { status: 'nothing' };
+    const sent = await sendDonation(projectId!, study, content, pin);
+    if (sent.status !== 'sent') return sent;
+    const manifest: DonationManifest = {
+      type: 'donation',
+      donation: sent.donation,
+      token: sent.token,
+      sent: new Date().toISOString(),
+      rows: content.rows.length,
+      tables: review.overview(keys).tables.filter((t) => t.rowCount > t.leftOut).map((t) => t.name),
+    };
+    const id = await (await unlockedStore()).putDataset(manifest, []);
+    return { status: 'done', receipt: receiptOf(id, manifest) };
+  },
+
+  async donations() {
+    const datasets = await (await unlockedStore()).listDatasets();
+    return datasets
+      .flatMap((d) => (d.manifest.type === 'donation' ? [receiptOf(d.id, d.manifest)] : []))
+      .sort((a, b) => b.sent.localeCompare(a.sent));
+  },
+
+  async withdraw(id) {
+    const s = await unlockedStore();
+    const found = (await s.listDatasets()).find((d) => d.id === id);
+    if (found?.manifest.type !== 'donation') throw new Error('no such donation');
+    const result = await withdrawDonation(found.manifest.donation, found.manifest.token);
+    if (result === 'done') {
+      await s.putDataset({ ...found.manifest, withdrawn: new Date().toISOString() }, []);
+      await s.deleteDataset(id);
+    }
+    return result;
   },
 };
 

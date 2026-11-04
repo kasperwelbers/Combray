@@ -31,6 +31,7 @@ Goal: a researcher with no programming experience creates a project, registers i
 - [x] Projects in the server's database: a draft edited in parts, a published version participants get, publishing on the key page. Studio project workspace with tabs; data explorer per platform with synthetic example packages. [ ] Information & consent forms; adding colleagues in the studio; donations per platform; participant codes.
 - Combray server: multi-tenant project registry, researcher accounts, embedded web client, signed project configs, participant sessions, donation storage on its own disk.
 - [x] `packages/seal`: HPKE with X-Wing, envelope format, personal and project keys.
+- [x] The participant donate screen: review of what is asked for, leaving rows out (by row or by text, remembered on the device), consent, the `#k=` key check, a receipt and withdrawal ([security.md](security.md#the-donate-screen)). [ ] Answers to questions, with stories ([plan](plans/2026-11-05-stories-and-exploration.md)).
 - [x] Revocable donation keys ([ADR 0006](decisions/0006-revocable-donation-keys.md)): sealed keys in a separate key database, fetch on use, withdrawal with tombstones re-applied on start.
 - Combray package: export the encrypted store as one file and restore it on any device with the password ([key-design.md](key-design.md#8-planned-the-combray-package-export-and-restore)).
 - R package for analysis (fetch keys, decrypt in memory, never store); Python later. Needs a way to hold a personal key without a passkey (a device key from the key page).

@@ -4,7 +4,8 @@
  *
  * Covers: email sign-in, passkey creation, key setup and recovery code, the project key, a
  * donation sealed in Node and opened on the page, adding a colleague and granting access after
- * comparing key codes, unlocking after a reload, and signing in with the recovery code.
+ * comparing key codes, unlocking after a reload, and signing in with the recovery code; and a
+ * participant who uploads a Takeout, leaves some rows out, donates and withdraws again.
  */
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,6 +15,8 @@ import { join } from 'node:path';
 import { donationRequest, encodePayload, fromBase64Url, sealDonation } from '@combray/seal';
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { fixtureZip } from '../../../importers/test/load';
 
 const enabled = process.env.COMBRAY_E2E === '1';
 const repo = join(__dirname, '../../..');
@@ -130,11 +133,23 @@ async function setUp(page: Page, email: string): Promise<string> {
   return recovery;
 }
 
+/** A Takeout upload point that asks for everything the pack shows. */
+function takeoutAskingAll() {
+  const pack = join(repo, 'importers/google-takeout');
+  const importer = JSON.parse(readFileSync(join(pack, 'importer.json'), 'utf8'));
+  const visit = (node: { decision?: string; children?: unknown[] }) => {
+    if (node.decision === 'show') node.decision = 'donate';
+    (node.children ?? []).forEach((c) => visit(c as typeof node));
+  };
+  visit(importer.root);
+  return { id: 'takeout', name: { en: 'Google Takeout' }, structure: JSON.parse(readFileSync(join(pack, 'structure.json'), 'utf8')), importer };
+}
+
 describe.skipIf(!enabled)('key page', () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'combray-e2e-'));
     mkdirSync(join(dir, 'data'), { recursive: true });
-    writeFileSync(join(dir, 'willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' } }));
+    writeFileSync(join(dir, 'willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' }, uploads: [takeoutAskingAll()] }));
     cli('project', 'import', join(dir, 'willow.json'));
     cli('researcher', 'add', 'ada@uni.example');
     cli('project', 'add-researcher', 'willow', 'ada@uni.example');
@@ -209,6 +224,57 @@ describe.skipIf(!enabled)('key page', () => {
     expect(downloads['willow-values.csv']).toContain('watch.json/[1]/title');
   }, 60_000);
 
+  it.skipIf(!hasWeb)('takes a donation from a participant, without what they left out, until they withdraw it', async () => {
+    const config = await (await fetch(`${MAIN}/api/v1/p/willow/config`)).json();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    page.on('console', (m) => {
+      if (m.type() === 'error') consoleErrors.push(m.text());
+    });
+    page.on('pageerror', (e) => consoleErrors.push(e.message));
+    page.on('dialog', (d) => void d.accept());
+    await page.goto(`${MAIN}/p/willow/#k=${config.donation_key.fingerprint}`);
+    await page.getByLabel('Password', { exact: true }).fill('a long participant password');
+    await page.getByLabel('Type it once more').fill('a long participant password');
+    await page.getByRole('button', { name: 'Create my space' }).click();
+    const zip = join(dir, 'takeout.zip');
+    writeFileSync(zip, fixtureZip('google-takeout-en'));
+    await page.locator('input[type=file]').first().setInputFiles(zip);
+    await page.getByRole('button', { name: 'See what you would share' }).click();
+    await page.getByText(/rows will be shared/).waitFor();
+
+    await page.getByLabel('Leave out everything that contains a word, a name or a site').fill('madeleines');
+    await page.getByRole('button', { name: 'Leave out', exact: true }).click();
+    await page.getByText(/^Left out \d+ rows? that contains? “madeleines”/).waitFor();
+    await page.getByLabel('I have looked at what will be shared').check();
+    await page.getByRole('button', { name: 'Share', exact: true }).click();
+    await page.getByRole('heading', { name: 'Thank you for sharing!' }).waitFor();
+    expect(await page.locator('.receipt-code code').textContent()).toMatch(/^[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]+$/);
+
+    // The researcher opens it: the Takeout's tables, without the rows that were left out.
+    await ada.page.reload();
+    await ada.page.getByRole('button', { name: 'Use passkey' }).click();
+    await ada.page.getByText('2 donation(s), 0 withdrawn.').waitFor();
+    const downloads: Record<string, string> = {};
+    ada.page.on('download', async (d) => {
+      downloads[d.suggestedFilename()] = readFileSync((await d.path())!, 'utf8');
+    });
+    await ada.page.getByRole('button', { name: 'Open and download' }).click();
+    await ada.page.getByText('Opened 2 donation(s).').waitFor();
+    await expect.poll(() => Object.keys(downloads)).toContain('willow-YouTube-watch-history.csv');
+    await expect.poll(() => Object.keys(downloads)).toContain('willow-values.csv');
+    expect(downloads['willow-YouTube-watch-history.csv']).toContain('Lime blossom tea');
+    expect(downloads['willow-values.csv']!.toLowerCase()).not.toContain('madeleines');
+
+    // Withdrawn from the participant's own page.
+    await page.getByRole('button', { name: 'Withdraw' }).click();
+    await page.getByText(/^Withdrawn on/).waitFor();
+    await ada.page.reload();
+    await ada.page.getByRole('button', { name: 'Use passkey' }).click();
+    await ada.page.getByText('1 donation(s), 1 withdrawn.').waitFor();
+    await context.close();
+  }, 90_000);
+
   it.skipIf(!hasWeb)('opens the studio with a one-time handoff, without key material', async () => {
     const page = ada.page;
     await page.getByRole('button', { name: 'Open the studio' }).click();
@@ -262,7 +328,7 @@ describe.skipIf(!enabled)('key page', () => {
 
     await bob.page.reload();
     await bob.page.getByRole('button', { name: 'Use passkey' }).click();
-    await bob.page.getByText('1 donation(s), 0 withdrawn.').waitFor();
+    await bob.page.getByText('1 donation(s), 1 withdrawn.').waitFor();
     await bob.context.close();
   }, 90_000);
 
@@ -275,7 +341,7 @@ describe.skipIf(!enabled)('key page', () => {
     await lost.page.getByRole('heading', { name: 'Add a new passkey' }).waitFor();
     await lost.page.getByRole('button', { name: 'Create passkey' }).click();
     await lost.page.getByRole('heading', { name: 'Your projects' }).waitFor();
-    await lost.page.getByText('1 donation(s), 0 withdrawn.').waitFor();
+    await lost.page.getByText('1 donation(s), 1 withdrawn.').waitFor();
     await lost.context.close();
   }, 60_000);
 
@@ -334,7 +400,8 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByRole('heading', { name: 'Willow study' }).waitFor();
     // Willow has an encryption key (Ada made it), which Cleo has no access to yet.
     await page.getByText('a colleague needs to give you access to its encryption key').waitFor();
-    await page.getByRole('heading', { name: 'Set up this project' }).waitFor();
+    // Willow is set up (key, platforms, published), so there is no checklist of steps to take.
+    expect(await page.getByRole('heading', { name: 'Set up this project' }).count()).toBe(0);
     await cleo.context.close();
   }, 90_000);
 

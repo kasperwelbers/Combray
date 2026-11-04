@@ -199,7 +199,7 @@ function NameSection({ tree, path, node, names, onName }: Props & { node: Projec
       <>
         <SectionHead title={t('studio.name.title')} help={`${t('studio.name.help')}${formsTable(node) ? ` ${t('studio.tableHelp')}` : ''}`} />
         <form
-          className="alias-form"
+          className="inline-form"
           onSubmit={(e) => {
             e.preventDefault();
             onName.create(path, text);
@@ -311,7 +311,7 @@ function MatchSection({ tree, path, node, info, onPatch, onMatch, onKeysAreData 
         <>
           <SectionHead title={t('studio.match.title')} help={t('studio.match.help')} />
           {node.virtual && <p className="meta">{t('studio.match.virtual')}</p>}
-          <ul className="alias-list">
+          <ul className="item-list">
             {node.match.map((m) => {
               const covers = keys.filter((k) => matchOne(m, k));
               return (
@@ -330,7 +330,7 @@ function MatchSection({ tree, path, node, info, onPatch, onMatch, onKeysAreData 
               );
             })}
           </ul>
-          <form className="alias-form" onSubmit={add}>
+          <form className="inline-form" onSubmit={add}>
             <input aria-label={t('studio.match.new')} value={text} placeholder={t('studio.match.new')} onChange={(e) => setText(e.target.value)} />
             <label className="check">
               <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
@@ -361,7 +361,7 @@ function MatchSection({ tree, path, node, info, onPatch, onMatch, onKeysAreData 
       {siblings.length > 0 && (
         <>
           <SectionHead title={t('studio.combine.title')} help={t('studio.combine.help')} />
-          <div className="alias-form">
+          <div className="inline-form">
             <select aria-label={t('studio.combine.with')} value={combineWith} onChange={(e) => setCombineWith(e.target.value)}>
               <option value="">{t('studio.chooseNode')}</option>
               {siblings.map((s) => (
@@ -439,7 +439,7 @@ function PlatformSection({ tree, path, node, onPatch }: Props & { node: ProjectN
 
       <SectionHead title={t('studio.findTitle')} help={t('studio.findHelp')} />
       {node.find && node.find.length > 0 && (
-        <ul className="alias-list">
+        <ul className="item-list">
           {node.find.map((p, i) => (
             <li key={`${p}:${i}`}>
               <code>{p}</code>
@@ -451,7 +451,7 @@ function PlatformSection({ tree, path, node, onPatch }: Props & { node: ProjectN
           ))}
         </ul>
       )}
-      <form className="alias-form" onSubmit={addPattern}>
+      <form className="inline-form" onSubmit={addPattern}>
         <input aria-label={t('studio.newPattern')} value={pattern} placeholder={t('studio.newPattern')} onChange={(e) => setPattern(e.target.value)} />
         <button className="button quiet" type="submit">
           {t('studio.add')}

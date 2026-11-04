@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveTables, donationValues, extractShape, jsonToTree, setDecision, setKeysAreData } from '../src';
+import { combineDonations, deriveTables, donationValues, withoutRows, extractShape, jsonToTree, setDecision, setKeysAreData } from '../src';
 import { at, keyedTree, nodeAt } from './trees';
 
 const data = jsonToTree('', {
@@ -55,6 +55,37 @@ describe('donationValues', () => {
     expect(withKeys.filter((v) => v.field === '{key}').map((v) => [v.value, v.path])).toEqual([
       ['marcel', ['replies', '{0}']],
       ['odette', ['replies', '{1}']],
+    ]);
+  });
+
+  it('lists the rows with their paths, to leave some out, nested rows with them', () => {
+    let tree = keyedTree(extractShape(data));
+    tree = setDecision(tree, at(tree, 'watch-history.json', '[*]', 'subtitles', '[*]', 'name'), 'donate');
+    tree = setDecision(tree, at(tree, 'watch-history.json', '[*]', 'title'), 'donate');
+    const content = donationValues(data, tree, deriveTables(tree));
+    expect(content.rows.map((r) => [r.table, r.row, r.path])).toEqual([
+      ['watch-history.json/[*]', 0, ['watch-history.json', '[0]']],
+      ['watch-history.json/[*]', 1, ['watch-history.json', '[1]']],
+      ['watch-history.json/[*]/subtitles/[*]', 0, ['watch-history.json', '[0]', 'subtitles', '[0]']],
+    ]);
+    // Leaving out the first video leaves out its subtitles too.
+    const left = withoutRows(content, (r) => r.path.join('/') === 'watch-history.json/[0]');
+    expect(left.values.map((v) => v.value)).toEqual(['Watched Tea']);
+    expect(left.tables.map((t) => t.id)).toEqual(['watch-history.json/[*]']);
+    expect(left.rows).toHaveLength(1);
+  });
+
+  it('combines uploads into one donation, numbering rows on', () => {
+    let tree = keyedTree(extractShape(data));
+    tree = setDecision(tree, at(tree, 'watch-history.json', '[*]', 'subtitles', '[*]', 'name'), 'donate');
+    tree = setDecision(tree, at(tree, 'watch-history.json', '[*]', 'title'), 'donate');
+    const one = donationValues(data, tree, deriveTables(tree));
+    const both = combineDonations([one, one]);
+    expect(both.tables).toEqual(one.tables);
+    expect(both.values.filter((v) => v.field === 'title').map((v) => v.row)).toEqual([0, 1, 2, 3]);
+    expect(both.values.filter((v) => v.field === 'name').map((v) => [v.row, v.parent])).toEqual([
+      [0, { table: 'watch-history.json/[*]', row: 0 }],
+      [1, { table: 'watch-history.json/[*]', row: 2 }],
     ]);
   });
 });

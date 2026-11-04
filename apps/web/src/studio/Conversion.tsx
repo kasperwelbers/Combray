@@ -107,7 +107,7 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
 
       <SectionHead title={t('studio.cleanTitle')} help={t('studio.cleanHelp')} />
       {transforms.length > 0 && (
-        <ol className="alias-list">
+        <ol className="item-list">
           {transforms.map((transform, i) => (
             <li key={`${JSON.stringify(transform)}:${i}`}>
               <span>{transformText(transform, t)}</span>
@@ -123,7 +123,7 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
           ))}
         </ol>
       )}
-      <form className="alias-form" onSubmit={addTransform}>
+      <form className="inline-form" onSubmit={addTransform}>
         <label className="visually-hidden" htmlFor="transform-kind">
           {t('studio.cleanStep')}
         </label>
