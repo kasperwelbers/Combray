@@ -16,7 +16,7 @@ The honest limit of a browser page: the server serves the page, so a server that
 
 ## Two addresses
 
-The server answers on two host names, set with `COMBRAY_PUBLIC_URL` and `COMBRAY_KEYS_URL` (for example `combray.uni.nl` and `keys.combray.uni.nl`):
+The server answers on two host names: the main site (`COMBRAY_PUBLIC_URL`, for example `combray.uni.nl`) and the key site, by default the same name with `keys.` in front (`keys.combray.uni.nl`; `COMBRAY_KEYS_URL` sets another):
 
 | | Main site | Key site |
 | --- | --- | --- |
@@ -25,7 +25,20 @@ The server answers on two host names, set with `COMBRAY_PUBLIC_URL` and `COMBRAY
 | Sessions | Participant stores; studio sessions (only through a handoff from the key page) | Researcher sign-in: email code, passkey |
 | Key material | Never | Sealed project keys, sealed donation keys, envelopes, wrapped personal keys |
 
-Browsers keep origins apart, so a bug in the large participant app or the studio (React, charts, parsers) cannot read the key page's memory or use its passkeys. Key routes do not exist on the main site at all; asking for them there gives `404`.
+Browsers keep origins apart, so a bug in the large participant app or the studio (React, charts, parsers) cannot read the key page's memory or use its passkeys. Key routes do not exist on the main site at all; asking for them there gives `404`. Any other host name gets `421`.
+
+### Why not one address
+
+Passkeys are usually on a site's own address, so why not serve the key page from the main site, say at `/keys/`? Because there a passkey only signs someone in, while here it unlocks the key to every donation. Within one origin, the browser gives no protection between pages. A script that got into the participant app or the studio, through XSS or, more likely, through one of the hundreds of packages they are built from, could:
+
+- open the key page in a window and reach into it (same-origin windows can call each other's functions, whatever the key page's CSP says), and take the keys once the researcher unlocks;
+- start a passkey request itself, because the passkeys would belong to that origin;
+- send requests to the key API with the researcher's session cookie (`HttpOnly` cookies are sent with its requests too, and a cookie's `Path` is no barrier within an origin);
+- install a service worker that changes the key page on later visits.
+
+Each of these could be patched, but then every response of the main site must get every header right, forever. With two host names the browser does it. The other ways to get a second origin do not work: another port shares passkeys and cookies (both ignore ports), a sandboxed page cannot use passkeys, and suborigins never shipped.
+
+The email code does not come from the second address: any design needs a way to know a researcher before their first passkey exists. What the second address adds is the trip from the studio to the key page and back. Its own risks are covered in [deployment.md](deployment.md#protecting-the-host-names).
 
 ## The key page
 

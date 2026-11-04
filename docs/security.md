@@ -279,7 +279,7 @@ Built for the pilot. The design, with the reasons and the user flows, is in [res
 
 ### Two origins
 
-The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participant app, studio) and the key site (`COMBRAY_KEYS_URL`: the key page and the key API). A request is routed by its `Host` header; an unknown host gets the main site. Routes that return key material (sealed project keys, sealed donation keys, envelopes, wrapped personal keys) and every passkey ceremony exist only on the key site. The passkey RP ID is the key host, and the main site's `Permissions-Policy` turns WebAuthn off.
+The server answers on two hosts: the main site (`COMBRAY_PUBLIC_URL`: participant app, studio) and the key site (`keys.` in front of the main host, or `COMBRAY_KEYS_URL`: the key page and the key API). The key site must have a host name of its own; another port is refused, because passkeys and cookies ignore ports. A request is routed by its `Host` header; any other host gets `421`, except the health check, so a forgotten DNS record or a wildcard never serves the app under a name of its own. Why the key page cannot share the main site's origin is in [researcher-keys.md](researcher-keys.md#why-not-one-address); DNS is the remaining trust, see [deployment.md](deployment.md#protecting-the-host-names). Routes that return key material (sealed project keys, sealed donation keys, envelopes, wrapped personal keys) and every passkey ceremony exist only on the key site. The passkey RP ID is the key host, and the main site's `Permissions-Policy` turns WebAuthn off.
 
 ### Sessions
 

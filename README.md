@@ -63,7 +63,7 @@ The development server keeps its databases in `.dev/` and does not send mail: si
    `pnpm admin` runs the server's operator commands on the development server; on its own it lists them.
 2. **Sign in:** open http://localhost:5173/studio/ and click "Sign in with your passkey". That takes you to the key page (http://keys.localhost:8080), where researchers sign in. The first time, choose "Sign in with an email code", type the 8-digit code from the newest file in `.dev/outbox/`, and set up your passkey and recovery code. You are then sent back to the studio, signed in.
 3. **Set up the project:** the project page lists the steps: create the encryption key (on the key page), add platforms (in the data explorer), and publish (on the key page).
-4. **A donation to open:** `pnpm synthetic-donation http://localhost:8080 example` seals a synthetic donation to the project's encryption key, which the key page can then open.
+4. **A donation to open:** `pnpm synthetic-donation http://localhost:5173 example` seals a synthetic donation to the project's encryption key, which the key page can then open.
 
 `pnpm serve` instead builds everything and serves it from the server alone, on http://localhost:8080. More in [docs/deployment.md](docs/deployment.md#development); all commands are in [CLAUDE.md](CLAUDE.md#commands).
 

@@ -4,10 +4,11 @@
  *
  * Two sites, one server:
  *
- * - The **key page** (`COMBRAY_KEYS_URL`) is the only place where researchers use passkeys, and the
- *   only one that can fetch key material. Passkeys are bound to its host name.
+ * - The **key page** (`keys.` in front of the main host, or `COMBRAY_KEYS_URL`) is the only place
+ *   where researchers use passkeys, and the only one that can fetch key material. Passkeys are bound
+ *   to its host name.
  * - The **main site** (`COMBRAY_PUBLIC_URL`) serves participants and the studio. The studio signs in
- *   with the emailed code (or a handoff from the key page), and never receives a key.
+ *   only through a handoff from the key page, after the passkey, and never receives a key.
  *
  * Every researcher request must come from the site's own origin (`Origin` and `Sec-Fetch-Site`), so
  * a page on the main site cannot drive the key page's API, even though both are the same site for

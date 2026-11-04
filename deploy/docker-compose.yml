@@ -23,10 +23,10 @@ services:
       RUST_LOG: info
       # Caddy sets this; its last entry is the real client IP, used only for rate limiting.
       COMBRAY_CLIENT_IP_HEADER: x-forwarded-for
-      # The participant app and studio, and the key page on its own host name. Researcher
-      # sign-in and donations are on when both are set.
+      # The participant app and studio. The key page is on its own host name, keys. in front of
+      # this one, unless COMBRAY_KEYS_URL names another (then change the Caddyfile to match).
       COMBRAY_PUBLIC_URL: https://${COMBRAY_DOMAIN:-localhost}
-      COMBRAY_KEYS_URL: https://keys.${COMBRAY_DOMAIN:-localhost}
+      COMBRAY_KEYS_URL: ${COMBRAY_KEYS_URL:-}
       # Sign-in codes go out by SMTP, e.g. smtps://user:password@smtp.uni.nl:465 (see .env).
       COMBRAY_SMTP_URL: ${COMBRAY_SMTP_URL:-}
       COMBRAY_MAIL_FROM: ${COMBRAY_MAIL_FROM:-}
