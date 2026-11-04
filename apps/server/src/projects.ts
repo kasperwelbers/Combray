@@ -125,6 +125,20 @@ export interface Consent {
 
 export const MAX_STATEMENTS = 10;
 
+/** The largest story, as JSON text. The web client checks its shape (`parseStory`). */
+export const MAX_STORY_BYTES = 256 * 1024;
+
+/**
+ * A story as stored: an object with a list of slides, within the size limit; `null` for none. The
+ * server only stores and publishes it: participants' devices check every block before they use it.
+ */
+function storyText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value) || !Array.isArray((value as Record<string, unknown>).slides)) return fail('invalid');
+  const text = JSON.stringify(value);
+  return Buffer.byteLength(text) <= MAX_STORY_BYTES ? text : fail('invalid');
+}
+
 export interface Details {
   name: Localized;
   description?: Localized;
@@ -283,6 +297,19 @@ export class Projects {
       .set({ draftUpdated: nowSecs(), draftRevision: sql`${projects.draftRevision} + 1` })
       .where(eq(projects.id, id))
       .run();
+  }
+
+  /** The draft's story, or `null`. */
+  story(id: string): unknown {
+    const row = this.db.select({ story: projectDetails.story }).from(projectDetails).where(eq(projectDetails.projectId, id)).get() ?? fail('not_found');
+    return parse(row.story);
+  }
+
+  /** Replace the draft's story (`null` removes it); throws `invalid`. */
+  setStory(id: string, value: unknown): void {
+    const story = storyText(value);
+    if (changes(this.db.update(projectDetails).set({ story }).where(eq(projectDetails.projectId, id)).run()) === 0) fail('not_found');
+    this.touch(id);
   }
 
   setDetails(id: string, value: Record<string, unknown>): void {
@@ -465,12 +492,14 @@ export class Projects {
   /** Copy the draft to the live version. Returns the new version number. */
   publish(id: string): number {
     const summary = this.draft(id);
+    const story = this.story(id);
     const live = {
       id,
       name: summary.details.name,
       ...(summary.details.description !== undefined ? { description: summary.details.description } : {}),
       participants: summary.details.participants,
       ...(summary.details.consent ? { consent: summary.details.consent } : {}),
+      ...(story !== null ? { story } : {}),
       uploads: summary.platforms.map((p) => {
         const draft = this.platform(id, p.id);
         return {
@@ -501,6 +530,7 @@ export class Projects {
     const id = c.id;
     if (!validProjectId(id)) return fail('invalid');
     const details = checkDetails({ ...c, name: c.name ?? id });
+    const story = storyText(c.story);
     const uploads = Array.isArray(c.uploads) ? c.uploads : [];
     const platforms = uploads.map((u, position) => {
       if (!u || typeof u !== 'object') return fail('invalid');
@@ -526,6 +556,7 @@ export class Projects {
         participantsMode: details.participants.mode,
         participantsPattern: details.participants.pattern ?? null,
         consent: details.consent ? JSON.stringify(details.consent) : null,
+        story,
       };
       tx.insert(projectDetails).values({ projectId: id, ...row }).onConflictDoUpdate({ target: projectDetails.projectId, set: row }).run();
       tx.delete(projectPlatforms).where(eq(projectPlatforms.projectId, id)).run();

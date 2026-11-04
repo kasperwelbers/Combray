@@ -135,3 +135,5 @@ export type {
   LocateResult,
 } from './locate';
 export type { CombineSuggestion } from './suggest';
+export { DATA_VIEWS, QUESTION_KINDS, STORY_LIMITS, fillText, optionValue, parseStory, slideFromTemplate, storyQuestions, validAnswer } from './story';
+export type { Answer, DataBlock, DataViewKind, QuestionBlock, QuestionKind, Slide, SlideTemplate, Story, StoryBlock, StoryValues, TextBlock } from './story';

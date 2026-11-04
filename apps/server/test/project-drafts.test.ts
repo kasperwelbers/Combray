@@ -114,6 +114,11 @@ describe('the draft', () => {
     expect((await s.main.put('/api/v1/projects/birch/draft/platforms/Tik%20Tok', { name: 'TikTok' }, ada)).status).toBe(400);
     const big = { name: 'TikTok', structure: { blob: 'x'.repeat(2 * 1024 * 1024 + 10) } };
     expect([400, 413]).toContain((await s.main.put('/api/v1/projects/birch/draft/platforms/tiktok', big, ada)).status);
+    for (const story of ['slides', { slides: 'none' }, [], { slides: [{ text: 'x'.repeat(256 * 1024) }] }]) {
+      expect([400, 413], JSON.stringify(story).slice(0, 40)).toContain((await s.main.put('/api/v1/projects/birch/draft/story', { story }, ada)).status);
+    }
+    // `null` removes the story.
+    expect((await s.main.put('/api/v1/projects/birch/draft/story', { story: null }, ada)).status).toBe(204);
   });
 
   it('is only for members', async () => {
@@ -124,6 +129,8 @@ describe('the draft', () => {
     expect((await s.main.get('/api/v1/projects/birch/draft', eve)).status).toBe(404);
     expect((await s.main.put('/api/v1/projects/birch/draft/details', { name: 'Mine' }, eve)).status).toBe(404);
     expect((await s.main.put('/api/v1/projects/birch/draft/platforms/x', { name: 'X' }, eve)).status).toBe(404);
+    expect((await s.main.get('/api/v1/projects/birch/draft/story', eve)).status).toBe(404);
+    expect((await s.main.put('/api/v1/projects/birch/draft/story', { story: null }, eve)).status).toBe(404);
   });
 });
 
@@ -140,6 +147,11 @@ describe('publishing', () => {
     await s.main.put('/api/v1/projects/birch/draft/details', { name: 'Birch study', participants: { mode: 'required', pattern: 'B-[0-9]{3}' }, consent }, studioSession);
     expect((await s.main.get('/api/v1/projects/birch/draft', studioSession)).json.details.consent).toEqual(consent);
     await s.main.put('/api/v1/projects/birch/draft/platforms/tiktok', { name: 'TikTok', pack: 'tiktok', structure: STRUCTURE, importer: IMPORTER }, studioSession);
+    // The story is stored as it is: participants' devices check its blocks.
+    const story = { slides: [{ id: 's1', blocks: [{ type: 'question', id: 'q1', kind: 'open', prompt: 'What do you remember?' }] }] };
+    expect((await s.main.get('/api/v1/projects/birch/draft/story', studioSession)).json).toEqual({ story: null });
+    expect((await s.main.put('/api/v1/projects/birch/draft/story', { story }, studioSession)).status).toBe(204);
+    expect((await s.main.get('/api/v1/projects/birch/draft/story', studioSession)).json).toEqual({ story });
     // Publishing needs access to the project's encryption key, which Ada creates first.
     expect((await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session)).status).toBe(403);
     expect((await createProjectKey(s, ada.session, 'birch')).status).toBe(201);
@@ -160,6 +172,7 @@ describe('publishing', () => {
       name: 'Birch study',
       participants: { mode: 'required' },
       consent,
+      story,
       uploads: [{ id: 'tiktok', name: 'TikTok', pack: 'tiktok', structure: STRUCTURE, importer: IMPORTER }],
     });
     expect(config.text).not.toContain('B-[0-9]');

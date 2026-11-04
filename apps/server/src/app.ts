@@ -18,7 +18,7 @@ import { dispatch, errorReply, HttpError, json, logRequest, noStore, type Reply,
 import { KeyService, loadStoreMasterKey } from './keys.ts';
 import { log } from './log.ts';
 import { Projects } from './projects.ts';
-import { PLATFORM_BODY_LIMIT, Research, TEST_PACKAGE_BODY_LIMIT } from './research.ts';
+import { PLATFORM_BODY_LIMIT, Research, STORY_BODY_LIMIT, TEST_PACKAGE_BODY_LIMIT } from './research.ts';
 import { projectError, storeHandlers } from './stores.ts';
 
 /**
@@ -151,6 +151,8 @@ export function createApp(config: Config): (req: IncomingMessage, res: ServerRes
     .add('GET', '/projects/{id}', on('main', (x) => x.getProject), 0)
     .add('GET', '/projects/{id}/draft', on('main', (x) => x.getDraft), 0)
     .add('PUT', '/projects/{id}/draft/details', on('main', (x) => x.putDetails), MAIN_RESEARCH_LIMIT * 8)
+    .add('GET', '/projects/{id}/draft/story', on('main', (x) => x.getStory), 0)
+    .add('PUT', '/projects/{id}/draft/story', on('main', (x) => x.putStory), STORY_BODY_LIMIT)
     .add('GET', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.getPlatform), 0)
     .add('PUT', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.putPlatform), PLATFORM_BODY_LIMIT)
     .add('DELETE', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.deletePlatform), MAIN_RESEARCH_LIMIT)

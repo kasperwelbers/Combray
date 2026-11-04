@@ -137,6 +137,8 @@ export const projectDetails = sqliteTable('project_details', {
   participantsPattern: text('participants_pattern'),
   /** Information for participants and the statements they agree to before donating (JSON). */
   consent: text('consent'),
+  /** The story participants are walked through: slides with text, their data and questions (JSON). */
+  story: text('story'),
 });
 
 /** The draft's platforms (upload points): each with the project tree participants' data is read with. */
