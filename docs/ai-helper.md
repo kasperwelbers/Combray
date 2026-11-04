@@ -11,7 +11,7 @@ The model never receives participant data. Not rows, not titles, not URLs, not s
 
 ```
    participant ──question──► AI model
-                               │  sees: shapes (keys, types, counts in buckets),
+                               │  sees: shapes (keys, types, repetition),
                                │        dataset and field names, local classifier
                                │        labels that are non-sensitive by design
                                ▼
@@ -25,7 +25,7 @@ The participant sees the result; the model does not. The model is told only whet
 
 What may go to the model:
 
-- **Shapes** as defined in [universal-importer.md](universal-importer.md#structure-metadata): file and key names (after dictionary collapsing and name screening), node kinds, value types, bucketed counts, HTML tag/id/class.
+- **Shapes** as defined in [universal-importer.md](universal-importer.md#structure-metadata): file and key names (after dictionary collapsing and name screening), node kinds, value types, whether lists repeat, HTML tag/id/class.
 - **Dataset descriptions**: dataset names, field names and types, time range at coarse granularity (year), bucketed sizes.
 - **Non-sensitive classifier outputs**: the label set of a local classifier and, where the study allows it, aggregate counts per label at coarse buckets (e.g. "music: many, news: few"). Classifier plugins declare in their manifest whether their labels are safe to share, and the project config must enable this explicitly.
 - **Help knowledge**: platform instructions and Combray documentation.

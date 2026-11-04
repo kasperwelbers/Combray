@@ -15,7 +15,7 @@
               {
                 "kind": "list",
                 "name": "ItemFavoriteList",
-                "count": "1",
+                "repeat": "once",
                 "children": [
                   {
                     "kind": "map",
@@ -51,7 +51,7 @@
               {
                 "kind": "list",
                 "name": "SearchList",
-                "count": "1",
+                "repeat": "once",
                 "children": [
                   {
                     "kind": "map",
@@ -87,7 +87,7 @@
               {
                 "kind": "list",
                 "name": "VideoList",
-                "count": "2-10",
+                "repeat": "many",
                 "children": [
                   {
                     "kind": "map",

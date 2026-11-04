@@ -87,7 +87,7 @@ export function NodeDetails(props: Props) {
             <div className="meta">
               {t(`kind.${node.kind}`)}
               {node.types && ` · ${node.types.map((type) => t(`type.${type}`)).join(', ')}`}
-              {node.count && ` · × ${node.count}`}
+              {node.repeat && ` · ${t(`studio.repeat.${node.repeat}`)}`}
             </div>
           )}
         </div>

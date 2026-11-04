@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { countBucket, extractShape, flatten, screenName, type Shape } from '../src';
+import { extractShape, flatten, mergeAll, repeatOf, screenName, type Shape } from '../src';
 import { inbox, takeout, watchHistory } from './fixtures';
 
 function allValues(node: unknown, out: string[] = []): string[] {
@@ -33,24 +33,29 @@ describe('screenName', () => {
   });
 });
 
-describe('countBucket', () => {
+describe('repeatOf', () => {
   it.each([
-    [0, '0'],
-    [1, '1'],
-    [7, '2-10'],
-    [100, '11-100'],
-    [101, '101-1k'],
-    [5000, '>1k'],
-  ])('%i -> %s', (n, bucket) => expect(countBucket(n)).toBe(bucket));
+    [0, 'once'],
+    [1, 'once'],
+    [2, 'many'],
+    [5000, 'many'],
+  ])('%i -> %s', (n, repeat) => expect(repeatOf(n)).toBe(repeat));
+
+  it('repeats once any structure shows more than one entry, like types merge', () => {
+    const one: Shape = { kind: 'list', name: 'tags', repeat: 'once' };
+    const many: Shape = { kind: 'list', name: 'tags', repeat: 'many' };
+    expect(mergeAll([one, many])[0]!.repeat).toBe('many');
+    expect(mergeAll([one, { ...one }])[0]!.repeat).toBe('once');
+  });
 });
 
 describe('extractShape', () => {
-  it('merges list items into one item shape with bucketed counts and types', () => {
+  it('merges list items into one item shape with repetition and types', () => {
     const shape = extractShape(watchHistory);
     expect(shape).toEqual<Shape>({
       kind: 'list',
       name: 'watch-history.json',
-      count: '2-10',
+      repeat: 'many',
       children: [
         {
           kind: 'map',
@@ -59,7 +64,7 @@ describe('extractShape', () => {
             {
               kind: 'list',
               name: 'subtitles',
-              count: '2-10',
+              repeat: 'many',
               children: [
                 {
                   kind: 'map',
@@ -97,7 +102,7 @@ describe('extractShape', () => {
   it('collapses dictionary-like directories such as usernames', () => {
     const shape = extractShape(inbox);
     expect(shape.collapsed).toBe(true);
-    expect(shape.count).toBe('2-10');
+    expect(shape.repeat).toBe('many');
     expect(shape.children?.map((c) => c.name)).toEqual(['{*}']);
     expect(JSON.stringify(shape)).not.toMatch(/marcel|gilberte|swann/);
   });
@@ -117,7 +122,7 @@ describe('extractShape', () => {
       kind: 'map',
       name: 'daily',
       collapsed: true,
-      count: '2-10',
+      repeat: 'many',
       keyTypes: ['date-like'],
       keyFormats: ['YYYY-MM-DD'],
       children: [{ kind: 'value', name: '{*}', types: ['int'] }],

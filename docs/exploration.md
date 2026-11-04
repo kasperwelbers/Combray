@@ -36,7 +36,7 @@ A **format** says how a value is written, without the value: `2010-12-05` is `YY
 
 ### Fake examples, later
 
-Kasper suggested a local model that, given many real values, makes up a few that look like them, so a researcher sees what kind of thing is in a field. This is promising but needs care: a model shown real values can copy them, and "looks like" is exactly what makes a value identifying (a rare name, a street). If we build it, it runs on the participant's device, its output is checked against the real values (no exact or near copies, no rare tokens) and it is sent only with the same specific consent as structure metadata, shown to the participant first. Until then, formats, types and bucketed counts are what is shared.
+Kasper suggested a local model that, given many real values, makes up a few that look like them, so a researcher sees what kind of thing is in a field. This is promising but needs care: a model shown real values can copy them, and "looks like" is exactly what makes a value identifying (a rare name, a street). If we build it, it runs on the participant's device, its output is checked against the real values (no exact or near copies, no rare tokens) and it is sent only with the same specific consent as structure metadata, shown to the participant first. Until then, formats, types and whether lists repeat are what is shared.
 
 ## The researcher's view of the tree
 

@@ -9,7 +9,7 @@
 import type { FieldType, Localized, Transform } from './importer/spec';
 import { globMatch } from './path';
 import type { FilterTest } from './query';
-import { COLLAPSED_NAME, countBucket, ITEM_NAME, mergeAll, type CountBucket, type Shape } from './shape';
+import { COLLAPSED_NAME, ITEM_NAME, mergeAll, repeatOf, type Repeat, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
 export type LeafDecision = 'undecided' | 'ignore' | 'show' | 'donate';
@@ -99,14 +99,14 @@ export interface ProjectNode {
   formats?: string[];
   keyTypes?: ValueType[];
   keyFormats?: string[];
-  count?: CountBucket;
+  repeat?: Repeat;
   mime?: string;
   collapsed?: true;
   children?: ProjectNode[];
 }
 
 /** The structure fields of a node, as in shapes: copied to and from structure files. */
-export const STRUCTURE_FIELDS = ['types', 'formats', 'keyTypes', 'keyFormats', 'count', 'mime', 'collapsed'] as const;
+export const STRUCTURE_FIELDS = ['types', 'formats', 'keyTypes', 'keyFormats', 'repeat', 'mime', 'collapsed'] as const;
 
 function copyStructure(from: Shape | ProjectNode, to: Shape | ProjectNode): void {
   for (const key of STRUCTURE_FIELDS) {
@@ -590,7 +590,6 @@ export function setKeysAreData(
     delete entry.aliases;
     merged.push(entry);
   }
-  const count = countBucket(children.length);
-  Object.assign(target, { collapsed: true, count, children: merged });
+  Object.assign(target, { collapsed: true, repeat: repeatOf(children.length), children: merged });
   return { tree, conflicts };
 }

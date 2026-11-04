@@ -418,5 +418,9 @@
     "too_big": "It is too big to keep its values (at most 25 MB); it is loaded in this tab only.",
     "too_many": "This platform already keeps the values of 10 packages; remove one first. This one is loaded in this tab only.",
     "temporaryHelpPractice": "Load a package to see its values here, in this tab only: nothing is stored anywhere."
+  },
+  "repeat": {
+    "once": "one entry seen",
+    "many": "repeats"
   }
 }

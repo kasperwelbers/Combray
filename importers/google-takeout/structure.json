@@ -15,7 +15,7 @@
               {
                 "kind": "list",
                 "name": "Browser History",
-                "count": "2-10",
+                "repeat": "many",
                 "children": [
                   {
                     "kind": "map",
@@ -89,7 +89,7 @@
               {
                 "kind": "list",
                 "name": "MyActivity.json",
-                "count": "2-10",
+                "repeat": "many",
                 "children": [
                   {
                     "kind": "map",
@@ -105,7 +105,7 @@
                       {
                         "kind": "list",
                         "name": "products",
-                        "count": "1",
+                        "repeat": "once",
                         "children": [
                           {
                             "kind": "value",
@@ -163,7 +163,7 @@
                               {
                                 "kind": "list",
                                 "name": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell",
-                                "count": "2-10",
+                                "repeat": "many",
                                 "children": [
                                   {
                                     "kind": "element",
@@ -290,7 +290,7 @@
               {
                 "kind": "list",
                 "name": "search-history.json",
-                "count": "2-10",
+                "repeat": "many",
                 "children": [
                   {
                     "kind": "map",
@@ -334,7 +334,7 @@
               {
                 "kind": "list",
                 "name": "watch-history.json",
-                "count": "2-10",
+                "repeat": "many",
                 "children": [
                   {
                     "kind": "map",
@@ -343,7 +343,7 @@
                       {
                         "kind": "list",
                         "name": "activityControls",
-                        "count": "1",
+                        "repeat": "once",
                         "children": [
                           {
                             "kind": "value",
@@ -357,7 +357,7 @@
                       {
                         "kind": "list",
                         "name": "details",
-                        "count": "1",
+                        "repeat": "once",
                         "children": [
                           {
                             "kind": "map",
@@ -384,7 +384,7 @@
                       {
                         "kind": "list",
                         "name": "products",
-                        "count": "1",
+                        "repeat": "once",
                         "children": [
                           {
                             "kind": "value",
@@ -398,7 +398,7 @@
                       {
                         "kind": "list",
                         "name": "subtitles",
-                        "count": "1",
+                        "repeat": "once",
                         "children": [
                           {
                             "kind": "map",
@@ -469,7 +469,7 @@
                               {
                                 "kind": "list",
                                 "name": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell",
-                                "count": "2-10",
+                                "repeat": "many",
                                 "children": [
                                   {
                                     "kind": "element",
@@ -630,7 +630,7 @@
               {
                 "kind": "list",
                 "name": "subscriptions.csv",
-                "count": "2-10",
+                "repeat": "many",
                 "children": [
                   {
                     "kind": "map",

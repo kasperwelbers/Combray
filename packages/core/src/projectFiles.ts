@@ -170,7 +170,7 @@ export function joinProjectTree(
 
 const KINDS = new Set<NodeKind>(['dir', 'map', 'list', 'value', 'element', 'text', 'blob']);
 const TYPES = new Set<ValueType>(['null', 'bool', 'int', 'float', 'string', 'date-like', 'url-like', 'email-like']);
-const BUCKETS = new Set(['0', '1', '2-10', '11-100', '101-1k', '>1k']);
+const REPEAT_VALUES = new Set(['once', 'many']);
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -208,7 +208,7 @@ function checkShape(v: unknown, where: string, depth = 0): void {
       `${where}: ${key} must be formats such as YYYY-MM-DD`,
     );
   }
-  if (v.count !== undefined) check(BUCKETS.has(v.count as string), `${where}: unknown count`);
+  if (v.repeat !== undefined) check(REPEAT_VALUES.has(v.repeat as string), `${where}: repeat must be once or many`);
   if (v.mime !== undefined) check(typeof v.mime === 'string', `${where}: mime must be a string`);
   if (v.collapsed !== undefined) check(v.collapsed === true, `${where}: collapsed must be true`);
   if (v.children !== undefined) {

@@ -2,7 +2,7 @@
  * Shape extraction: the structure of a tree with all values removed.
  *
  * See docs/universal-importer.md#structure-metadata. A shape keeps node kinds, names
- * (screened), bucketed list lengths and inferred value types. It never contains values.
+ * (screened), whether lists repeat, and inferred value types. It never contains values.
  * Dictionary-like maps and directories (keys that are themselves data, such as usernames or
  * dates) are collapsed to `{*}`. The thresholds are first guesses and need tuning on
  * real-world shapes from consenting team members.
@@ -14,8 +14,11 @@ import { childrenOf, type NodeKind, type TreeNode, type ValueType } from './tree
 export interface Shape {
   kind: NodeKind;
   name: string;
-  /** Bucketed number of children, for lists and collapsed maps or directories. */
-  count?: CountBucket;
+  /**
+   * For lists and collapsed maps or directories: `many` once any structure had more than one
+   * entry here, else `once`. Never how many: sizes say something about a person.
+   */
+  repeat?: Repeat;
   /** Inferred types seen at this position, for values. */
   types?: ValueType[];
   /** How values are written, for dates and timestamps (`YYYY-MM-DD`); see formats.ts. */
@@ -33,16 +36,12 @@ export interface Shape {
 export const ITEM_NAME = '[*]';
 export const COLLAPSED_NAME = '{*}';
 
-const BUCKETS = ['0', '1', '2-10', '11-100', '101-1k', '>1k'] as const;
-export type CountBucket = (typeof BUCKETS)[number];
+export type Repeat = 'once' | 'many';
+export const REPEATS: readonly Repeat[] = ['once', 'many'];
 
-export function countBucket(n: number): CountBucket {
-  if (n <= 0) return '0';
-  if (n === 1) return '1';
-  if (n <= 10) return '2-10';
-  if (n <= 100) return '11-100';
-  if (n <= 1000) return '101-1k';
-  return '>1k';
+/** How often a list or a map whose keys are data repeats, from its number of entries. */
+export function repeatOf(n: number): Repeat {
+  return n > 1 ? 'many' : 'once';
 }
 
 const PHONE = /^\+?\d[\d\s().-]{7,}\d$/;
@@ -117,10 +116,8 @@ function merge(a: Shape, b: Shape): Shape {
     const merged = union<string>(a[key], b[key], key.endsWith('ormats') ? MAX_FORMATS : Infinity);
     if (merged) (out as unknown as Record<string, unknown>)[key] = merged;
   }
-  if (a.count || b.count) {
-    const rank = (c?: CountBucket) => (c ? BUCKETS.indexOf(c) : -1);
-    out.count = rank(b.count) > rank(a.count) ? b.count : a.count;
-  }
+  // Like types: once any structure shows more than one entry, it repeats.
+  if (a.repeat || b.repeat) out.repeat = a.repeat === 'many' || b.repeat === 'many' ? 'many' : 'once';
   if (!a.mime && b.mime) out.mime = b.mime;
   if (a.collapsed || b.collapsed) out.collapsed = true;
   if (a.children || b.children) {
@@ -194,7 +191,7 @@ function collapsedShape(map: Shape, names: string[]): Shape {
       kind: map.kind,
       name: map.name,
       collapsed: true,
-      count: countBucket(map.children?.length ?? 0),
+      repeat: repeatOf(map.children?.length ?? 0),
       ...keyInfo(names),
     },
     mergeAll((map.children ?? []).map((c) => ({ ...c, name: COLLAPSED_NAME }))),
@@ -257,7 +254,7 @@ export function extractShape(node: TreeNode): Shape {
       return { kind: 'blob', name: screenName(node.name), mime: node.mime };
     case 'list':
       return withChildren(
-        { kind: 'list', name: screenName(node.name), count: countBucket(node.children.length) },
+        { kind: 'list', name: screenName(node.name), repeat: repeatOf(node.children.length) },
         mergeAll(
           collapseSparseKeys(
             node.children.map((c) => ({ ...extractShape(c), name: ITEM_NAME })),
@@ -279,7 +276,7 @@ export function extractShape(node: TreeNode): Shape {
           {
             ...base,
             collapsed: true,
-            count: countBucket(node.children.length),
+            repeat: repeatOf(node.children.length),
             ...keyInfo(node.children.map((c) => c.name)),
           },
           mergeAll(shapes.map((s) => ({ ...s, name: COLLAPSED_NAME }))),

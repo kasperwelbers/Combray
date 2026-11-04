@@ -283,7 +283,7 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
         {...(children.length > 0 ? { onToggle: () => actions.toggleOpen(key) } : {})}
         tags={
           <>
-            {node.count && node.count !== '1' && <span className="tag">× {node.count}</span>}
+            {node.repeat === 'once' && <span className="tag">{t('studio.repeat.once')}</span>}
             {node.lifter !== undefined && <span className="tag">{t('studio.lifter')}</span>}
             {node.required && <span className="tag">{t('studio.requiredTag')}</span>}
             {node.newChildren === 'skip' && <span className="tag">{t('studio.skipTag')}</span>}
@@ -433,7 +433,7 @@ function GroupRow(props: FieldsProps & { group: OutlineGroup }) {
   const { t, i18n } = useTranslation(undefined, { lng: 'en' });
   const { group, states, open, actions } = props;
   const node = getNode(props.tree, group.path)!;
-  // The list a table's rows belong to holds its count and is what researchers think of.
+  // The list a table's rows belong to says whether it repeats, and is what researchers think of.
   const list = getNode(props.tree, group.path.slice(0, -1));
   const key = `fields:${pathKey(group.path)}`;
   const isOpen = !open.has(key);
@@ -460,7 +460,7 @@ function GroupRow(props: FieldsProps & { group: OutlineGroup }) {
         }
         tags={
           <>
-            {(list?.count ?? node.count) && (list?.count ?? node.count) !== '1' && <span className="tag">× {list?.count ?? node.count}</span>}
+            {(list?.repeat ?? node.repeat) === 'once' && <span className="tag">{t('studio.repeat.once')}</span>}
             {group.keyed && <span className="tag">{t('studio.keysTag')}</span>}
             {node.headerRow && <span className="tag">{t('studio.headerRowTag')}</span>}
           </>
