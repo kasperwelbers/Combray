@@ -22,13 +22,15 @@ interface Props {
  * the study's key. Earlier donations can be withdrawn here.
  */
 export function Donate({ keyPin, onBack }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [overview, setOverview] = useState<DonationOverview | 'unreachable'>();
   const [receipts, setReceipts] = useState<DonationReceipt[]>([]);
   const [sent, setSent] = useState<DonationReceipt>();
   const [problem, setProblem] = useState<DonationProblem>();
   const [busy, setBusy] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  /** The study's consent statements ticked, by position. */
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
   // Bumped whenever rows are left out or put back, so open tables read their rows again.
   const [version, setVersion] = useState(0);
 
@@ -37,6 +39,7 @@ export function Donate({ keyPin, onBack }: Props) {
     const [o, r] = await Promise.all([data.donationOverview(), data.donations()]);
     setOverview(o);
     setReceipts(r);
+    setTicked(new Set());
     setVersion((v) => v + 1);
   }, []);
 
@@ -54,11 +57,21 @@ export function Donate({ keyPin, onBack }: Props) {
     setBusy(true);
     setProblem(undefined);
     try {
-      const result = await data.donate(keyPin);
+      if (!overview || overview === 'unreachable') return;
+      // What the participant read and agreed to, in their language, goes with the donation.
+      const language = i18n.resolvedLanguage ?? 'en';
+      const information = overview.consent?.information && localize(overview.consent.information, language);
+      const consent = {
+        language,
+        ...(information ? { information } : {}),
+        statements: [...(overview.consent?.statements ?? []).map((s) => localize(s, language)), t('donate.agree')],
+      };
+      const result = await data.donate(keyPin, consent);
       if (result.status === 'done') {
         setSent(result.receipt);
         setReceipts(await data.donations());
         setAgreed(false);
+        setTicked(new Set());
       } else {
         setProblem(result.status);
         // The study's settings changed: show what would be sent now.
@@ -112,14 +125,36 @@ export function Donate({ keyPin, onBack }: Props) {
 
           <form className="card consent" onSubmit={donate}>
             <h2>{t('donate.consentTitle')}</h2>
+            {overview.consent?.information && <Information text={localize(overview.consent.information, i18n.language)} />}
             <p>{t('donate.consentText')}</p>
+            {(overview.consent?.statements ?? []).map((statement, i) => (
+              <label key={i} className="check">
+                <input
+                  type="checkbox"
+                  checked={ticked.has(i)}
+                  onChange={(e) =>
+                    setTicked((set) => {
+                      const next = new Set(set);
+                      if (e.target.checked) next.add(i);
+                      else next.delete(i);
+                      return next;
+                    })
+                  }
+                />
+                {localize(statement, i18n.language)}
+              </label>
+            ))}
             <label className="check">
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
               {t('donate.agree')}
             </label>
             {problem && <p className="message error">{t(`donate.problem.${problem}`)}</p>}
             <p>
-              <button type="submit" className="button" disabled={!agreed || busy || overview.rows === overview.leftOut}>
+              <button
+                type="submit"
+                className="button"
+                disabled={!agreed || ticked.size < (overview.consent?.statements?.length ?? 0) || busy || overview.rows === overview.leftOut}
+              >
                 {busy ? t('donate.sending') : t('donate.send')}
               </button>
             </p>
@@ -128,6 +163,19 @@ export function Donate({ keyPin, onBack }: Props) {
       )}
 
       {receipts.length > 0 && <Receipts receipts={receipts} onChanged={async () => setReceipts(await data.donations())} />}
+    </section>
+  );
+}
+
+/** The study's information: plain text, an empty line between paragraphs. Never HTML. */
+function Information({ text }: { text: string }) {
+  const { t } = useTranslation();
+  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  return (
+    <section className="study-information" aria-label={t('donate.information')}>
+      {paragraphs.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
     </section>
   );
 }

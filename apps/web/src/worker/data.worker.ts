@@ -278,7 +278,7 @@ async function buildReview(): Promise<Review | 'unreachable'> {
     const project = point && pointProject(point);
     if (project) parts.push(uploadDonation(d.id, unflatten(await nodesOf(d.id)), project));
   }
-  review = new Review(parts, study.settings);
+  review = new Review(parts, study.settings, study.consent);
   return review;
 }
 
@@ -529,7 +529,7 @@ const api: DataApi = {
     return reviewing().overview(new Set());
   },
 
-  async donate(pin) {
+  async donate(pin, consent) {
     const study = await fetchSettings(projectId!);
     if (!study) return { status: 'unreachable' };
     // What is sent must be what the participant reviewed.
@@ -540,7 +540,7 @@ const api: DataApi = {
     const keys = await leftOutKeys();
     const content = review.donated(keys);
     if (content.values.length === 0) return { status: 'nothing' };
-    const sent = await sendDonation(projectId!, study, content, pin);
+    const sent = await sendDonation(projectId!, study, content, pin, consent);
     if (sent.status !== 'sent') return sent;
     const manifest: DonationManifest = {
       type: 'donation',

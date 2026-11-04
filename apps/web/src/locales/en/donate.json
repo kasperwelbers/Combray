@@ -32,6 +32,7 @@
   "outWithParent": "Left out with its row",
   "shown": "Showing {{shown}} of {{count}}.",
   "more": "Show more",
+  "information": "About this study",
   "consentTitle": "Sharing",
   "consentText": "Your donation is locked on this computer with the study's key before it is sent, so only the researchers of this study can open it. The server that stores it cannot. You can withdraw it later from this page; the researchers then can no longer open it.",
   "agree": "I have looked at what will be shared, and I want to share it with the researchers.",

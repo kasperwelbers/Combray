@@ -144,6 +144,10 @@ describe('donation envelopes', () => {
     expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: -1, field: 'f', path: [], value: 1 }] }))).toThrow('invalid value');
     expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: 0, field: 'f', path: [], value: { x: 1 } }] }))).toThrow('invalid value');
     expect(() => decodePayload(bytes({ ...base, tables: [{ id: 't', name: 'T', columns: [] }] }))).toThrow('invalid table');
+    const consent = { language: 'nl', information: 'Over het onderzoek', statements: ['Ik ben 16 of ouder.'] };
+    expect(decodePayload(bytes({ ...base, consent })).consent).toEqual(consent);
+    expect(() => decodePayload(bytes({ ...base, consent: { language: 'nl', statements: [1] } }))).toThrow('invalid consent');
+    expect(() => decodePayload(bytes({ ...base, consent: { statements: [] } }))).toThrow('invalid consent');
   });
 
   it('refuses tampering, truncation, the wrong key and the wrong donation', async () => {

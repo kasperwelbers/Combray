@@ -242,7 +242,6 @@
     "saveFailed": "Saving did not work. Please try again.",
     "nameRequired": "Give the project a name, in English or Dutch.",
     "detailsInvalid": "Something here is not accepted. Check the names and the id pattern (no repeated groups such as (a+)+).",
-    "consentSoon": "Here you will write what participants read about the project, and the informed consent form they agree to. This comes next.",
     "platformsTitle": "Platforms",
     "platformsIntro": "The platforms participants can add data from. Per platform, you decide which parts participants see and which they are asked to donate.",
     "addPlatform": "Add a platform",
@@ -275,11 +274,26 @@
       "platforms": "Add the platforms",
       "platformsHelp": "The platforms participants can share data from, and per platform what they see and are asked to donate.",
       "platformsAction": "Open the data explorer",
+      "consent": "Write the information and consent",
+      "consentHelp": "What participants read about the study, and the statements they agree to before they share their data.",
+      "consentAction": "Open information & consent",
       "publish": "Publish",
       "publishHelp": "Participants can open the project once it is published. Publishing happens on the key page, with your passkey, because it changes what participants see and are asked to donate.",
       "publishAction": "Publish on the key page",
       "doneLabel": "done"
     }
+  },
+  "consent": {
+    "intro": "What participants read about the study, and agree to, before they share their data. They see it on the page where they review and share what you ask for. Changes reach participants when you publish.",
+    "information": "Information for participants",
+    "informationHelp": "Who you are, why you do this study, what you ask for and what you do with it, how long you keep it, that taking part is voluntary and how to withdraw, and whom to contact with questions or complaints. Plain text; an empty line starts a new paragraph. Your ethics committee may ask for specific wording.",
+    "statements": "Consent statements",
+    "statementsHelp": "Statements participants tick, every one, before they can share, such as \"I have read the information about this study\" or \"I am 16 or older\". The donation records the statements as the participant saw them.",
+    "add": "Add a statement",
+    "remove": "Remove this statement",
+    "always": "Participants always also confirm that they have looked at what will be shared, and see how their donation is encrypted and how to withdraw it.",
+    "save": "Save information and consent",
+    "invalid": "This could not be saved: a statement is empty in both languages, or a text is too long."
   },
   "newProject": {
     "title": "New project",

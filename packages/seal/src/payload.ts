@@ -43,6 +43,16 @@ export interface DonationPayload {
   values: DonatedValue[];
   /** Answers to the project's questions, by question id. */
   answers?: Record<string, Cell>;
+  /** What the participant read and agreed to, as they saw it. */
+  consent?: DonationConsent;
+}
+
+/** The study's information and consent statements, in the language the participant read them. */
+export interface DonationConsent {
+  language: string;
+  information?: string;
+  /** Every statement the participant ticked: all of the study's, and that they reviewed what is shared. */
+  statements: string[];
 }
 
 export function encodePayload(payload: DonationPayload): Uint8Array<ArrayBuffer> {
@@ -83,6 +93,13 @@ export function decodePayload(bytes: Uint8Array): DonationPayload {
   if (!value.values.every(validValue)) throw new Error('invalid value in payload');
   if (value.answers !== undefined && (typeof value.answers !== 'object' || !Object.values(value.answers).every(isCell))) {
     throw new Error('invalid answers in payload');
+  }
+  const c = value.consent;
+  if (
+    c !== undefined &&
+    (typeof c !== 'object' || c === null || !isText(c.language) || (c.information !== undefined && !isText(c.information)) || !Array.isArray(c.statements) || !c.statements.every(isText))
+  ) {
+    throw new Error('invalid consent in payload');
   }
   return value as DonationPayload;
 }

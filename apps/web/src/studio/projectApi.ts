@@ -7,6 +7,8 @@ export interface ProjectDetails {
   name: Localized;
   description?: Localized;
   participants: { mode: 'anonymous' | 'optional' | 'required'; pattern?: string };
+  /** What participants read and agree to before donating. */
+  consent?: { information?: Localized; statements?: Localized[] };
 }
 
 export interface PlatformSummary {

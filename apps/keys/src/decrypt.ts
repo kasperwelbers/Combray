@@ -152,6 +152,13 @@ export function answersCsv(opened: Opened[]): string | undefined {
   return [['donation', 'day', ...questions].map(csvCell).join(','), ...lines].join('\r\n') + '\r\n';
 }
 
+/** What each participant agreed to: one row per statement, in the language they read it in. */
+export function consentCsv(opened: Opened[]): string | undefined {
+  const rows = opened.flatMap((d) => (d.payload.consent?.statements ?? []).map((s) => [d.id, d.day, d.payload.consent!.language, s]));
+  if (rows.length === 0) return undefined;
+  return [['donation', 'day', 'language', 'statement'], ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
 export function safeFileName(name: string): string {
   return name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 60) || 'table';
 }

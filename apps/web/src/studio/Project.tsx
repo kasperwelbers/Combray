@@ -74,7 +74,7 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
       <h1>{english(draft.details.name) || draft.id}</h1>
       {account}
       {info?.key && !info.has_access && <p className="message">{t('studio.project.noAccess')}</p>}
-      {info && <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} />}
+      {info && <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} onConsent={() => open('consent')} />}
       <nav className="tabs" aria-label={t('studio.project.tabsLabel')}>
         {STUDIO_TABS.map((key) => (
           <a
@@ -93,7 +93,7 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
       </nav>
       <div className="tab-panel">
         {tab === 'details' && <DetailsTab draft={draft} onSaved={refresh} />}
-        {tab === 'consent' && <ConsentTab />}
+        {tab === 'consent' && <ConsentTab draft={draft} onSaved={refresh} />}
         {tab === 'data' && <DataExplorer draft={draft} onChanged={refresh} />}
         {tab === 'researchers' && <ResearchersTab projectId={projectId} keysUrl={keysUrl} />}
         {tab === 'donations' && <DonationsTab projectId={projectId} />}
@@ -106,7 +106,19 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
  * What a project needs before participants can use it, in order, with what is done. Once all is
  * done, only a note about unpublished changes remains.
  */
-function SetupSteps({ draft, info, keysUrl, onData }: { draft: Draft; info: ProjectInfo; keysUrl?: string; onData: () => void }) {
+function SetupSteps({
+  draft,
+  info,
+  keysUrl,
+  onData,
+  onConsent,
+}: {
+  draft: Draft;
+  info: ProjectInfo;
+  keysUrl?: string;
+  onData: () => void;
+  onConsent: () => void;
+}) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const steps = [
     { key: 'encryptionKey', done: info.key !== null, action: keysUrl ? <a href={keysUrl}>{t('studio.project.steps.encryptionKeyAction')}</a> : null },
@@ -116,6 +128,15 @@ function SetupSteps({ draft, info, keysUrl, onData }: { draft: Draft; info: Proj
       action: (
         <button type="button" className="link-button" onClick={onData}>
           {t('studio.project.steps.platformsAction')}
+        </button>
+      ),
+    },
+    {
+      key: 'consent',
+      done: draft.details.consent?.information !== undefined,
+      action: (
+        <button type="button" className="link-button" onClick={onConsent}>
+          {t('studio.project.steps.consentAction')}
         </button>
       ),
     },
@@ -172,10 +193,22 @@ function PublishBar({ draft, keysUrl }: { draft: Draft; keysUrl?: string }) {
 
 // Details.
 
+/** The text of a localized value in one language (a plain string counts as English). */
+const textIn = (value: Localized | undefined, language: string) =>
+  typeof value === 'string' ? (language === 'en' ? value : '') : (value?.[language] ?? '');
+
+/** English and Dutch text as one value, without empty languages; undefined when both are empty. */
+const both = (en: string, nl: string): Localized | undefined => {
+  const value: Record<string, string> = {};
+  if (en.trim()) value.en = en.trim();
+  if (nl.trim()) value.nl = nl.trim();
+  return Object.keys(value).length > 0 ? value : undefined;
+};
+
 function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const d = draft.details;
-  const text = (value: Localized | undefined, language: string) => (typeof value === 'string' ? (language === 'en' ? value : '') : (value?.[language] ?? ''));
+  const text = textIn;
   const [nameEn, setNameEn] = useState(text(d.name, 'en'));
   const [nameNl, setNameNl] = useState(text(d.name, 'nl'));
   const [descEn, setDescEn] = useState(text(d.description, 'en'));
@@ -183,13 +216,6 @@ function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
   const [mode, setMode] = useState(d.participants.mode);
   const [pattern, setPattern] = useState(d.participants.pattern ?? '');
   const [status, setStatus] = useState<{ text: string; error?: boolean }>();
-
-  const both = (en: string, nl: string): Localized | undefined => {
-    const value: Record<string, string> = {};
-    if (en.trim()) value.en = en.trim();
-    if (nl.trim()) value.nl = nl.trim();
-    return Object.keys(value).length > 0 ? value : undefined;
-  };
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -200,6 +226,7 @@ function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
       name,
       ...(description ? { description } : {}),
       participants: { mode, ...(mode !== 'anonymous' && pattern.trim() ? { pattern: pattern.trim() } : {}) },
+      ...(d.consent ? { consent: d.consent } : {}),
     };
     try {
       await projectApi.saveDetails(draft.id, details);
@@ -271,15 +298,92 @@ function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
 
 // Information and consent.
 
-function ConsentTab() {
+function ConsentTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const consent = draft.details.consent;
+  const [infoEn, setInfoEn] = useState(textIn(consent?.information, 'en'));
+  const [infoNl, setInfoNl] = useState(textIn(consent?.information, 'nl'));
+  const [statements, setStatements] = useState(() => (consent?.statements ?? []).map((s) => ({ en: textIn(s, 'en'), nl: textIn(s, 'nl') })));
+  const [status, setStatus] = useState<{ text: string; error?: boolean }>();
+
+  const change = (i: number, language: 'en' | 'nl', value: string) =>
+    setStatements((list) => list.map((s, j) => (j === i ? { ...s, [language]: value } : s)));
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    const information = both(infoEn, infoNl);
+    const kept = statements.flatMap((s) => {
+      const value = both(s.en, s.nl);
+      return value ? [value] : [];
+    });
+    const next = { ...(information ? { information } : {}), ...(kept.length > 0 ? { statements: kept } : {}) };
+    const { consent: _old, ...details } = draft.details;
+    try {
+      await projectApi.saveDetails(draft.id, { ...details, ...(Object.keys(next).length > 0 ? { consent: next } : {}) });
+      setStatus({ text: t('studio.project.saved') });
+      onSaved();
+    } catch (error) {
+      setStatus({ text: error instanceof ApiFailure && error.status === 400 ? t('studio.consent.invalid') : t('studio.project.saveFailed'), error: true });
+    }
+  }
+
   return (
-    <section className="card">
+    <form className="card project-form" onSubmit={(e) => void save(e)}>
       <h2>{t('studio.project.tab.consent')}</h2>
-      <p>{t('studio.project.consentSoon')}</p>
-    </section>
+      <p className="meta">{t('studio.consent.intro')}</p>
+      <fieldset>
+        <legend>{t('studio.consent.information')}</legend>
+        <p className="meta">{t('studio.consent.informationHelp')}</p>
+        <label className="field">
+          English
+          <textarea rows={10} value={infoEn} onChange={(e) => setInfoEn(e.target.value)} />
+        </label>
+        <label className="field">
+          Nederlands
+          <textarea rows={10} value={infoNl} onChange={(e) => setInfoNl(e.target.value)} />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>{t('studio.consent.statements')}</legend>
+        <p className="meta">{t('studio.consent.statementsHelp')}</p>
+        <ol className="statement-list">
+          {statements.map((s, i) => (
+            <li key={i}>
+              <label className="field">
+                English
+                <input value={s.en} onChange={(e) => change(i, 'en', e.target.value)} />
+              </label>
+              <label className="field">
+                Nederlands
+                <input value={s.nl} onChange={(e) => change(i, 'nl', e.target.value)} />
+              </label>
+              <button type="button" className="link-button" onClick={() => setStatements((list) => list.filter((_, j) => j !== i))}>
+                {t('studio.consent.remove')}
+              </button>
+            </li>
+          ))}
+        </ol>
+        {statements.length < MAX_STATEMENTS && (
+          <button type="button" className="button quiet" onClick={() => setStatements((list) => [...list, { en: '', nl: '' }])}>
+            {t('studio.consent.add')}
+          </button>
+        )}
+      </fieldset>
+      <p className="meta">{t('studio.consent.always')}</p>
+      {status && (
+        <p className={`message${status.error ? ' error' : ''}`} role={status.error ? 'alert' : 'status'}>
+          {status.text}
+        </p>
+      )}
+      <button className="button" type="submit">
+        {t('studio.consent.save')}
+      </button>
+    </form>
   );
 }
+
+/** As on the server: participants tick every statement, so a few clear ones work best. */
+const MAX_STATEMENTS = 10;
 
 // The data explorer.
 

@@ -11,6 +11,7 @@ import type {
   UploadProblem,
   ValueType,
 } from '@combray/core';
+import type { DonationConsent } from '@combray/seal';
 
 /** An imported archive, folder or file, stored as its tree. Encrypted; never sent anywhere. */
 export interface SourceManifest {
@@ -297,9 +298,16 @@ export interface DonationTable {
   leftOut: number;
 }
 
+/** What the study tells participants, and asks them to agree to, before they donate. */
+export interface StudyConsent {
+  information?: Localized;
+  statements?: Localized[];
+}
+
 /** What a donation would hold right now. */
 export interface DonationOverview {
   tables: DonationTable[];
+  consent?: StudyConsent;
   /** Rows in the donation, and rows left out. */
   rows: number;
   leftOut: number;
@@ -393,7 +401,7 @@ export interface DataApi {
    * Encrypt the reviewed donation to the study's key and send it. `pin` is the key fingerprint
    * from the study link, if there was one; the key must match it.
    */
-  donate(pin: string | undefined): Promise<DonateResult>;
+  donate(pin: string | undefined, consent: DonationConsent): Promise<DonateResult>;
   /** Donations sent from this device, newest first. */
   donations(): Promise<DonationReceipt[]>;
   /** Withdraw a donation: the server forgets its key, so nobody can open it any more. */

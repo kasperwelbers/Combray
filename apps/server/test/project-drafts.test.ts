@@ -103,6 +103,11 @@ describe('the draft', () => {
       { name: 'Birch', participants: { mode: 'sometimes' } },
       { name: 'Birch', participants: { pattern: '(a+)+' } },
       { name: { 'not a language': 'x' } },
+      { name: 'Birch', consent: 'I agree' },
+      { name: 'Birch', consent: { statements: 'I agree' } },
+      { name: 'Birch', consent: { statements: [''] } },
+      { name: 'Birch', consent: { statements: Array.from({ length: 11 }, (_, i) => `Statement ${i}`) } },
+      { name: 'Birch', consent: { information: { en: 'x'.repeat(20_001) } } },
     ]) {
       expect((await s.main.put('/api/v1/projects/birch/draft/details', body, ada)).status, JSON.stringify(body)).toBe(400);
     }
@@ -128,7 +133,12 @@ describe('publishing', () => {
     const ada = await setUpResearcher(s, ADA);
     const studioSession = await studioSignIn(s, ada);
     await s.main.post('/api/v1/projects', { id: 'birch', name: 'Birch study' }, studioSession);
-    await s.main.put('/api/v1/projects/birch/draft/details', { name: 'Birch study', participants: { mode: 'required', pattern: 'B-[0-9]{3}' } }, studioSession);
+    const consent = {
+      information: { en: 'We study memories.\n\nWrite to us at birch@uni.example.', nl: 'We onderzoeken herinneringen.' },
+      statements: [{ en: 'I am 16 or older.', nl: 'Ik ben 16 of ouder.' }, 'I have read the information.'],
+    };
+    await s.main.put('/api/v1/projects/birch/draft/details', { name: 'Birch study', participants: { mode: 'required', pattern: 'B-[0-9]{3}' }, consent }, studioSession);
+    expect((await s.main.get('/api/v1/projects/birch/draft', studioSession)).json.details.consent).toEqual(consent);
     await s.main.put('/api/v1/projects/birch/draft/platforms/tiktok', { name: 'TikTok', pack: 'tiktok', structure: STRUCTURE, importer: IMPORTER }, studioSession);
     // Publishing needs access to the project's encryption key, which Ada creates first.
     expect((await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session)).status).toBe(403);
@@ -149,6 +159,7 @@ describe('publishing', () => {
       id: 'birch',
       name: 'Birch study',
       participants: { mode: 'required' },
+      consent,
       uploads: [{ id: 'tiktok', name: 'TikTok', pack: 'tiktok', structure: STRUCTURE, importer: IMPORTER }],
     });
     expect(config.text).not.toContain('B-[0-9]');

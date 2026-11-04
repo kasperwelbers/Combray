@@ -133,6 +133,11 @@ async function setUp(page: Page, email: string): Promise<string> {
   return recovery;
 }
 
+const CONSENT = {
+  information: { en: 'We study how people remember.\n\nQuestions? Write to willow@uni.example.' },
+  statements: [{ en: 'I am 16 or older.' }],
+};
+
 /** A Takeout upload point that asks for everything the pack shows. */
 function takeoutAskingAll() {
   const pack = join(repo, 'importers/google-takeout');
@@ -149,7 +154,7 @@ describe.skipIf(!enabled)('key page', () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'combray-e2e-'));
     mkdirSync(join(dir, 'data'), { recursive: true });
-    writeFileSync(join(dir, 'willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' }, uploads: [takeoutAskingAll()] }));
+    writeFileSync(join(dir, 'willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' }, consent: CONSENT, uploads: [takeoutAskingAll()] }));
     cli('project', 'import', join(dir, 'willow.json'));
     cli('researcher', 'add', 'ada@uni.example');
     cli('project', 'add-researcher', 'willow', 'ada@uni.example');
@@ -246,7 +251,11 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByLabel('Leave out everything that contains a word, a name or a site').fill('madeleines');
     await page.getByRole('button', { name: 'Leave out', exact: true }).click();
     await page.getByText(/^Left out \d+ rows? that contains? “madeleines”/).waitFor();
+    await page.getByText('Questions? Write to willow@uni.example.').waitFor();
     await page.getByLabel('I have looked at what will be shared').check();
+    // Every statement of the study must be ticked too.
+    expect(await page.getByRole('button', { name: 'Share', exact: true }).isDisabled()).toBe(true);
+    await page.getByLabel('I am 16 or older.').check();
     await page.getByRole('button', { name: 'Share', exact: true }).click();
     await page.getByRole('heading', { name: 'Thank you for sharing!' }).waitFor();
     expect(await page.locator('.receipt-code code').textContent()).toMatch(/^[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]+$/);
@@ -263,6 +272,8 @@ describe.skipIf(!enabled)('key page', () => {
     await ada.page.getByText('Opened 2 donation(s).').waitFor();
     await expect.poll(() => Object.keys(downloads)).toContain('willow-YouTube-watch-history.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-values.csv');
+    await expect.poll(() => Object.keys(downloads)).toContain('willow-consent.csv');
+    expect(downloads['willow-consent.csv']).toContain('en,I am 16 or older.');
     expect(downloads['willow-YouTube-watch-history.csv']).toContain('Lime blossom tea');
     expect(downloads['willow-values.csv']!.toLowerCase()).not.toContain('madeleines');
 

@@ -115,10 +115,33 @@ function treeText(value: unknown): string | null {
 
 const parse = (text: string | null): unknown => (text === null ? null : JSON.parse(text));
 
+/** What participants read, and agree to, before they donate. */
+export interface Consent {
+  /** About the study: who, why, what happens with the data, how to withdraw, whom to contact. */
+  information?: Localized;
+  /** Statements participants tick, every one, before they can donate. */
+  statements?: Localized[];
+}
+
+export const MAX_STATEMENTS = 10;
+
 export interface Details {
   name: Localized;
   description?: Localized;
   participants: { mode: ParticipantMode; pattern?: string };
+  consent?: Consent;
+}
+
+function checkConsent(value: unknown): Consent | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) return fail('invalid');
+  const c = value as Record<string, unknown>;
+  const information = localized(c.information, false);
+  const statements = c.statements ?? [];
+  if (!Array.isArray(statements) || statements.length > MAX_STATEMENTS) return fail('invalid');
+  const checked = statements.map((s) => localized(s)!);
+  if (information === undefined && checked.length === 0) return undefined;
+  return { ...(information !== undefined ? { information } : {}), ...(checked.length > 0 ? { statements: checked } : {}) };
 }
 
 export interface PlatformDraft {
@@ -179,10 +202,12 @@ export function checkDetails(value: Record<string, unknown>): Details {
   const pattern = participants.pattern;
   if (pattern !== undefined && pattern !== null && (typeof pattern !== 'string' || !safePattern(pattern))) fail('invalid');
   const description = localized(value.description, false);
+  const consent = checkConsent(value.consent);
   return {
     name: localized(value.name)!,
     ...(description !== undefined ? { description } : {}),
     participants: { mode: mode as ParticipantMode, ...(typeof pattern === 'string' && pattern ? { pattern } : {}) },
+    ...(consent ? { consent } : {}),
   };
 }
 
@@ -232,6 +257,7 @@ export class Projects {
       name: JSON.parse(row.name) as Localized,
       ...(row.description ? { description: JSON.parse(row.description) as Localized } : {}),
       participants: { mode: row.participantsMode, ...(row.participantsPattern ? { pattern: row.participantsPattern } : {}) },
+      ...(row.consent ? { consent: JSON.parse(row.consent) as Consent } : {}),
     };
   }
 
@@ -268,6 +294,7 @@ export class Projects {
         description: d.description !== undefined ? JSON.stringify(d.description) : null,
         participantsMode: d.participants.mode,
         participantsPattern: d.participants.pattern ?? null,
+        consent: d.consent ? JSON.stringify(d.consent) : null,
       })
       .where(eq(projectDetails.projectId, id))
       .run();
@@ -443,6 +470,7 @@ export class Projects {
       name: summary.details.name,
       ...(summary.details.description !== undefined ? { description: summary.details.description } : {}),
       participants: summary.details.participants,
+      ...(summary.details.consent ? { consent: summary.details.consent } : {}),
       uploads: summary.platforms.map((p) => {
         const draft = this.platform(id, p.id);
         return {
@@ -497,6 +525,7 @@ export class Projects {
         description: details.description !== undefined ? JSON.stringify(details.description) : null,
         participantsMode: details.participants.mode,
         participantsPattern: details.participants.pattern ?? null,
+        consent: details.consent ? JSON.stringify(details.consent) : null,
       };
       tx.insert(projectDetails).values({ projectId: id, ...row }).onConflictDoUpdate({ target: projectDetails.projectId, set: row }).run();
       tx.delete(projectPlatforms).where(eq(projectPlatforms.projectId, id)).run();

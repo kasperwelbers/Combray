@@ -7,7 +7,23 @@
   "participants": {
     "mode": "optional"
   },
-  "note": "An example project for development: import it with `pnpm admin project import deploy/examples/projects/*.json`, which creates the project and publishes it. Researchers edit projects in the studio. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match, such as W-[0-9]{4}; no quantified groups, at most two * or +, 100 characters) is optional and never sent to participants. uploads lists the platforms; each starts from a bundled platform pack (pack), or carries the project's own tree (structure and importer, as the studio saves them).",
+  "consent": {
+    "information": {
+      "en": "This is an example study, made to try Combray. The researchers of the Combray project run it.\n\nWe ask for your YouTube watch history and Google searches, to see how people remember what they watched and looked for. Only what you choose to share is sent, encrypted so that only the researchers can open it.\n\nTaking part is voluntary. You can withdraw your donation on this page at any time. Questions? Ask the researcher who gave you the link.",
+      "nl": "Dit is een voorbeeldonderzoek, gemaakt om Combray uit te proberen. De onderzoekers van het Combray-project voeren het uit.\n\nWe vragen om je YouTube-kijkgeschiedenis en Google-zoekopdrachten, om te zien hoe mensen zich herinneren wat ze bekeken en zochten. Alleen wat je kiest te delen wordt verstuurd, versleuteld zodat alleen de onderzoekers het kunnen openen.\n\nMeedoen is vrijwillig. Je kunt je donatie op elk moment op deze pagina intrekken. Vragen? Stel ze aan de onderzoeker die je de link gaf."
+    },
+    "statements": [
+      {
+        "en": "I have read the information about this study.",
+        "nl": "Ik heb de informatie over dit onderzoek gelezen."
+      },
+      {
+        "en": "I am 16 or older.",
+        "nl": "Ik ben 16 jaar of ouder."
+      }
+    ]
+  },
+  "note": "An example project for development: import it with `pnpm admin project import deploy/examples/projects/*.json`, which creates the project and publishes it. Researchers edit projects in the studio. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match, such as W-[0-9]{4}; no quantified groups, at most two * or +, 100 characters) is optional and never sent to participants. uploads lists the platforms; each starts from a bundled platform pack (pack), or carries the project's own tree (structure and importer, as the studio saves them). consent (optional) holds the information participants read before donating (plain text, an empty line between paragraphs) and up to 10 statements they must all tick.",
   "uploads": [
     {
       "id": "takeout",

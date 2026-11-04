@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { answersCsv, csvCell, type Opened, safeFileName, toCsv, valuesCsv } from '../src/decrypt';
+import { answersCsv, consentCsv, csvCell, type Opened, safeFileName, toCsv, valuesCsv } from '../src/decrypt';
 import { assertionJson, creationOptions, registrationJson } from '../src/passkey';
 
 const donation = (id: string, payload: Partial<Opened['payload']> = {}, answers?: Record<string, string>): Opened => ({
@@ -66,6 +66,15 @@ describe('CSV export', () => {
     const csv = answersCsv([donation('d1', {}, { q1: 'yes' }), donation('d2', {}, { q2: '=no' })]);
     expect(csv).toBe(`donation,day,q1,q2\r\nd1,2026-11-01,yes,\r\nd2,2026-11-01,,'=no\r\n`);
     expect(answersCsv([donation('d1')])).toBeUndefined();
+  });
+
+  it('writes one consent row per statement agreed to, in the language it was read in', () => {
+    const csv = consentCsv([
+      donation('d1', { consent: { language: 'nl', statements: ['Ik ben 16 of ouder.', 'Ik heb bekeken wat ik deel.'] } }),
+      donation('d2'),
+    ]);
+    expect(csv).toBe('donation,day,language,statement\r\nd1,2026-11-01,nl,Ik ben 16 of ouder.\r\nd1,2026-11-01,nl,Ik heb bekeken wat ik deel.\r\n');
+    expect(consentCsv([donation('d2')])).toBeUndefined();
   });
 
   it('makes safe file names', () => {

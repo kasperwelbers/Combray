@@ -135,6 +135,8 @@ export const projectDetails = sqliteTable('project_details', {
   participantsMode: text('participants_mode', { enum: ['anonymous', 'optional', 'required'] }).notNull().default('optional'),
   /** A regular expression participant ids must match (never sent to participants). */
   participantsPattern: text('participants_pattern'),
+  /** Information for participants and the statements they agree to before donating (JSON). */
+  consent: text('consent'),
 });
 
 /** The draft's platforms (upload points): each with the project tree participants' data is read with. */

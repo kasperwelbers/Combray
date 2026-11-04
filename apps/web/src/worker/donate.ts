@@ -20,10 +20,10 @@ import {
   type Localized,
   type TreeNode,
 } from '@combray/core';
-import { donationRequest, encodePayload, fingerprint, fromBase64Url, sealDonation } from '@combray/seal';
+import { donationRequest, encodePayload, fingerprint, fromBase64Url, sealDonation, type DonationConsent } from '@combray/seal';
 
 import { uploadPoints } from '../projectConfig';
-import type { DonateResult, DonationOverview, DonationRow, DonationTable, Page, UploadPoint } from './api';
+import type { DonateResult, DonationOverview, DonationRow, DonationTable, Page, StudyConsent, UploadPoint } from './api';
 import type { PointProject } from './derived';
 
 /** The donation from one upload, with a stable key per row and names for people. */
@@ -67,8 +67,12 @@ export class Review {
   private readonly cells = new Map<string, Record<string, string[]>>();
   private readonly names = new Map<string, { name: Localized; fields: Map<string, Localized> }>();
 
-  constructor(parts: UploadDonation[], settings: string) {
+  /** What the study tells participants and asks them to agree to. */
+  readonly consent: StudyConsent | undefined;
+
+  constructor(parts: UploadDonation[], settings: string, consent?: StudyConsent) {
     this.settings = settings;
+    this.consent = consent;
     this.content = combineDonations(parts.map((p) => p.content));
     // `combineDonations` keeps the rows in order, upload after upload.
     const keys = parts.flatMap((p) => p.keys);
@@ -112,7 +116,7 @@ export class Review {
         leftOut: rows.filter((r) => dropped.has(rowId(r.table, r.row))).length,
       };
     });
-    return { tables, rows: this.content.rows.length, leftOut: dropped.size };
+    return { tables, rows: this.content.rows.length, leftOut: dropped.size, ...(this.consent ? { consent: this.consent } : {}) };
   }
 
   private matches(row: DonatedRow, query: string): boolean {
@@ -152,8 +156,9 @@ export class Review {
 /** The parts of a study's public config a donation needs. */
 export interface StudySettings {
   points: UploadPoint[];
-  /** The upload points as sent, to tell when they change. */
+  /** The upload points and consent as sent, to tell when they change. */
   settings: string;
+  consent?: StudyConsent;
   key?: { public_key: string; fingerprint: string };
 }
 
@@ -162,11 +167,13 @@ export async function fetchSettings(projectId: string): Promise<StudySettings | 
   try {
     const response = await fetch(`/api/v1/p/${projectId}/config`, { cache: 'no-store', credentials: 'same-origin' });
     if (!response.ok) return undefined;
-    const config = (await response.json()) as { uploads?: unknown; donation_key?: { public_key?: unknown; fingerprint?: unknown } };
+    const config = (await response.json()) as { uploads?: unknown; consent?: unknown; donation_key?: { public_key?: unknown; fingerprint?: unknown } };
     const key = config.donation_key;
+    const consent = studyConsent(config.consent);
     return {
       points: uploadPoints(config.uploads),
-      settings: JSON.stringify(config.uploads ?? null),
+      settings: JSON.stringify([config.uploads ?? null, config.consent ?? null]),
+      ...(consent ? { consent } : {}),
       ...(key && typeof key.public_key === 'string' && typeof key.fingerprint === 'string'
         ? { key: { public_key: key.public_key, fingerprint: key.fingerprint } }
         : {}),
@@ -174,6 +181,19 @@ export async function fetchSettings(projectId: string): Promise<StudySettings | 
   } catch {
     return undefined;
   }
+}
+
+const isLocalized = (v: unknown): v is Localized =>
+  typeof v === 'string' || (typeof v === 'object' && v !== null && !Array.isArray(v) && Object.values(v).every((s) => typeof s === 'string'));
+
+/** The study's information and consent statements from its config, without trusting its shape. */
+export function studyConsent(raw: unknown): StudyConsent | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  const c = raw as Record<string, unknown>;
+  const information = isLocalized(c.information) ? c.information : undefined;
+  const statements = Array.isArray(c.statements) ? c.statements.filter(isLocalized) : [];
+  if (!information && statements.length === 0) return undefined;
+  return { ...(information ? { information } : {}), ...(statements.length > 0 ? { statements } : {}) };
 }
 
 /**
@@ -185,12 +205,13 @@ export async function sendDonation(
   study: StudySettings,
   content: DonationContent,
   pin: string | undefined,
+  consent: DonationConsent,
 ): Promise<DonateResult | { status: 'sent'; donation: string; token: string }> {
   if (!study.key) return { status: 'no-key' };
   const publicKey = fromBase64Url(study.key.public_key);
   const actual = await fingerprint(publicKey);
   if (actual !== study.key.fingerprint || (pin !== undefined && pin !== actual)) return { status: 'wrong-key' };
-  const payload = encodePayload({ format: 'combray-donation/1', tables: content.tables, values: content.values });
+  const payload = encodePayload({ format: 'combray-donation/1', tables: content.tables, values: content.values, consent });
   const sealed = await sealDonation(payload, { projectId, projectPublicKey: publicKey });
   let response: Response;
   try {
