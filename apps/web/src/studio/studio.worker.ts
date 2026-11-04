@@ -11,6 +11,7 @@ import {
   deriveRows,
   defaultRoot,
   deriveTables,
+  groupTables,
   headerNames,
   extractShape,
   normalizeTree,
@@ -107,7 +108,11 @@ const api: StudioApi = {
   },
 
   async preview(projectTree, rowLimit, source) {
-    const tables = deriveTables(projectTree);
+    // Tables of nodes that share a name are one table, as participants see them. Without a
+    // source, the structure only: tables and columns without rows.
+    const ungrouped = deriveTables(projectTree);
+    const rowsOf = source === undefined || !exports.has(source) ? ungrouped.map(() => []) : allRows(projectTree, ungrouped, source);
+    const { tables, rows: derived } = groupTables(ungrouped, rowsOf);
     const out: PreviewTable[] = tables.map((t) => ({
       name: t.name,
       keyed: t.keyed === true,
@@ -119,8 +124,6 @@ const api: StudioApi = {
       rowCount: 0,
       rows: [],
     }));
-    // Without a source, the structure only: tables and columns without rows.
-    const derived = source === undefined || !exports.has(source) ? tables.map(() => []) : allRows(projectTree, tables, source);
     // A first row that holds the column names names them and is not shown as a row (top-level
     // tables, as in the participant client); its nested rows go with it.
     tables.forEach((table, i) => {

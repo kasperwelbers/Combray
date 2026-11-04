@@ -3,9 +3,15 @@ import {
   findPatternProblem,
   getNode,
   isDecidable,
+  isItemNode,
+  isKeysNode,
   isLeaf,
-  type Alias,
-  type Localized,
+  matchOne,
+  matchText,
+  nodesNamed,
+  regexProblem,
+  type Match,
+  type Name,
   type NodePath,
   type ProjectNode,
 } from '@combray/core';
@@ -16,42 +22,56 @@ import { LANGUAGES } from '../i18n';
 import type { FieldValues as Values } from './api';
 import { Conversion } from './Conversion';
 import { FieldValues } from './FieldValues';
-import { displayName, filterColumns, formsTable, type NodePatch } from './model';
+import { displayName, filterColumns, formsTable, nameText, type NodePatch, type RowInfo } from './model';
 import { Help, SectionHead } from './Popover';
 import { RowFilters } from './RowFilters';
 
 export type DetailSection = 'values' | 'name' | 'read' | 'rows' | 'match' | 'platform';
 
+export interface NameActions {
+  set: (path: NodePath, nameId: string | undefined) => void;
+  create: (path: NodePath, text: string) => void;
+  edit: (nameId: string, change: (name: Name) => Name) => void;
+}
+
+export interface MatchActions {
+  add: (path: NodePath, match: Match) => void;
+  remove: (path: NodePath, match: Match) => void;
+  split: (path: NodePath) => void;
+  combine: (paths: NodePath[]) => void;
+}
+
 interface Props {
   tree: ProjectNode;
   path: NodePath;
+  names: Name[];
+  info: Map<ProjectNode, RowInfo>;
   /** The section last looked at, kept from row to row when the next row has it too. */
   section: DetailSection;
   onSection: (section: DetailSection) => void;
   values: Values | undefined;
   hasPackages: boolean;
   onPatch: (path: NodePath, patch: NodePatch) => void;
-  onMerge: (from: NodePath, into: NodePath) => void;
+  onName: NameActions;
+  onMatch: MatchActions;
   onKeysAreData: (path: NodePath) => void;
   onClose: () => void;
 }
 
-function textOf(value: Localized | undefined, language: string): string {
-  if (value === undefined) return '';
-  return typeof value === 'string' ? (language === 'en' ? value : '') : (value[language] ?? '');
-}
-
-/** Set one language of a localized text; empty texts are removed. */
-function withLanguage(value: Localized | undefined, language: string, text: string): Localized | undefined {
-  const base: Record<string, string> =
-    value === undefined ? {} : typeof value === 'string' ? { en: value } : { ...value };
+/** Set one language of a per-language text; empty texts are removed, and so is an empty map. */
+function withLanguage(value: Record<string, string> | undefined, language: string, text: string): Record<string, string> | undefined {
+  const base = { ...value };
   if (text.trim() === '') delete base[language];
   else base[language] = text;
   return Object.keys(base).length > 0 ? base : undefined;
 }
 
-function aliasText(alias: Alias): string {
-  return typeof alias === 'string' ? alias : `/${alias.regex}/${alias.flags ?? ''}`;
+/** A name with one field set, or removed when it is empty. */
+function withField(name: Name, key: 'label' | 'description', value: Record<string, string> | undefined): Name {
+  const out = { ...name };
+  if (value === undefined) delete out[key];
+  else out[key] = value;
+  return out;
 }
 
 /** The sections a node has, in order. */
@@ -82,7 +102,9 @@ export function NodeDetails(props: Props) {
       <div className="node-details-head">
         <div>
           <strong>{name}</strong>
-          {path.length > 0 && <PathToggle text={path.map((n) => displayName(n, t)).join(' / ')} />}
+          {path.length > 0 && (
+            <PathToggle text={path.map((_, i) => displayName(getNode(tree, path.slice(0, i + 1))?.name ?? '', t)).join(' / ')} />
+          )}
           {path.length > 0 && (
             <div className="meta">
               {t(`kind.${node.kind}`)}
@@ -109,7 +131,7 @@ export function NodeDetails(props: Props) {
 
       <div className="details-body">
         {section === 'values' && <FieldValues values={props.values} hasPackages={props.hasPackages} />}
-        {section === 'name' && <NameSection node={node} onPatch={patch} />}
+        {section === 'name' && <NameSection {...props} node={node} />}
         {section === 'read' && (
           <>
             <Conversion node={node} onPatch={patch} />
@@ -127,7 +149,8 @@ export function NodeDetails(props: Props) {
         )}
         {section === 'rows' && (
           <>
-            {node.name === '[*]' && !path.slice(0, -1).some((n) => n === '[*]' || n === '{*}') && (
+            {node.name === '[*]' &&
+              !path.slice(0, -1).some((_, i) => ['[*]', '{*}'].includes(getNode(tree, path.slice(0, i + 1))?.name ?? '')) && (
               <CheckWithHelp
                 checked={node.headerRow === true}
                 onChange={(checked) => patch({ headerRow: checked ? true : undefined })}
@@ -145,18 +168,66 @@ export function NodeDetails(props: Props) {
   );
 }
 
-function NameSection({ node, onPatch }: { node: ProjectNode; onPatch: (patch: NodePatch) => void }) {
+/**
+ * The row's name: what participants see, shared by every row with the same name (ADR 0012).
+ * Rows with one name are one table or column for participants; each keeps its own settings.
+ */
+function NameSection({ tree, path, node, names, onName }: Props & { node: ProjectNode }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const [text, setText] = useState(node.name === '[*]' || node.name === '{*}' ? '' : node.name);
+  const name = node.nameId === undefined ? undefined : names.find((n) => n.id === node.nameId);
   const describable = isLeaf(node) || node.name === '{*}';
+  const others = name ? nodesNamed(tree, name.id).length - 1 : 0;
+  const choose = (
+    <label className="field compact">
+      <span>{name ? t('studio.name.useOther') : t('studio.name.useExisting')}</span>
+      <select value="" onChange={(e) => e.target.value && onName.set(path, e.target.value)}>
+        <option value="">{t('studio.chooseNode')}</option>
+        {names
+          .filter((n) => n.id !== name?.id)
+          .map((n) => (
+            <option key={n.id} value={n.id}>
+              {nameText(n)}
+            </option>
+          ))}
+      </select>
+    </label>
+  );
+
+  if (!name) {
+    return (
+      <>
+        <SectionHead title={t('studio.name.title')} help={`${t('studio.name.help')}${formsTable(node) ? ` ${t('studio.tableHelp')}` : ''}`} />
+        <form
+          className="alias-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onName.create(path, text);
+          }}
+        >
+          <input aria-label={t('studio.name.new')} value={text} placeholder={t('studio.name.new')} onChange={(e) => setText(e.target.value)} />
+          <button className="button quiet" type="submit" disabled={text.trim() === ''}>
+            {t('studio.name.give')}
+          </button>
+        </form>
+        {names.length > 0 && choose}
+      </>
+    );
+  }
+
   return (
     <>
-      <SectionHead title={t('studio.label')} help={`${t('studio.labelHelp')}${formsTable(node) ? ` ${t('studio.tableHelp')}` : ''}`} />
+      <SectionHead title={t('studio.name.title')} help={`${t('studio.name.help')}${formsTable(node) ? ` ${t('studio.tableHelp')}` : ''}`} />
+      {others > 0 && <p className="meta">{t('studio.name.shared', { count: others })}</p>}
       {LANGUAGES.map((language) => (
         <label key={language} className="field compact">
           <span>{t(`studio.language.${language}`)}</span>
           <input
-            value={textOf(node.label, language)}
-            onChange={(e) => onPatch({ label: withLanguage(node.label, language, e.target.value) })}
+            value={language === 'en' ? name.text : (name.label?.[language] ?? '')}
+            onChange={(e) => {
+              const value = e.target.value;
+              onName.edit(name.id, (n) => (language === 'en' ? { ...n, text: value } : withField(n, 'label', withLanguage(n.label, language, value))));
+            }}
           />
         </label>
       ))}
@@ -168,13 +239,20 @@ function NameSection({ node, onPatch }: { node: ProjectNode; onPatch: (patch: No
               <span>{t(`studio.language.${language}`)}</span>
               <textarea
                 rows={2}
-                value={textOf(node.description, language)}
-                onChange={(e) => onPatch({ description: withLanguage(node.description, language, e.target.value) })}
+                value={name.description?.[language] ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  onName.edit(name.id, (n) => withField(n, 'description', withLanguage(n.description, language, value)));
+                }}
               />
             </label>
           ))}
         </>
       )}
+      {names.length > 1 && choose}
+      <button type="button" className="link-button" onClick={() => onName.set(path, undefined)}>
+        {t('studio.name.remove')}
+      </button>
     </>
   );
 }
@@ -198,37 +276,115 @@ function NewChildrenSetting({ tree, path, node, onPatch }: { tree: ProjectNode; 
   );
 }
 
-function MatchSection({ tree, path, node, onPatch, onMerge, onKeysAreData }: Props & { node: ProjectNode }) {
+/**
+ * How the row finds its data: its matches (exact keys, or regular expressions), and joining or
+ * splitting rows (ADR 0012). Every match is tested against the keys seen, so a researcher sees
+ * what each one covers.
+ */
+function MatchSection({ tree, path, node, info, onPatch, onMatch, onKeysAreData }: Props & { node: ProjectNode }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const [alias, setAlias] = useState('');
+  const [text, setText] = useState('');
   const [regex, setRegex] = useState(false);
-  const [aliasError, setAliasError] = useState(false);
-  const [mergeTarget, setMergeTarget] = useState('');
+  const [problem, setProblem] = useState<string>();
+  const [combineWith, setCombineWith] = useState('');
   const parent = getNode(tree, path.slice(0, -1));
-  const siblings = (parent?.children ?? []).filter((c) => c !== node && c.kind === node.kind);
+  const positional = isItemNode(node) || isKeysNode(node);
+  const siblings = positional ? [] : (parent?.children ?? []).filter((c) => c !== node && c.kind === node.kind && !isItemNode(c) && !isKeysNode(c));
   const patch = (p: NodePatch) => onPatch(path, p);
+  const keys = node.keys ?? [];
+  const notes = info.get(node);
 
-  function addAlias(event: FormEvent) {
+  function add(event: FormEvent) {
     event.preventDefault();
-    const text = alias.trim();
-    if (text === '') return;
-    let next: Alias = text;
-    if (regex) {
-      try {
-        new RegExp(text);
-      } catch {
-        setAliasError(true);
-        return;
-      }
-      next = { regex: text };
-    }
-    setAliasError(false);
-    patch({ aliases: [...(node.aliases ?? []), next] });
-    setAlias('');
+    const value = text.trim();
+    if (value === '') return;
+    const found = regex ? regexProblem(value) : undefined;
+    setProblem(found);
+    if (found) return;
+    onMatch.add(path, regex ? { regex: value } : value);
+    setText('');
   }
 
   return (
     <>
+      {!positional && (
+        <>
+          <SectionHead title={t('studio.match.title')} help={t('studio.match.help')} />
+          {node.virtual && <p className="meta">{t('studio.match.virtual')}</p>}
+          <ul className="alias-list">
+            {node.match.map((m) => {
+              const covers = keys.filter((k) => matchOne(m, k));
+              return (
+                <li key={matchText(m)}>
+                  <code>{matchText(m)}</code>
+                  {typeof m !== 'string' && (
+                    <span className="meta"> {covers.length > 0 ? t('studio.match.covers', { keys: covers.join(', ') }) : t('studio.match.coversNothing')}</span>
+                  )}
+                  {!node.virtual && (
+                    <button type="button" className="link-button" onClick={() => onMatch.remove(path, m)}>
+                      {t('studio.remove')}
+                      <span className="visually-hidden"> {matchText(m)}</span>
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <form className="alias-form" onSubmit={add}>
+            <input aria-label={t('studio.match.new')} value={text} placeholder={t('studio.match.new')} onChange={(e) => setText(e.target.value)} />
+            <label className="check">
+              <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
+              {t('studio.regex')}
+            </label>
+            <button className="button quiet" type="submit">
+              {t('studio.add')}
+            </button>
+          </form>
+          {problem && (
+            <p className="message error" role="alert">
+              {t('studio.match.bad', { problem })}
+            </p>
+          )}
+          {keys.length > 1 && (
+            <div className="section-head check-row">
+              <span className="meta">{t('studio.match.keys', { count: keys.length, keys: keys.join(', ') })}</span>
+              <button type="button" className="button quiet" onClick={() => onMatch.split(path)}>
+                {t('studio.match.split')}
+              </button>
+            </div>
+          )}
+          {notes?.conflicts && <p className="message error">{t('studio.conflictHelp')}</p>}
+          {notes?.alsoMatchedBy && <p className="meta">{t('studio.match.shared', { names: notes.alsoMatchedBy.join(', ') })}</p>}
+        </>
+      )}
+
+      {siblings.length > 0 && (
+        <>
+          <SectionHead title={t('studio.combine.title')} help={t('studio.combine.help')} />
+          <div className="alias-form">
+            <select aria-label={t('studio.combine.with')} value={combineWith} onChange={(e) => setCombineWith(e.target.value)}>
+              <option value="">{t('studio.chooseNode')}</option>
+              {siblings.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="button quiet"
+              type="button"
+              disabled={combineWith === ''}
+              onClick={() => {
+                onMatch.combine([path, [...path.slice(0, -1), combineWith]]);
+                setCombineWith('');
+              }}
+            >
+              {t('studio.combine.action')}
+            </button>
+          </div>
+        </>
+      )}
+
       <CheckWithHelp
         checked={node.required === true}
         onChange={(checked) => patch({ required: checked ? true : undefined })}
@@ -237,67 +393,6 @@ function MatchSection({ tree, path, node, onPatch, onMerge, onKeysAreData }: Pro
       />
 
       {!isLeaf(node) && <NewChildrenSetting tree={tree} path={path} node={node} onPatch={patch} />}
-
-      <SectionHead title={t('studio.aliasesTitle')} help={t('studio.aliasesHelp')} />
-      {node.aliases && node.aliases.length > 0 && (
-        <ul className="alias-list">
-          {node.aliases.map((a, i) => (
-            <li key={`${aliasText(a)}:${i}`}>
-              <code>{aliasText(a)}</code>
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => patch({ aliases: node.aliases!.filter((_, j) => j !== i) })}
-              >
-                {t('studio.remove')}
-                <span className="visually-hidden"> {aliasText(a)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form className="alias-form" onSubmit={addAlias}>
-        <input aria-label={t('studio.newAlias')} value={alias} placeholder={t('studio.newAlias')} onChange={(e) => setAlias(e.target.value)} />
-        <label className="check">
-          <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
-          {t('studio.regex')}
-        </label>
-        <button className="button quiet" type="submit">
-          {t('studio.add')}
-        </button>
-      </form>
-      {aliasError && (
-        <p className="message error" role="alert">
-          {t('studio.badRegex')}
-        </p>
-      )}
-
-      {siblings.length > 0 && (
-        <>
-          <SectionHead title={t('studio.mergeTitle')} help={t('studio.mergeHelp')} />
-          <div className="alias-form">
-            <select aria-label={t('studio.mergeInto')} value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)}>
-              <option value="">{t('studio.chooseNode')}</option>
-              {siblings.map((s) => (
-                <option key={s.name} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <button
-              className="button quiet"
-              type="button"
-              disabled={mergeTarget === ''}
-              onClick={() => {
-                onMerge(path, [...path.slice(0, -1), mergeTarget]);
-                setMergeTarget('');
-              }}
-            >
-              {t('studio.mergeInto')}
-            </button>
-          </div>
-        </>
-      )}
 
       {(node.kind === 'map' || node.kind === 'dir') && (
         <>

@@ -1891,3 +1891,104 @@ main.wide {
 .path-toggle .path {
   word-break: break-all;
 }
+
+/* Names and matches (ADR 0012): a row's name as a badge in a colour of its own, its matches,
+   and notes from the seen structures. */
+.row-extras {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.name-badge {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0 0.6em;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--name-hue) 45% 45%);
+  background: hsl(var(--name-hue) 60% 92%);
+  color: hsl(var(--name-hue) 50% 25%);
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .name-badge {
+    background: hsl(var(--name-hue) 30% 22%);
+    color: hsl(var(--name-hue) 60% 85%);
+  }
+}
+
+.row-match {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0 0.4em;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.tag.warn-tag {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.tag.quiet-tag {
+  border-style: dashed;
+}
+
+/* Giving a name and the buttons to a row's settings appear on the row in use, to keep the tree calm. */
+.add-name,
+.row-buttons {
+  font-size: 0.8rem;
+  visibility: hidden;
+}
+
+.row-buttons {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.decision-line:hover .add-name,
+.decision-line:focus-within .add-name,
+.decision-line.selected .add-name,
+.decision-line:hover .row-buttons,
+.decision-line:focus-within .row-buttons,
+.decision-line.selected .row-buttons {
+  visibility: visible;
+}
+
+.row-check {
+  margin: 0;
+}
+
+.selection-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+}
+
+.selection-bar .actions {
+  margin: 0.25rem 0 0;
+}
+
+.decision-name.static {
+  cursor: default;
+}
+
+.decision-name.static:hover {
+  text-decoration: none;
+}
+
+/* Parts nobody has configured yet: like undecided rows, with their name a little quieter. */
+.virtual > .decision-line .decision-name {
+  font-style: italic;
+}

@@ -3,7 +3,7 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { combineNodes, extractShape, jsonToTree, normalizeTree, parseEntries, suggestCombines } from '../src';
+import { buildTree, combineNodes, emptyConfig, extractShape, jsonToTree, normalizeTree, parseEntries, suggestCombines } from '../src';
 import { keyedTree, rebuild } from './trees';
 
 const fixtures = new URL('../../../importers/fixtures/', import.meta.url).pathname;
@@ -29,7 +29,13 @@ describe('suggestCombines', () => {
     expect(pairs(suggestCombines(tree, shape))).toEqual([['[*]/~value:date', '[*]/timestamp']]);
   });
 
-  it('does not pair values of different types, nodes that are both present, or unconfigured nodes', () => {
+  it('pairs with parts seen before that nobody has configured yet', () => {
+    const first = fixtureShape('tiktok-2023');
+    const tree = buildTree(emptyConfig(first.kind), first).tree;
+    expect(pairs(suggestCombines(tree, fixtureShape('tiktok-2025')))).toEqual([['~map:user_data_tiktok.json', '~map:user_data.json']]);
+  });
+
+  it('does not pair values of different types, or nodes that are both present', () => {
     const tree = keyedTree(extractShape(jsonToTree('a.json', [{ title: 'x', likes: 3 }])));
     expect(suggestCombines(tree, extractShape(jsonToTree('b.json', [{ title: 'y', when: '2024-02-01' }])))).toEqual([]);
     expect(suggestCombines(tree, extractShape(jsonToTree('b.json', [{ title: 'y', likes: 3, extra: 4 }])))).toEqual([]);

@@ -7,6 +7,7 @@ import {
   importerFile,
   parseImporterFile,
   parseStructureFile,
+  toConfig,
   ProjectFileError,
   setDecision,
   structureFile,
@@ -37,7 +38,7 @@ const leaf = (extra: object = {}) => ({ id: 'a', kind: 'value', match: ['a'], ..
 describe('project files', () => {
   it('keep the configuration apart from the structure, and lay over it to the same tree', () => {
     const tree = decided();
-    const file = importerFile(tree, names, 'YouTube');
+    const file = importerFile({ root: toConfig(tree), names }, 'YouTube');
     expect(file.names.map((n) => n.id)).toEqual(['when']);
     // Only nodes someone touched: the untouched title is configured because its matches changed.
     expect(JSON.stringify(file)).not.toMatch(/subtitles|titleUrl|types/);
@@ -91,7 +92,7 @@ describe('project files', () => {
     tree.find = ['watch-history*.json'];
     tree.newChildren = 'skip';
     nodeAt(tree, '[*]', 'time').required = true;
-    const parsed = parseImporterFile(JSON.parse(JSON.stringify(importerFile(tree, names))));
+    const parsed = parseImporterFile(JSON.parse(JSON.stringify(importerFile({ root: toConfig(tree), names }))));
     expect(parsed.root).toMatchObject({ find: ['watch-history*.json'], newChildren: 'skip' });
     expect(nodeAt(buildTree(configOf(parsed), shape).tree, '[*]', 'time').required).toBe(true);
 

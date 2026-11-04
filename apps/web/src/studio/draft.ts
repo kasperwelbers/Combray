@@ -1,19 +1,12 @@
 /**
- * What the workspace keeps in this browser: the draft project tree (structure and settings,
+ * What the workspace keeps in this browser: the draft (seen structures and configuration,
  * never values from exports) and view preferences. Plus saving files to disk.
  */
-import {
-  parseImporterFile,
-  parseStructureFile,
-  type ImporterEntry,
-  type ImporterFile,
-  type ProjectNode,
-  type StructureFile,
-} from '@combray/core';
+import { parseImporterFile, parseStructureFile, type ImporterFile, type StructureFile } from '@combray/core';
 
 import type { TreeView } from './DecisionTree';
 import type { DraftStore } from './Studio';
-import { fromFiles, toFiles } from './model';
+import { fromFiles, toFiles, type StudioDraft } from './model';
 
 const DRAFT_KEY = 'combray:studio:draft';
 
@@ -36,21 +29,21 @@ interface Draft {
 }
 
 /** The draft holds structure and settings only, never values from the exports. */
-export function loadDraft(projectId?: string): { tree?: ProjectNode; pending: ImporterEntry[] } {
+export function loadDraft(projectId?: string): StudioDraft | undefined {
   try {
     const raw = localStorage.getItem(draftKey(projectId));
-    if (!raw) return { pending: [] };
+    if (!raw) return undefined;
     const draft = JSON.parse(raw) as Draft;
     return fromFiles(parseStructureFile(draft.structure), parseImporterFile(draft.importer));
   } catch {
-    return { pending: [] };
+    return undefined;
   }
 }
 
-export function saveDraft(projectId: string | undefined, tree: ProjectNode | undefined, pending: ImporterEntry[]): void {
+export function saveDraft(projectId: string | undefined, draft: StudioDraft | undefined): void {
   try {
-    if (!tree) localStorage.removeItem(draftKey(projectId));
-    else localStorage.setItem(draftKey(projectId), JSON.stringify(toFiles(tree, pending)));
+    if (!draft) localStorage.removeItem(draftKey(projectId));
+    else localStorage.setItem(draftKey(projectId), JSON.stringify(toFiles(draft)));
   } catch {
     // Without local storage the draft lives as long as the tab.
   }
@@ -68,5 +61,5 @@ export function download(name: string, content: unknown): void {
 
 /** The workspace's draft kept in this browser: for servers without researcher accounts. */
 export function localDraft(): DraftStore {
-  return { initial: loadDraft(), save: (tree, pending) => saveDraft(undefined, tree, pending) };
+  return { initial: loadDraft(), save: (draft) => saveDraft(undefined, draft) };
 }

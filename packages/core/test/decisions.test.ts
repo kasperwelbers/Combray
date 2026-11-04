@@ -149,6 +149,15 @@ describe('toConfig and materialise', () => {
     // The selection follows the node.
     expect(remapPath(tree, rebuild(real, shape), at(tree, '[*]', 'time'))).toEqual(path);
   });
+
+  it('keep virtual nodes an edit gave a setting, as config nodes matching their key', () => {
+    const tree = structuredClone(base());
+    nodeAt(tree, '[*]', 'time').as = 'datetime';
+    const config = toConfig(tree);
+    expect(config.children![0]).toMatchObject({ kind: 'map', match: ['[*]'], children: [{ kind: 'value', match: ['time'], as: 'datetime' }] });
+    expect(config.children![0]!.children).toHaveLength(1);
+    expect(config.children![0]!.id).not.toMatch(/^~/);
+  });
 });
 
 describe('effectiveStates', () => {

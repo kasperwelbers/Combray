@@ -1,24 +1,31 @@
-import type { MergeSuggestion, NodePath } from '@combray/core';
+import { getNode, type CombineSuggestion, type NodePath, type ProjectNode } from '@combray/core';
 import { useTranslation } from 'react-i18next';
 
 import { displayName } from './model';
 
 interface Props {
-  suggestions: MergeSuggestion[];
-  onMerge: (suggestion: MergeSuggestion) => void;
-  onDismiss: (suggestion: MergeSuggestion) => void;
+  tree: ProjectNode;
+  suggestions: CombineSuggestion[];
+  onCombine: (suggestion: CombineSuggestion) => void;
+  onSameName: (suggestion: CombineSuggestion) => void;
+  onDismiss: (suggestion: CombineSuggestion) => void;
   onShow: (path: NodePath) => void;
 }
 
 /**
- * Parts of a new export that may be a renamed or translated version of a part the project
- * already knows. Merging adds the new name as an alias; the researcher decides each one.
+ * Parts of a new package that may be a renamed or translated version of a part the configuration
+ * already has (ADR 0012). The researcher combines them into one node (one set of settings for
+ * both), gives them the same name (each keeps its own settings), or says they differ.
  */
-export function Suggestions({ suggestions, onMerge, onDismiss, onShow }: Props) {
+export function Suggestions({ tree, suggestions, onCombine, onSameName, onDismiss, onShow }: Props) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   if (suggestions.length === 0) return null;
-  const name = (path: NodePath) => displayName(path.at(-1)!, t);
-  const where = (path: NodePath) => path.slice(0, -1).map((n) => displayName(n, t)).join(' / ') || t('studio.root');
+  const name = (path: NodePath) => displayName(getNode(tree, path)?.name ?? '', t);
+  const where = (path: NodePath) =>
+    path
+      .slice(0, -1)
+      .map((_, i) => displayName(getNode(tree, path.slice(0, i + 1))?.name ?? '', t))
+      .join(' / ') || t('studio.root');
   return (
     <section className="card suggestions" aria-labelledby="studio-suggestions">
       <h2 id="studio-suggestions">{t('studio.suggestTitle')}</h2>
@@ -34,8 +41,11 @@ export function Suggestions({ suggestions, onMerge, onDismiss, onShow }: Props) 
               </span>
             </p>
             <div className="actions">
-              <button type="button" className="button" onClick={() => onMerge(s)}>
-                {t('studio.suggestMerge')}
+              <button type="button" className="button" onClick={() => onCombine(s)}>
+                {t('studio.combine.action')}
+              </button>
+              <button type="button" className="button quiet" onClick={() => onSameName(s)}>
+                {t('studio.sameName.action')}
               </button>
               <button type="button" className="button quiet" onClick={() => onDismiss(s)}>
                 {t('studio.suggestDismiss')}

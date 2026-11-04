@@ -15,7 +15,6 @@ import {
   type ProjectConfig,
   type Role,
 } from './config';
-import { toConfig, type ProjectNode } from './decisions';
 import { checkTransform, FIELD_TYPES, SpecError, type FieldType, type Localized } from './importer/spec';
 import { findPatternProblem } from './locate';
 import { COLLAPSED_NAME, ITEM_NAME, type Shape } from './shape';
@@ -49,22 +48,19 @@ export function structureFile(root: Shape): StructureFile {
   return { format: STRUCTURE_FORMAT, root };
 }
 
-/**
- * The importer file of a project tree: its configuration, with only the names its nodes use.
- */
-export function importerFile(tree: ProjectNode, names: Name[], name?: Localized): ImporterFile {
-  const root = toConfig(tree);
+/** The importer file of a configuration, with only the names its nodes use. */
+export function importerFile(config: ProjectConfig, name?: Localized): ImporterFile {
   const used = new Set<string>();
   const visit = (node: ConfigNode) => {
     if (node.nameId !== undefined) used.add(node.nameId);
     node.children?.forEach(visit);
   };
-  visit(root);
+  visit(config.root);
   return {
     format: IMPORTER_FORMAT,
     ...(name !== undefined ? { name } : {}),
-    names: names.filter((n) => used.has(n.id)),
-    root,
+    names: config.names.filter((n) => used.has(n.id)),
+    root: config.root,
   };
 }
 

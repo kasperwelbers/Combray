@@ -384,7 +384,7 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
 
   const store = useMemo((): DraftStore | 'unreadable' | undefined => {
     if (!platform || platform === 'failed') return undefined;
-    let initial: DraftStore['initial'] = { pending: [] };
+    let initial: DraftStore['initial'];
     if (platform.structure && platform.importer) {
       try {
         initial = fromFiles(parseStructureFile(platform.structure), parseImporterFile(platform.importer));
@@ -394,8 +394,8 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
     }
     return {
       initial,
-      save(tree, pending) {
-        const files = tree ? toFiles(tree, pending) : undefined;
+      save(draft) {
+        const files = draft ? toFiles(draft) : undefined;
         latest.current = async () => {
           setSaving('saving');
           try {

@@ -1,23 +1,35 @@
 import {
+  addMatch,
+  buildTree,
+  combineConflicts,
+  combineNodes,
+  combineProblem,
+  configOf,
+  createName,
   effectiveStates,
+  emptyConfig,
+  getNode,
   ignoreOverrides,
-  mergeNodes,
-  mergeShape,
+  isDecidable,
+  matchText,
+  newPositions,
   parseImporterFile,
   parseStructureFile,
-  projectTreeFromShape,
+  remapPath,
+  removeMatch,
   setDecision,
-  seenTogether,
   setKeysAreData,
-  suggestAfterMerge,
-  suggestMerges,
-  getNode,
-  isDecidable,
-  type ImporterEntry,
-  type MergeSuggestion,
+  setName,
+  splitByKey,
+  suggestCombines,
+  toConfig,
+  type CombineSuggestion,
   type ImporterFile,
   type LeafDecision,
+  type Match,
+  type Name,
   type NodePath,
+  type ProjectConfig,
   type ProjectNode,
   type Shape,
   type StructureFile,
@@ -33,21 +45,26 @@ import type { FieldValues as FieldValuesSummary, PackageStore, PreviewTable, Sto
 import { addExport, studio } from './client';
 import { DecisionTree } from './DecisionTree';
 import {
+  addSeen,
   asParticipantsSee,
+  notSeen,
+  rowInfo,
   countDecisions,
   decideBelow,
-  fromFiles,
   pathKey,
   patchNode,
   SHORTCUT_DECISIONS,
   toFiles,
   undecidedBelow,
   type NodePatch,
+  type RowInfo,
   type Shortcut,
+  type StudioDraft,
 } from './model';
 import { download, loadView, VIEW_KEY } from './draft';
 import { NodeDetails, type DetailSection } from './NodeDetails';
 import { Help, Popover } from './Popover';
+import { SelectionBar } from './SelectionBar';
 import { Suggestions } from './Suggestions';
 
 const PREVIEW_ROWS = 25;
@@ -60,8 +77,7 @@ const ROW_EXAMPLES = 2;
 import { ChartBuilder } from './ChartBuilder';
 import { Preview } from './Preview';
 
-const samePair = (a: Pick<MergeSuggestion, 'from' | 'into'>, b: Pick<MergeSuggestion, 'from' | 'into'>) =>
-  pathKey(a.from) === pathKey(b.from) && pathKey(a.into) === pathKey(b.into);
+const samePair = (a: CombineSuggestion, b: CombineSuggestion) => pathKey(a.from) === pathKey(b.from) && pathKey(a.into) === pathKey(b.into);
 
 /** The tabs of the tree editor. */
 const STUDIO_SECTIONS = ['packages', 'decisions', 'preview', 'chart', 'files'] as const;
@@ -70,17 +86,41 @@ type StudioSection = (typeof STUDIO_SECTIONS)[number];
 /** Ancestors of a path, to open them in the tree. */
 const ancestorsOf = (path: NodePath) => path.slice(0, -1).map((_, i) => pathKey(path.slice(0, i + 1)));
 
-/** Where the tree being edited is kept: the project's draft on the server, or this browser. */
+/** Suggestions without repeats: a pair counts once, whichever way round. */
+function uniquePairs(suggestions: CombineSuggestion[]): CombineSuggestion[] {
+  const seen = new Set<string>();
+  return suggestions.filter((s) => {
+    const key = [pathKey(s.from), pathKey(s.into)].sort().join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Open rows after an edit: the same rows, where the edit made virtual ones real. */
+function remapOpen(open: Set<string>, before: ProjectNode | undefined, after: ProjectNode): Set<string> {
+  if (!before) return open;
+  const out = new Set<string>();
+  for (const key of open) {
+    const fields = key.startsWith('fields:');
+    const path = JSON.parse(fields ? key.slice('fields:'.length) : key) as NodePath;
+    const moved = remapPath(before, after, path);
+    if (moved) out.add(fields ? `fields:${pathKey(moved)}` : pathKey(moved));
+  }
+  return out;
+}
+
+/** Where the configuration being edited is kept: the project's draft on the server, or this browser. */
 export interface DraftStore {
-  initial: { tree?: ProjectNode; pending: ImporterEntry[] };
-  save(tree: ProjectNode | undefined, pending: ImporterEntry[]): void;
+  initial: StudioDraft | undefined;
+  save(draft: StudioDraft | undefined): void;
 }
 
 /**
  * The tree editor for one platform: load data donation packages (your own, or a synthetic example),
  * decide per node what happens to it, and see the result as participants would. Packages stay in
- * the studio worker's memory and are dropped when this closes; only the project tree (structure
- * and settings) is saved, through `draft`.
+ * the studio worker's memory and are dropped when this closes; only the configuration and the
+ * structures seen (never values) are saved, through `draft`.
  */
 export function Studio({
   title,
@@ -101,8 +141,13 @@ export function Studio({
 }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [initial] = useState(() => draft.initial);
-  const [tree, setTree] = useState<ProjectNode | undefined>(initial.tree);
-  const [pending, setPending] = useState<ImporterEntry[]>(initial.pending);
+  /** The researcher's configuration: config nodes and names (ADR 0012). */
+  const [config, setConfig] = useState<ProjectConfig | undefined>(initial?.config);
+  /** The structures seen so far, as one union: it only grows. */
+  const [seen, setSeen] = useState<Shape | undefined>(initial?.seen);
+  const built = useMemo(() => (config ? buildTree(config, seen) : undefined), [config, seen]);
+  const tree = built?.tree;
+  const names = useMemo(() => config?.names ?? [], [config]);
   const [exports, setExports] = useState<StudioExport[]>([]);
   /** The shapes of the loaded exports: what each one has, to tell which nodes occur together. */
   const [shapes, setShapes] = useState<Map<number, Shape>>(new Map());
@@ -115,11 +160,14 @@ export function Studio({
   const [preview, setPreview] = useState<PreviewTable[]>([]);
   /** The one package "view as participant" shows; none: the structure with placeholders. */
   const [previewSource, setPreviewSource] = useState<number>();
-  const [suggestions, setSuggestions] = useState<MergeSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<CombineSuggestion[]>([]);
   const [fieldValues, setFieldValues] = useState<FieldValuesSummary>();
   const fileInput = useRef<HTMLInputElement>(null);
   const platformButton = useRef<HTMLButtonElement>(null);
   const [section, setSection] = useState<DetailSection>('values');
+  /** Rows picked to join: their paths, while selecting is on. */
+  const [selecting, setSelecting] = useState(false);
+  const [checked, setChecked] = useState<NodePath[]>([]);
   /** Test packages kept with the platform, and the structures they have. */
   const [stored, setStored] = useState<StoredPackage[]>([]);
   const [storedShapes, setStoredShapes] = useState<Shape[]>([]);
@@ -127,16 +175,19 @@ export function Studio({
   const [storedOf, setStoredOf] = useState<Map<number, string>>(new Map());
   const [keepValues, setKeepValues] = useState(false);
   const [loadingKept, setLoadingKept] = useState(false);
-  const [tab, setTab] = useState<StudioSection>(initial.tree ? 'decisions' : 'packages');
+  const [tab, setTab] = useState<StudioSection>(initial ? 'decisions' : 'packages');
+
+  /** Every structure seen one by one: the loaded packages and those kept with the platform. */
+  const structures = useMemo(() => [...shapes.values(), ...storedShapes], [shapes, storedShapes]);
 
   // The first package gives a tree: go on to deciding what happens to it.
-  const hadTree = useRef(initial.tree !== undefined);
+  const hadTree = useRef(initial !== undefined);
   useEffect(() => {
     if (tree && !hadTree.current) setTab('decisions');
     hadTree.current = tree !== undefined;
   }, [tree]);
 
-  // Save changes, not the tree as it was loaded (saving marks the draft as changed).
+  // Save changes, not the draft as it was loaded (saving marks the draft as changed).
   const loaded = useRef(true);
   const store = useRef(draft);
   useEffect(() => {
@@ -144,8 +195,8 @@ export function Studio({
       loaded.current = false;
       return;
     }
-    store.current.save(tree, pending);
-  }, [tree, pending]);
+    store.current.save(config ? { config, ...(seen ? { seen } : {}) } : undefined);
+  }, [config, seen]);
 
   // The packages loaded here belong to this platform: drop them from the worker when it closes.
   const loadedIds = useRef<number[]>([]);
@@ -195,13 +246,18 @@ export function Studio({
     };
   }, [tree, previewSource]);
 
-  // Packages kept with the platform: their structures for the merge check, and their values loaded
-  // into this tab.
+  // Packages kept with the platform: their structures, seen like any other, and their values
+  // loaded into this tab.
   const refreshStored = useCallback(async () => {
     if (!packages) return [];
     const list = await packages.list();
+    const kept = list.shapes.map((s) => s.shape);
     setStored(list.packages);
-    setStoredShapes(list.shapes.map((s) => s.shape));
+    setStoredShapes(kept);
+    if (kept.length > 0) {
+      setSeen((s) => addSeen(s, ...kept));
+      setConfig((c) => c ?? emptyConfig(kept[0]!.kind));
+    }
     return list.packages;
   }, [packages]);
   useEffect(() => {
@@ -237,7 +293,7 @@ export function Studio({
       const paths: NodePath[] = [];
       const visit = (node: ProjectNode, path: NodePath) => {
         if (isDecidable(node) && path.length > 0) paths.push(path);
-        if (node.lifter === undefined) for (const child of node.children ?? []) visit(child, [...path, child.name]);
+        if (node.lifter === undefined) for (const child of node.children ?? []) visit(child, [...path, child.id]);
       };
       visit(tree, []);
       void studio.examples(tree, paths, ROW_EXAMPLES).then((found) => {
@@ -272,27 +328,41 @@ export function Studio({
     };
   }, [tree, selected, exports]);
 
-  // Nodes that occur together in a loaded export are different nodes: never suggest merging them.
-  const together = useCallback(
-    (from: NodePath, into: NodePath) => (tree ? seenTogether(tree, [...shapes.values(), ...storedShapes], from, into) : 0),
-    [tree, shapes, storedShapes],
-  );
-  const shownSuggestions = useMemo(
-    () => suggestions.filter((s) => together(s.from, s.into) === 0),
-    [suggestions, together],
-  );
-
   const states = useMemo(() => (tree ? effectiveStates(tree) : new Map()), [tree]);
   const undecided = useMemo(() => (tree ? undecidedBelow(tree, states) : new Map()), [tree, states]);
   const counts = useMemo(() => (tree ? countDecisions(tree, states) : undefined), [tree, states]);
+  const info = useMemo(() => (built && config ? rowInfo(built, config, structures) : new Map<ProjectNode, RowInfo>()), [built, config, structures]);
 
-  /** Apply settings that were waiting for their paths, now that the tree may have them. */
-  const settle = useCallback((next: ProjectNode, waiting: ImporterEntry[]) => {
-    const { structure, importer } = toFiles(next, waiting);
-    const joined = fromFiles(structure, importer);
-    setTree(joined.tree);
-    setPending(joined.pending);
-  }, []);
+  /**
+   * Take the configuration back out of an edited tree. Rows that were open or selected stay so,
+   * also where the edit made a virtual row a config node.
+   */
+  function commit(next: ProjectNode, nextNames: Name[] = names): ProjectNode {
+    const nextConfig: ProjectConfig = { root: toConfig(next), names: nextNames };
+    const after = buildTree(nextConfig, seen).tree;
+    const before = tree;
+    if (before) {
+      setSelected((path) => path && remapPath(before, after, path));
+      setOpen((o) => remapOpen(o, before, after));
+      setChecked((paths) =>
+        paths.flatMap((p) => {
+          const moved = remapPath(before, after, p);
+          return moved ? [moved] : [];
+        }),
+      );
+    }
+    setConfig(nextConfig);
+    return after;
+  }
+
+  /** Run an edit, and say why when it cannot be done. */
+  function attempt(edit: () => void) {
+    try {
+      edit();
+    } catch (error) {
+      setMessage({ text: (error as Error).message, error: true });
+    }
+  }
 
   /** Load a package; returns its id, or that of the same package loaded before. */
   async function addFiles(uploads: Upload[], keep = false): Promise<number | undefined> {
@@ -322,14 +392,17 @@ export function Studio({
         return info.id;
       }
       setShapes((m) => new Map(m).set(info.id, shape));
-      if (tree) {
-        setSuggestions((s) => [...s, ...suggestMerges(tree, shape)]);
-        const merged = mergeShape(tree, shape);
-        settle(merged.tree, pending);
-        setMessage({ text: [t('studio.added', { count: merged.added.length }), kept].filter(Boolean).join(' ') });
+      const added = newPositions(seen, shape).size;
+      const nextSeen = addSeen(seen, shape);
+      setSeen(nextSeen);
+      if (config) {
+        const next = buildTree(config, nextSeen).tree;
+        setSuggestions((s) => [...s, ...suggestCombines(next, shape)]);
+        setMessage({ text: [t('studio.added', { count: added }), kept].filter(Boolean).join(' ') });
       } else {
-        settle(projectTreeFromShape(shape), pending);
-        setOpen(new Set(shape.children?.map((c) => pathKey([c.name])) ?? []));
+        const first = emptyConfig(shape.kind);
+        setConfig(first);
+        setOpen(new Set(buildTree(first, nextSeen).tree.children?.map((c) => pathKey([c.id])) ?? []));
         setMessage({ text: [t('studio.started'), kept].filter(Boolean).join(' ') });
       }
       return info.id;
@@ -400,34 +473,35 @@ export function Studio({
         if (json.format === 'combray-structure@1') structure = parseStructureFile(json);
         else importer = parseImporterFile(json);
       }
-      // An opened structure adds to the tree; an opened importer replaces the settings.
-      let next = tree ?? projectTreeFromShape(structure?.root ?? { kind: 'dir', name: '' });
-      if (structure && tree) {
-        setSuggestions((s) => [...s, ...suggestMerges(tree, structure.root)]);
-        next = mergeShape(next, structure.root).tree;
+      // An opened structure adds to what was seen; an opened importer replaces the configuration.
+      const nextSeen = structure ? addSeen(seen, structure.root) : seen;
+      const nextConfig = importer ? configOf(importer) : (config ?? emptyConfig(structure?.root.kind ?? 'dir'));
+      if (structure && config && !importer) {
+        setSuggestions((s) => [...s, ...suggestCombines(buildTree(config, nextSeen).tree, structure.root)]);
       }
-      const settings = importer ?? toFiles(next, pending).importer;
-      const joined = fromFiles(toFiles(next, []).structure, settings);
-      setTree(joined.tree);
-      setPending(joined.pending);
-      setMessage({ text: t('studio.opened', { count: joined.pending.length }) });
+      setSeen(nextSeen);
+      setConfig(nextConfig);
+      setSelected(undefined);
+      setChecked([]);
+      setMessage({ text: t('studio.opened', { count: notSeen(buildTree(nextConfig, nextSeen).tree).length }) });
     } catch (error) {
       setMessage({ text: t('studio.openFailed', { reason: (error as Error).message }), error: true });
     }
   }
 
   function saveFiles() {
-    if (!tree) return;
-    const { structure, importer } = toFiles(tree, pending);
+    if (!config) return;
+    const { structure, importer } = toFiles({ config, ...(seen ? { seen } : {}) });
     download('structure.json', structure);
     download('importer.json', importer);
   }
 
   function startOver() {
     if (!window.confirm(t('studio.confirmStartOver'))) return;
-    setTree(undefined);
-    setPending([]);
+    // What was seen stays: it is what the packages have, not a decision.
+    setConfig(seen ? emptyConfig(seen.kind) : undefined);
     setSelected(undefined);
+    setChecked([]);
     setOpen(new Set());
     setMessage(undefined);
     setSuggestions([]);
@@ -440,15 +514,20 @@ export function Studio({
     if (!isDecidable(node) && decision !== 'ignore' && decision !== 'undecided') return;
     const overridden = decision === 'ignore' ? ignoreOverrides(tree, path).length : 0;
     if (overridden > 0 && !window.confirm(t('studio.confirmIgnore', { count: overridden }))) return;
-    setTree(setDecision(tree, path, decision));
+    commit(setDecision(tree, path, decision));
+  }
+
+  function select(path: NodePath, to?: DetailSection) {
+    if (to) setSection(to);
+    setSelected(path);
   }
 
   const actions = {
-    select: (path: NodePath) => setSelected(path),
+    select,
     close: () => setSelected(undefined),
     decide,
     decideBelow: (path: NodePath, decision: 'show' | 'donate' | 'undecided', undecidedOnly: boolean) =>
-      setBelow(path, decision, undecidedOnly),
+      tree && commit(decideBelow(tree, path, decision, undecidedOnly)),
     toggleOpen: (key: string) =>
       setOpen((o) => {
         const next = new Set(o);
@@ -467,48 +546,80 @@ export function Studio({
       }
       decide(path, decision);
     },
+    check: (path: NodePath, on: boolean) =>
+      setChecked((paths) => (on ? [...paths.filter((p) => pathKey(p) !== pathKey(path)), path] : paths.filter((p) => pathKey(p) !== pathKey(path)))),
   };
 
-  function setBelow(path: NodePath, decision: 'show' | 'donate' | 'undecided', undecidedOnly: boolean) {
-    if (tree) setTree(decideBelow(tree, path, decision, undecidedOnly));
-  }
-
   function patch(path: NodePath, change: NodePatch) {
-    if (tree) setTree(patchNode(tree, path, change));
+    if (tree) commit(patchNode(tree, path, change));
   }
 
   function keysAreData(path: NodePath) {
     if (!tree || !window.confirm(t('studio.confirmKeys'))) return;
-    const result = setKeysAreData(tree, path);
-    setTree(result.tree);
-    setSelected(path);
-    setMessage({ text: t('studio.merged', { count: result.conflicts.length }) });
+    attempt(() => commit(setKeysAreData(tree, path)));
   }
 
-  function merge(from: NodePath, into: NodePath) {
+  /** Combine sibling rows into one node with all their matches (ADR 0012). */
+  function combine(paths: NodePath[]) {
     if (!tree) return;
-    const count = together(from, into);
-    if (count > 0) {
-      setMessage({ text: t('studio.mergeTogether', { count }), error: true });
-      return;
-    }
-    try {
-      const result = mergeNodes(tree, from, into);
-      // What was inside both now sits side by side: suggest pairs there next.
-      const next = suggestAfterMerge(tree, from, into);
-      setSuggestions((s) =>
-        [...next, ...s.filter((x) => !samePair(x, { from, into }))].filter(
-          (x) => getNode(result.tree, x.from) && getNode(result.tree, x.into),
-        ),
-      );
-      setTree(result.tree);
-      setSelected(into);
-      setOpen((o) => new Set([...o, ...ancestorsOf(into)]));
-      setMessage({ text: t('studio.merged', { count: result.conflicts.length }) });
-    } catch (error) {
-      setMessage({ text: (error as Error).message, error: true });
-    }
+    const problem = combineProblem(tree, paths);
+    if (problem) return setMessage({ text: t('studio.combine.refused', { reason: problem }), error: true });
+    // One node cannot hold two keys that are side by side in one package.
+    const together = combineConflicts(tree, structures, paths);
+    if (together > 0) return setMessage({ text: t('studio.combine.together', { count: together }), error: true });
+    attempt(() => {
+      const result = combineNodes(tree, paths);
+      const after = commit(result.tree);
+      setChecked([]);
+      // What was inside each now sits side by side: suggest pairs there next.
+      const below = (path: NodePath) => pathKey(path.slice(0, result.path.length)) === pathKey(result.path);
+      const inside = structures.flatMap((shape) => suggestCombines(after, shape)).filter((x) => below(x.into));
+      setSuggestions((s) => uniquePairs([...inside, ...s]).filter((x) => getNode(after, x.from) && getNode(after, x.into)));
+      setSelected(result.path);
+      setOpen((o) => new Set([...o, ...ancestorsOf(result.path)]));
+      setMessage({ text: t('studio.combine.done', { count: result.conflicts.length }) });
+    });
   }
+
+  /** Give rows one name, so participants see them as one table or column (ADR 0012). */
+  function sameName(paths: NodePath[]) {
+    if (!tree || paths.length === 0) return;
+    const nodes = paths.map((p) => getNode(tree, p)!);
+    const existing = nodes.find((n) => n.nameId !== undefined)?.nameId;
+    const name = existing === undefined ? createName(nodes[0]!.name) : undefined;
+    attempt(() => {
+      const after = commit(setName(tree, paths, existing ?? name!.id), name ? [...names, name] : names);
+      setChecked([]);
+      const first = remapPath(tree, after, paths[0]!);
+      if (first) select(first, 'name');
+    });
+  }
+
+  const nameActions = {
+    /** Give a row an existing name, or none. */
+    set: (path: NodePath, nameId: string | undefined) => tree && attempt(() => commit(setName(tree, [path], nameId))),
+    /** A new name for a row. */
+    create: (path: NodePath, text: string) => {
+      if (!tree || text.trim() === '') return;
+      const name = createName(text);
+      attempt(() => commit(setName(tree, [path], name.id), [...names, name]));
+    },
+    /** Change a name: every row with it changes. */
+    edit: (nameId: string, change: (name: Name) => Name) =>
+      config && setConfig({ ...config, names: names.map((n) => (n.id === nameId ? change(n) : n)) }),
+  };
+
+  const matchActions = {
+    add: (path: NodePath, match: Match) => tree && attempt(() => commit(addMatch(tree, path, match).tree)),
+    remove: (path: NodePath, match: Match) => {
+      if (!tree) return;
+      const node = getNode(tree, path);
+      if (node && node.match.length === 1 && !window.confirm(t('studio.match.confirmLast', { match: matchText(match) }))) return;
+      attempt(() => commit(removeMatch(tree, path, match)));
+    },
+    split: (path: NodePath) => tree && attempt(() => commit(splitByKey(tree, path))),
+    combine,
+  };
 
   const busy = progress !== undefined;
   const details = (path: NodePath) =>
@@ -516,12 +627,15 @@ export function Studio({
       <NodeDetails
         tree={tree}
         path={path}
+        names={names}
+        info={info}
         section={section}
         onSection={setSection}
         values={fieldValues}
         hasPackages={exports.length > 0}
         onPatch={patch}
-        onMerge={merge}
+        onName={nameActions}
+        onMatch={matchActions}
         onKeysAreData={keysAreData}
         onClose={() => setSelected(undefined)}
       />
@@ -682,8 +796,13 @@ export function Studio({
           (tree && counts ? (
             <>
               <Suggestions
-                suggestions={shownSuggestions}
-                onMerge={(s) => merge(s.from, s.into)}
+                tree={tree}
+                suggestions={suggestions.filter((s) => getNode(tree, s.from) && getNode(tree, s.into))}
+                onCombine={(s) => combine([s.into, s.from])}
+                onSameName={(s) => {
+                  setSuggestions((all) => all.filter((x) => !samePair(x, s)));
+                  sameName([s.into, s.from]);
+                }}
                 onDismiss={(s) => setSuggestions((all) => all.filter((x) => !samePair(x, s)))}
                 onShow={(path) => {
                   setViewSettings({ view: 'tree', hideIgnored });
@@ -723,6 +842,17 @@ export function Studio({
                     />
                     {t('studio.hideIgnored')}
                   </label>
+                  <button
+                    type="button"
+                    className="button quiet"
+                    aria-pressed={selecting}
+                    onClick={() => {
+                      setSelecting((on) => !on);
+                      setChecked([]);
+                    }}
+                  >
+                    {t('studio.select.toggle')}
+                  </button>
                   <span className="decision-menu-anchor">
                     <button
                       ref={platformButton}
@@ -747,8 +877,21 @@ export function Studio({
                   </span>
                 </div>
                 <p className="meta">{t(`studio.viewHelp.${view}`)}</p>
+                {selecting && (
+                  <SelectionBar
+                    tree={tree}
+                    paths={checked}
+                    onCombine={() => combine(checked)}
+                    onSameName={() => sameName(checked)}
+                    onClear={() => setChecked([])}
+                  />
+                )}
                 <DecisionTree
                   tree={tree}
+                  hasPackages={exports.length > 0}
+                  names={names}
+                  info={info}
+                  {...(selecting ? { checked } : {})}
                   states={states}
                   undecided={undecided}
                   onlyUndecided={onlyUndecided}
@@ -837,14 +980,14 @@ export function Studio({
               <button className="button quiet" type="button" onClick={() => fileInput.current?.click()}>
                 {t('studio.open')}
               </button>
-              <button className="button" type="button" disabled={!tree} onClick={saveFiles}>
+              <button className="button" type="button" disabled={!config} onClick={saveFiles}>
                 {t('studio.save')}
               </button>
-              <button className="button danger" type="button" disabled={!tree} onClick={startOver}>
+              <button className="button danger" type="button" disabled={!config} onClick={startOver}>
                 {t('studio.startOver')}
               </button>
             </div>
-            {pending.length > 0 && <p className="meta">{t('studio.pending', { count: pending.length })}</p>}
+            {tree && notSeen(tree).length > 0 && <p className="meta">{t('studio.pending', { count: notSeen(tree).length })}</p>}
           </section>
         )}
       </div>

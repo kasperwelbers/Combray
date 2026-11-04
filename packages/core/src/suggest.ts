@@ -81,25 +81,27 @@ const positional = (name: string) => name === ITEM_NAME || name === COLLAPSED_NA
 
 /**
  * Suggest combining for a shape (a newly loaded export): pairs of siblings where the shape has a
- * position no config node matches (`from`, a virtual node) and the configuration has a node this
- * shape lacks (`into`), of the same kind. `tree` is the project tree the researcher sees (the
- * configuration over all seen structures); paths are in it.
+ * position no config node matches (`from`, a virtual node) and the project has a node this shape
+ * lacks (`into`: configured, or seen before), of the same kind. `tree` is the project tree the
+ * researcher sees (the configuration over the seen structures, with or without this shape);
+ * paths are in that tree once the shape is added to it.
  */
 export function suggestCombines(tree: ProjectNode, shape: Shape): CombineSuggestion[] {
   const built = buildTree({ root: toConfig(tree), names: [] }, shape);
   const out: CombineSuggestion[] = [];
-  const visit = (node: ProjectNode, own: ProjectNode | undefined, path: NodePath) => {
-    if (!own || node.collapsed) return;
-    const children = node.children ?? [];
-    const unknown = children.filter((c) => c.virtual && !positional(c.name));
-    const missing = children.filter((c) => !c.virtual && !positional(c.name) && (built.sources.get(c)?.length ?? 0) === 0);
+  const key = (n: ProjectNode) => (n.virtual ? `~${n.kind}\u0000${n.name}` : n.id);
+  const inShape = (n: ProjectNode) => n.virtual || (built.sources.get(n)?.length ?? 0) > 0;
+  const visit = (own: ProjectNode, node: ProjectNode, path: NodePath) => {
+    if (node.collapsed) return;
+    const present = new Map((node.children ?? []).filter(inShape).map((c) => [key(c), c]));
+    const unknown = (node.children ?? []).filter((c) => c.virtual && !positional(c.name));
+    const missing = (own.children ?? []).filter((c) => !positional(c.name) && !present.has(key(c)));
     const pairs: CombineSuggestion[] = [];
     for (const u of unknown) {
       const shapeOfU = built.sources.get(u)?.[0];
       for (const m of missing) {
-        const known = own.children?.find((c) => c.id === m.id);
-        if (u.kind !== m.kind || !shapeOfU || !known) continue;
-        const score = similarity(shapeOfU, asShape(known));
+        if (u.kind !== m.kind || !shapeOfU) continue;
+        const score = similarity(shapeOfU, asShape(m));
         if (score >= MIN_SCORE) pairs.push({ from: [...path, u.id], into: [...path, m.id], score });
       }
     }
@@ -113,9 +115,12 @@ export function suggestCombines(tree: ProjectNode, shape: Shape): CombineSuggest
       used.add(into);
       out.push({ ...pair, score: Math.round(pair.score * 100) / 100 });
     }
-    for (const child of children) if (!child.virtual) visit(child, own.children?.find((c) => c.id === child.id), [...path, child.id]);
+    for (const child of own.children ?? []) {
+      const twin = present.get(key(child));
+      if (twin) visit(child, twin, [...path, child.id]);
+    }
   };
-  visit(built.tree, tree, []);
+  visit(tree, built.tree, []);
   return out;
 }
 

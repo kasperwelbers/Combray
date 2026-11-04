@@ -407,16 +407,30 @@ export function emptyConfig(kind: NodeKind): ProjectConfig {
   return { root: { id: 'root', kind, match: [] }, names: [] };
 }
 
-/** The configuration in a project tree: its config nodes, without virtual ones or structure. */
+/** Whether a virtual node was given something: a name or a setting, here or below. */
+function touched(node: ProjectNode): boolean {
+  // A map the structures show with data keys is collapsed without anyone saying so.
+  if (node.nameId !== undefined || SETTINGS.some((key) => key !== 'collapsed' && node[key] !== undefined)) return true;
+  return (node.children ?? []).some(touched);
+}
+
+/**
+ * The configuration in a project tree: its config nodes, without structure. Virtual nodes are
+ * left out, unless an edit gave them (or something below them) a name or a setting: those
+ * become config nodes with a new id and their key as their one match.
+ */
 export function toConfig(tree: ProjectNode): ConfigNode {
   const visit = (node: ProjectNode): ConfigNode => {
-    const out: ConfigNode = { id: node.id, kind: node.kind, match: [...node.match] };
+    const out: ConfigNode = node.virtual
+      ? { id: newId(), kind: node.kind, match: [node.name] }
+      : { id: node.id, kind: node.kind, match: [...node.match] };
     if (node.nameId !== undefined) out.nameId = node.nameId;
     for (const key of SETTINGS) {
+      if (node.virtual && key === 'collapsed') continue;
       const value = node[key];
       if (value !== undefined) (out as unknown as Record<string, unknown>)[key] = structuredClone(value);
     }
-    const children = (node.children ?? []).filter((c) => !c.virtual).map(visit);
+    const children = (node.children ?? []).filter((c) => !c.virtual || touched(c)).map(visit);
     if (children.length > 0) out.children = children;
     return out;
   };

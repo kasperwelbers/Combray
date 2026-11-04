@@ -1,20 +1,30 @@
 /**
  * Pure helpers for the researcher workspace: editing project trees and summarising decisions.
  * The core does the decision logic (`@combray/core`); this is what the screens need on top.
+ *
+ * The workspace keeps a configuration (config nodes and names) and the structures seen so far;
+ * the tree on screen is the one laid over the other (`buildTree`). Edits change a copy of that
+ * tree, and the configuration is taken back out of it (`toConfig`). See ADR 0012.
  */
 import {
+  buildTree,
+  configOf,
   deriveTables,
   getNode,
+  importerFile,
   isDecidable,
   isLeaf,
-  joinProjectTree,
-  splitProjectTree,
-  type EffectiveState,
-  type ImporterEntry,
-  type ImporterFile,
-  type NodePath,
+  structureFile,
+  unionShape,
+  type Built,
   type ColumnDef,
+  type EffectiveState,
+  type ImporterFile,
+  type Name,
+  type NodePath,
+  type ProjectConfig,
   type ProjectNode,
+  type Shape,
   type StructureFile,
 } from '@combray/core';
 
@@ -144,9 +154,6 @@ export function decideBelow(
 export type NodePatch = Partial<
   Pick<
     ProjectNode,
-    | 'label'
-    | 'description'
-    | 'aliases'
     | 'raw'
     | 'transform'
     | 'as'
@@ -250,25 +257,62 @@ export function foldChain(node: ProjectNode, path: NodePath): { node: ProjectNod
       return chain;
     }
     current = only;
-    currentPath = [...currentPath, only.name];
+    currentPath = [...currentPath, only.id];
     chain.push({ node: current, path: currentPath });
   }
 }
 
-/** The workspace draft as files, with settings for paths not seen yet kept at the end. */
-export function toFiles(
-  tree: ProjectNode,
-  pending: ImporterEntry[],
-): { structure: StructureFile; importer: ImporterFile } {
-  const { structure, importer } = splitProjectTree(tree);
-  return { structure, importer: { ...importer, entries: [...importer.entries, ...pending] } };
+/** What the workspace edits: a configuration, and the structures seen so far (their union). */
+export interface StudioDraft {
+  config: ProjectConfig;
+  seen?: Shape;
 }
 
-export function fromFiles(
-  structure: StructureFile,
-  importer: ImporterFile,
-): { tree: ProjectNode; pending: ImporterEntry[] } {
-  return joinProjectTree(structure, importer);
+/** The workspace draft as files: the seen structures, and the configuration. */
+export function toFiles(draft: StudioDraft): { structure: StructureFile; importer: ImporterFile } {
+  return {
+    structure: structureFile(draft.seen ?? { kind: draft.config.root.kind, name: '' }),
+    importer: importerFile(draft.config),
+  };
+}
+
+export function fromFiles(structure: StructureFile, importer: ImporterFile): StudioDraft {
+  return { config: configOf(importer), seen: structure.root };
+}
+
+/** The seen structures with one more added (they only grow). */
+export function addSeen(seen: Shape | undefined, ...shapes: Shape[]): Shape | undefined {
+  return unionShape(seen ? [seen, ...shapes] : shapes);
+}
+
+/** A name's text for people, in a language: its label there, else its text. */
+export function nameText(name: Name, language = 'en'): string {
+  return (language !== 'en' && name.label?.[language]) || name.text;
+}
+
+/** A stable colour per name, as a hue, so rows with the same name can be told at a glance. */
+export function nameHue(id: string): number {
+  let hash = 0;
+  for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+  return hash % 360;
+}
+
+/**
+ * Siblings in the order rows show them: as in the tree, but nodes with the same name next to
+ * each other, after the first of them.
+ */
+export function withSameNamesTogether(children: ProjectNode[]): ProjectNode[] {
+  const out: ProjectNode[] = [];
+  const done = new Set<ProjectNode>();
+  for (const child of children) {
+    if (done.has(child)) continue;
+    const same = child.nameId === undefined ? [child] : children.filter((c) => c.nameId === child.nameId);
+    for (const c of same) {
+      out.push(c);
+      done.add(c);
+    }
+  }
+  return out;
 }
 
 /** A name shortened for the tree: the shortest form that no other node in the list could have. */
@@ -311,8 +355,11 @@ function suffixForms(steps: { name: string; kind: ProjectNode['kind'] }[], k: nu
  * be the name of another path in the list.
  */
 export function shortNames(tree: ProjectNode, paths: NodePath[], base: NodePath = []): ShortName[] {
+  const namesOf = (path: NodePath) => path.map((id, i) => getNode(tree, path.slice(0, i + 1))?.name ?? id);
   const steps = paths.map((path) => {
-    const out = path.slice(base.length).flatMap((name, i) => {
+    const names = namesOf(path);
+    const out = path.slice(base.length).flatMap((_, i) => {
+      const name = names[base.length + i]!;
       const node = getNode(tree, path.slice(0, base.length + i + 1));
       const parent = getNode(tree, path.slice(0, base.length + i));
       // Repeated elements are a list named after the element.
@@ -331,7 +378,8 @@ export function shortNames(tree: ProjectNode, paths: NodePath[], base: NodePath 
   const owners = new Map<string, Set<number>>();
   candidates.forEach((list, i) => list.forEach((c) => owners.set(c, (owners.get(c) ?? new Set()).add(i))));
   return paths.map((path, i) => {
-    const full = path.slice(base.length).filter((n) => !isRepeatedName(n)).join(' / ') || path.join(' / ');
+    const names = namesOf(path);
+    const full = names.slice(base.length).filter((n) => !isRepeatedName(n)).join(' / ') || names.join(' / ');
     const short = candidates[i]!.find((c) => owners.get(c)!.size === 1) ?? steps[i]!.map((s) => s.name).join('/');
     const shown = short.split('/').join(' / ');
     return { short: shown || full, full, shortened: shown !== full };
@@ -359,4 +407,64 @@ export function asParticipantsSee(tree: ProjectNode): ProjectNode {
   const withChildren = (node: ProjectNode): ProjectNode =>
     node.children && !isLeaf(node) ? { ...node, children: node.children.map(visit) } : node;
   return visit(tree);
+}
+
+/** What a row of the tree says beyond its decision: how the configuration meets the structures. */
+export interface RowInfo {
+  /** A config node that matches nothing in the structures seen so far. */
+  notSeen?: true;
+  /** In how many packages this node matches two keys side by side: which value is meant? */
+  conflicts?: number;
+  /** Other rows that match the same keys: the data is in each of them. */
+  alsoMatchedBy?: string[];
+  /** Rows with this row's name have different decisions: allowed, but unusual. */
+  nameMismatch?: true;
+}
+
+function walk(tree: ProjectNode, visit: (node: ProjectNode, path: NodePath) => void) {
+  const go = (node: ProjectNode, path: NodePath) => {
+    visit(node, path);
+    for (const child of node.children ?? []) go(child, [...path, child.id]);
+  };
+  go(tree, []);
+}
+
+/** Config nodes that match nothing seen so far: settings for parts no package has shown. */
+export function notSeen(tree: ProjectNode): NodePath[] {
+  const out: NodePath[] = [];
+  walk(tree, (node, path) => {
+    if (path.length > 0 && !node.virtual && !node.keys?.length) out.push(path);
+  });
+  return out;
+}
+
+/**
+ * The notes on each row: config nodes nothing matches, rows that share their data, and nodes
+ * that match two keys side by side. Conflicts are checked per structure (each package on its
+ * own), since the union has keys side by side that no package has together.
+ */
+export function rowInfo(built: Built, config: ProjectConfig, structures: readonly Shape[]): Map<ProjectNode, RowInfo> {
+  const out = new Map<ProjectNode, RowInfo>();
+  const add = (node: ProjectNode, info: RowInfo) => out.set(node, { ...out.get(node), ...info });
+  const conflicts = new Map<string, number>();
+  for (const shape of structures) {
+    const own = buildTree(config, shape);
+    if (own.conflicts.size === 0) continue;
+    walk(own.tree, (node, path) => {
+      if (own.conflicts.has(node)) conflicts.set(pathKey(path), (conflicts.get(pathKey(path)) ?? 0) + 1);
+    });
+  }
+  const byName = new Map<string, ProjectNode[]>();
+  walk(built.tree, (node, path) => {
+    if (path.length > 0 && !node.virtual && !node.keys?.length) add(node, { notSeen: true });
+    const count = conflicts.get(pathKey(path));
+    if (count) add(node, { conflicts: count });
+    const shared = built.shared.get(node);
+    if (shared?.length) add(node, { alsoMatchedBy: shared.map((n) => n.name) });
+    if (node.nameId !== undefined && isDecidable(node)) byName.set(node.nameId, [...(byName.get(node.nameId) ?? []), node]);
+  });
+  for (const nodes of byName.values()) {
+    if (new Set(nodes.map((n) => n.decision ?? 'undecided')).size > 1) for (const n of nodes) add(n, { nameMismatch: true });
+  }
+  return out;
 }
