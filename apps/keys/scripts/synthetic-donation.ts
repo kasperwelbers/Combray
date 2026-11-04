@@ -25,10 +25,23 @@ export async function main(server: string, project: string): Promise<void> {
       {
         id: 'watch_history',
         name: 'Watch history (synthetic)',
-        columns: ['title', 'channel', 'day'],
-        rows: days.map((day, i) => [`Synthetic video ${i + 1}`, i % 2 ? 'Garden channel' : 'Cooking channel', day]),
+        fields: [
+          { id: 'title', name: 'Title' },
+          { id: 'channel', name: 'Channel' },
+          { id: 'day', name: 'Day' },
+        ],
       },
     ],
+    // One value per field and row, in long format, as a participant's browser sends them.
+    values: days.flatMap((day, row) =>
+      Object.entries({ title: `Synthetic video ${row + 1}`, channel: row % 2 ? 'Garden channel' : 'Cooking channel', day }).map(([field, value]) => ({
+        table: 'watch_history',
+        row,
+        field,
+        path: ['watch-history.json', `[${row}]`, field],
+        value,
+      })),
+    ),
     answers: { reflection: 'This is a synthetic donation.' },
   });
   const donation = await sealDonation(payload, { projectId: project, projectPublicKey: publicKey });

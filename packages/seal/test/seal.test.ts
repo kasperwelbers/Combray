@@ -112,7 +112,8 @@ describe('project keys', () => {
 describe('donation envelopes', () => {
   const payload = encodePayload({
     format: 'combray-donation/1',
-    tables: [{ id: 'watch', name: 'Watch history', columns: ['title', 'day'], rows: [['A video', '2026-10-01']] }],
+    tables: [{ id: 'watch', name: 'Watch history', fields: [{ id: 'title', name: 'Title' }] }],
+    values: [{ table: 'watch', row: 0, field: 'title', path: ['watch-history.json', '[0]', 'title'], value: 'A video' }],
     answers: { q1: 'yes' },
   });
 
@@ -132,7 +133,17 @@ describe('donation envelopes', () => {
     const d = await sealDonation(payload, { projectId: 'willow', projectPublicKey: project.publicKey });
     expect(d.header.chunkBytes).toBe(CHUNK_BYTES);
     const { payload: out } = await openDonation(d.envelope, d.sealedKey, project.seed, { projectId: 'willow', donationId: d.header.donation });
-    expect(decodePayload(out).tables[0]?.rows).toEqual([['A video', '2026-10-01']]);
+    expect(decodePayload(out).values[0]?.value).toBe('A video');
+  });
+
+  it('refuses payloads that are not in the long format', () => {
+    const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+    const base = { format: 'combray-donation/1', tables: [], values: [] };
+    expect(decodePayload(bytes(base)).values).toEqual([]);
+    expect(() => decodePayload(bytes({ ...base, values: undefined, rows: [] }))).toThrow('unknown payload format');
+    expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: -1, field: 'f', path: [], value: 1 }] }))).toThrow('invalid value');
+    expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: 0, field: 'f', path: [], value: { x: 1 } }] }))).toThrow('invalid value');
+    expect(() => decodePayload(bytes({ ...base, tables: [{ id: 't', name: 'T', columns: [] }] }))).toThrow('invalid table');
   });
 
   it('refuses tampering, truncation, the wrong key and the wrong donation', async () => {

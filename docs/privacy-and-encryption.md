@@ -101,7 +101,7 @@ chunk i: nonce = 11-byte big-endian i || last flag; aad = SHA-256(magic || heade
 
 The sealed donation key travels next to the envelope, never in it, and the server keeps it in its own database. Exact constructions are in [security.md](security.md#donation-envelope). Size padding is not done yet.
 
-Decrypted, the payload is `{ format: "combray-donation/1", tables: [{ id, name, columns, rows }], answers }`. Consent receipts, importer versions and annotations are to be added with the donate screen.
+Decrypted, the payload is `{ format: "combray-donation/1", tables: [{ id, name, fields }], values: [{ table, row, parent?, field, path, value, raw? }], answers }`: the donated values in long format, as matched by the configuration, each with the path where it was in the participant's files ([ADR 0012](decisions/0012-names-and-matches.md)). The key page pivots them into tables. Consent receipts, importer versions and annotations are to be added with the donate screen.
 
 ### Key management
 

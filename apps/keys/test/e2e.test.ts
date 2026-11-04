@@ -175,7 +175,13 @@ describe.skipIf(!enabled)('key page', () => {
     const config = await (await fetch(`${MAIN}/api/v1/p/willow/config`)).json();
     const payload = encodePayload({
       format: 'combray-donation/1',
-      tables: [{ id: 'watch', name: 'Watch history', columns: ['title', 'day'], rows: [['=HYPERLINK("x")', '2026-10-01'], ['A video', '2026-10-02']] }],
+      tables: [{ id: 'watch', name: 'Watch history', fields: [{ id: 'title', name: 'title' }, { id: 'day', name: 'day' }] }],
+      values: [
+        { table: 'watch', row: 0, field: 'title', path: ['watch.json', '[0]', 'title'], value: '=HYPERLINK("x")' },
+        { table: 'watch', row: 0, field: 'day', path: ['watch.json', '[0]', 'day'], value: '2026-10-01' },
+        { table: 'watch', row: 1, field: 'title', path: ['watch.json', '[1]', 'title'], value: 'A video' },
+        { table: 'watch', row: 1, field: 'day', path: ['watch.json', '[1]', 'day'], value: '2026-10-02' },
+      ],
       answers: { q1: 'yes' },
     });
     const donation = await sealDonation(payload, { projectId: 'willow', projectPublicKey: fromBase64Url(config.donation_key.public_key) });
@@ -193,11 +199,14 @@ describe.skipIf(!enabled)('key page', () => {
     });
     await ada.page.getByRole('button', { name: 'Open and download' }).click();
     await ada.page.getByText('Opened 1 donation(s).').waitFor();
-    await expect.poll(() => Object.keys(downloads).sort()).toEqual(['willow-answers.csv', 'willow-donations.json', 'willow-watch.csv']);
-    const csv = downloads['willow-watch.csv']!;
-    expect(csv).toContain('donation,day,title,day');
+    await expect
+      .poll(() => Object.keys(downloads).sort())
+      .toEqual(['willow-Watch-history.csv', 'willow-answers.csv', 'willow-donations.json', 'willow-values.csv']);
+    const csv = downloads['willow-Watch-history.csv']!;
+    expect(csv).toContain('donation,day,row,title,day');
     expect(csv).toContain(`'=HYPERLINK`);
     expect(csv).toContain('A video,2026-10-02');
+    expect(downloads['willow-values.csv']).toContain('watch.json/[1]/title');
   }, 60_000);
 
   it.skipIf(!hasWeb)('opens the studio with a one-time handoff, without key material', async () => {

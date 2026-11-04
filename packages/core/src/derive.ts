@@ -58,6 +58,8 @@ export interface ColumnDef {
   transform?: Transform[];
   as?: FieldType;
   format?: string;
+  /** With a conversion: donate the value as it is in the file too. */
+  raw?: true;
   role?: Role;
   /**
    * The name is only structure: no label, and every step is a position (`#cell[0]`,
@@ -192,11 +194,12 @@ function valueInfo(types?: ValueType[], formats?: string[]): Pick<ColumnDef, 'ty
 }
 
 /** The conversion settings of a leaf, for its column. */
-function conversion(node: ProjectNode): Pick<ColumnDef, 'transform' | 'as' | 'format' | 'role'> {
-  const out: Pick<ColumnDef, 'transform' | 'as' | 'format' | 'role'> = {};
+function conversion(node: ProjectNode): Pick<ColumnDef, 'transform' | 'as' | 'format' | 'raw' | 'role'> {
+  const out: Pick<ColumnDef, 'transform' | 'as' | 'format' | 'raw' | 'role'> = {};
   if (node.transform?.length) out.transform = node.transform;
   if (node.as) out.as = node.as;
   if (node.format) out.format = node.format;
+  if (node.raw && (out.transform || out.as)) out.raw = true;
   if (node.role) out.role = node.role;
   return out;
 }
@@ -451,10 +454,13 @@ export function groupTables(
 export interface DerivedRow {
   values: Record<string, unknown>;
   parent?: number;
+  /** With `sources`: the row's own node in the tree, and the nodes each column's values are from. */
+  node?: TreeNode;
+  sources?: Record<string, TreeNode[]>;
 }
 
 /** Whether a tree child is the real position the project node `target` (below `parent`) matches. */
-function matchesChild(parent: ProjectNode, treeParent: TreeNode, child: TreeNode, target: ProjectNode): boolean {
+export function matchesChild(parent: ProjectNode, treeParent: TreeNode, child: TreeNode, target: ProjectNode): boolean {
   if (child.kind !== target.kind) return false;
   if (treeParent.kind === 'list') return isItemNode(target);
   if (parent.collapsed) return isKeysNode(target);
@@ -479,7 +485,7 @@ function resolve(node: TreeNode, projectNode: ProjectNode, path: NodePath): Tree
   });
 }
 
-function leafValue(node: TreeNode): unknown {
+export function leafValue(node: TreeNode): unknown {
   switch (node.kind) {
     case 'value':
       return node.type === 'null' ? null : node.value;
@@ -525,6 +531,8 @@ function keeps(table: TableDef, values: Record<string, unknown>): boolean {
 export interface DeriveOptions {
   /** Keep values as in the file: no conversions, no row filters. */
   raw?: boolean;
+  /** Keep where each value is from (`DerivedRow.node` and `sources`), for donations. */
+  sources?: boolean;
 }
 
 /**
@@ -560,6 +568,7 @@ export function deriveRows(
     const columns = [...table.columns, ...(options.raw ? [] : (table.hidden ?? []))];
     for (const { node, parent } of candidates) {
       const values: Record<string, unknown> = {};
+      const sources: Record<string, TreeNode[]> = {};
       for (const column of columns) {
         let value: unknown;
         if (column.type === 'table') {
@@ -570,13 +579,16 @@ export function deriveRows(
         else {
           const matches = resolve(node, rowProject, column.path);
           value = column.type === 'list' ? matches.map(leafValue) : matches.length > 0 ? leafValue(matches[0]!) : null;
+          if (options.sources) sources[column.id] = column.type === 'list' ? matches : matches.slice(0, 1);
         }
         values[column.id] = options.raw ? value : convertValue(value, column);
       }
       if (!options.raw && !keeps(table, values)) continue;
       for (const column of table.hidden ?? []) delete values[column.id];
       rowNodes[index]!.push(node);
-      out[index]!.push(parent === undefined ? { values } : { values, parent });
+      const row: DerivedRow = parent === undefined ? { values } : { values, parent };
+      if (options.sources) Object.assign(row, { node, sources });
+      out[index]!.push(row);
     }
   });
   // Counts of nested rows per parent row.

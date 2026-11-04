@@ -63,33 +63,85 @@ export function csvCell(value: Cell): string {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** One CSV per table id across all donations, with the donation id and day in front. */
+const toLine = (cells: Cell[]) => cells.map(csvCell).join(',');
+const toFile = (lines: Cell[][]) => lines.map(toLine).join('\r\n') + '\r\n';
+
+/** The cell for a field of a row: its value, or all of them as JSON when the field is a list. */
+const joined = (values: Cell[] | undefined): Cell =>
+  values === undefined || values.length === 0 ? null : values.length === 1 ? values[0]! : JSON.stringify(values);
+
+/**
+ * One CSV per table across all donations: the donated values pivoted into rows, with the
+ * donation id, its day and the row number in front (and, for nested tables, the row they are in).
+ * A field read in a converted way that was donated as in the file too gets a second column.
+ */
 export function toCsv(opened: Opened[]): Map<string, { name: string; csv: string }> {
-  const tables = new Map<string, { name: string; columns: string[]; rows: Cell[][] }>();
+  interface Table {
+    name: string;
+    fields: Map<string, string>;
+    withRaw: Set<string>;
+    nested: boolean;
+    rows: Map<string, { donation: string; day: string; row: number; parent?: number; values: Map<string, Cell[]>; raw: Map<string, Cell[]> }>;
+  }
+  const tables = new Map<string, Table>();
   for (const d of opened) {
     for (const t of d.payload.tables) {
-      let table = tables.get(t.id);
-      if (!table) {
-        table = { name: t.name, columns: [], rows: [] };
-        tables.set(t.id, table);
-      }
-      for (const c of t.columns) if (!table.columns.includes(c)) table.columns.push(c);
-      const cols = table.columns;
-      for (const row of t.rows) {
-        const byName = new Map(t.columns.map((c, i) => [c, row[i] ?? null]));
-        table.rows.push([d.id, d.day, ...cols.map((c) => byName.get(c) ?? null)]);
-      }
+      const table = tables.get(t.id) ?? { name: t.name, fields: new Map(), withRaw: new Set(), nested: false, rows: new Map() };
+      for (const f of t.fields) if (!table.fields.has(f.id)) table.fields.set(f.id, f.name);
+      tables.set(t.id, table);
+    }
+    for (const v of d.payload.values) {
+      const table = tables.get(v.table);
+      if (!table) continue;
+      if (!table.fields.has(v.field)) table.fields.set(v.field, v.field);
+      if (v.parent) table.nested = true;
+      if (v.raw !== undefined) table.withRaw.add(v.field);
+      const key = `${d.id}\u0000${v.row}`;
+      const row = table.rows.get(key) ?? { donation: d.id, day: d.day, row: v.row, ...(v.parent ? { parent: v.parent.row } : {}), values: new Map(), raw: new Map() };
+      row.values.set(v.field, [...(row.values.get(v.field) ?? []), v.value]);
+      if (v.raw !== undefined) row.raw.set(v.field, [...(row.raw.get(v.field) ?? []), v.raw]);
+      table.rows.set(key, row);
     }
   }
   const out = new Map<string, { name: string; csv: string }>();
   for (const [id, t] of tables) {
-    const header = ['donation', 'day', ...t.columns].map(csvCell).join(',');
-    // Rows added before a later donation brought new columns are shorter; pad them.
-    const width = t.columns.length + 2;
-    const lines = t.rows.map((r) => [...r, ...Array<Cell>(Math.max(0, width - r.length)).fill(null)].map(csvCell).join(','));
-    out.set(id, { name: t.name, csv: [header, ...lines].join('\r\n') + '\r\n' });
+    const fields = [...t.fields.keys()];
+    const header: Cell[] = ['donation', 'day', 'row', ...(t.nested ? ['in row'] : [])];
+    for (const f of fields) {
+      header.push(t.fields.get(f)!);
+      if (t.withRaw.has(f)) header.push(`${t.fields.get(f)!} (as in the file)`);
+    }
+    const lines = [...t.rows.values()].map((r) => {
+      const cells: Cell[] = [r.donation, r.day, r.row, ...(t.nested ? [r.parent ?? null] : [])];
+      for (const f of fields) {
+        cells.push(joined(r.values.get(f)));
+        if (t.withRaw.has(f)) cells.push(joined(r.raw.get(f)));
+      }
+      return cells;
+    });
+    out.set(id, { name: t.name, csv: toFile([header, ...lines]) });
   }
   return out;
+}
+
+/** Every donated value, one per line, with where it was in the participant's files. */
+export function valuesCsv(opened: Opened[]): string {
+  const header: Cell[] = ['donation', 'day', 'table', 'row', 'parent table', 'parent row', 'field', 'path', 'value', 'as in the file'];
+  const lines = opened.flatMap((d) =>
+    d.payload.values.map((v): Cell[] => [
+      d.id,
+      d.day,
+      v.table,
+      v.row,
+      v.parent?.table ?? null,
+      v.parent?.row ?? null,
+      v.field,
+      v.path.join('/'),
+      v.value,
+      v.raw ?? null,
+    ]),
+  );
+  return toFile([header, ...lines]);
 }
 
 /** Answers to questions, one row per donation. */

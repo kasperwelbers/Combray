@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { answersCsv, csvCell, type Opened, safeFileName, toCsv } from '../src/decrypt';
+import { answersCsv, csvCell, type Opened, safeFileName, toCsv, valuesCsv } from '../src/decrypt';
 import { assertionJson, creationOptions, registrationJson } from '../src/passkey';
 
-const donation = (id: string, tables: Opened['payload']['tables'], answers?: Record<string, string>): Opened => ({
+const donation = (id: string, payload: Partial<Opened['payload']> = {}, answers?: Record<string, string>): Opened => ({
   id,
   day: '2026-11-01',
-  payload: { format: 'combray-donation/1', tables, answers },
+  payload: { format: 'combray-donation/1', tables: [], values: [], ...payload, ...(answers ? { answers } : {}) },
 });
+
+const watch = { id: 't', name: 'Watch', fields: [{ id: 'title', name: 'Title' }] };
+const value = (row: number, field: string, v: string, more: object = {}) => ({ table: 't', row, field, path: ['w.json', `[${row}]`, field], value: v, ...more });
 
 describe('CSV export', () => {
   it('neutralises spreadsheet formulas and quotes when needed', () => {
@@ -22,18 +25,47 @@ describe('CSV export', () => {
     expect(csvCell('=a,b')).toBe(`"'=a,b"`);
   });
 
-  it('merges tables across donations and pads columns added later', () => {
+  it('pivots values into one table across donations, with fields added later and raw values', () => {
     const out = toCsv([
-      donation('d1', [{ id: 't', name: 'Watch', columns: ['title'], rows: [['one']] }]),
-      donation('d2', [{ id: 't', name: 'Watch', columns: ['channel', 'title'], rows: [['c', 'two']] }]),
+      donation('d1', { tables: [watch], values: [value(0, 'title', 'one'), value(1, 'title', 'two')] }),
+      donation('d2', {
+        tables: [{ ...watch, fields: [{ id: 'channel', name: 'Channel' }, { id: 'title', name: 'Title' }] }],
+        values: [value(0, 'channel', 'c'), value(0, 'title', 'three', { raw: 'Watched three' })],
+      }),
     ]);
-    expect(out.get('t')!.csv).toBe('donation,day,title,channel\r\nd1,2026-11-01,one,\r\nd2,2026-11-01,two,c\r\n');
+    expect(out.get('t')!.csv).toBe(
+      'donation,day,row,Title,Title (as in the file),Channel\r\n' +
+        'd1,2026-11-01,0,one,,\r\n' +
+        'd1,2026-11-01,1,two,,\r\n' +
+        'd2,2026-11-01,0,three,Watched three,c\r\n',
+    );
+  });
+
+  it('keeps nested rows with the row they are in, and lists as JSON', () => {
+    const out = toCsv([
+      donation('d1', {
+        tables: [watch, { id: 'c', name: 'Channels', fields: [{ id: 'name', name: 'Name' }] }],
+        values: [
+          value(0, 'title', 'one'),
+          { table: 'c', row: 0, parent: { table: 't', row: 0 }, field: 'name', path: [], value: 'Proust' },
+          { table: 'c', row: 0, parent: { table: 't', row: 0 }, field: 'name', path: [], value: 'Odette' },
+        ],
+      }),
+    ]);
+    expect(out.get('c')!.csv).toBe('donation,day,row,in row,Name\r\nd1,2026-11-01,0,0,"[""Proust"",""Odette""]"\r\n');
+  });
+
+  it('lists every value with its path in long format', () => {
+    const csv = valuesCsv([donation('d1', { tables: [watch], values: [value(0, 'title', '=one', { raw: 'x' })] })]);
+    expect(csv).toBe(
+      'donation,day,table,row,parent table,parent row,field,path,value,as in the file\r\nd1,2026-11-01,t,0,,,title,w.json/[0]/title,\'=one,x\r\n',
+    );
   });
 
   it('writes one answers row per donation', () => {
-    const csv = answersCsv([donation('d1', [], { q1: 'yes' }), donation('d2', [], { q2: '=no' })]);
+    const csv = answersCsv([donation('d1', {}, { q1: 'yes' }), donation('d2', {}, { q2: '=no' })]);
     expect(csv).toBe(`donation,day,q1,q2\r\nd1,2026-11-01,yes,\r\nd2,2026-11-01,,'=no\r\n`);
-    expect(answersCsv([donation('d1', [])])).toBeUndefined();
+    expect(answersCsv([donation('d1')])).toBeUndefined();
   });
 
   it('makes safe file names', () => {

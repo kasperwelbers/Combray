@@ -24,7 +24,7 @@ import {
 } from '@combray/seal';
 
 import { type Me, type Member, type Project, type ProjectSummary, type Site, ApiError, api, projectName } from './api';
-import { answersCsv, openAll, safeFileName, toCsv } from './decrypt';
+import { answersCsv, openAll, safeFileName, toCsv, valuesCsv } from './decrypt';
 import { action, download, h, message, show } from './dom';
 import { authenticate, passkeysAvailable, register, signInWithPasskey } from './passkey';
 import * as vault from './vault';
@@ -667,7 +667,14 @@ async function donationsBlock(project: Project, seed: Uint8Array): Promise<HTMLE
       action('Open and download', async () => {
         const result = await openAll(project.id, seed, (done, total) => (status.textContent = `Opening ${done} of ${total}…`));
         const base = safeFileName(project.id);
-        for (const [id, t] of toCsv(result.opened)) download(`${base}-${safeFileName(id)}.csv`, t.csv, 'text/csv');
+        const tables = toCsv(result.opened);
+        const names = [...tables.values()].map((t) => safeFileName(t.name));
+        for (const [id, t] of tables) {
+          // Named after the table; two tables with one name keep apart by their ids.
+          const name = safeFileName(t.name);
+          download(`${base}-${names.filter((n) => n === name).length > 1 ? `${name}-${safeFileName(id)}` : name}.csv`, t.csv, 'text/csv');
+        }
+        download(`${base}-values.csv`, valuesCsv(result.opened), 'text/csv');
         const answers = answersCsv(result.opened);
         if (answers) download(`${base}-answers.csv`, answers, 'text/csv');
         download(`${base}-donations.json`, JSON.stringify(result.opened, null, 2), 'application/json');
