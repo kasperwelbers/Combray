@@ -6,8 +6,10 @@
 import { and, asc, eq, max, sql } from 'drizzle-orm';
 
 import { changes, type Db, type Queries } from './db.ts';
-import { projectDetails, projectPlatforms, projects } from './db/schema.ts';
-import { nowSecs } from './util.ts';
+import { projectDetails, projectPlatforms, projects, researchers, testPackages } from './db/schema.ts';
+import { nowSecs, random, sha256 } from './util.ts';
+
+const sha256Hex = (text: string): string => sha256(text).toString('hex');
 
 /**
  * Project ids are lowercase letters, digits and dashes. Participants open `/p/{project}/`, so no id
@@ -126,6 +128,37 @@ export interface PlatformDraft {
   position: number;
   structure: unknown;
   importer: unknown;
+}
+
+/** Packages with content a platform may keep; structure-only ones have a higher cap. */
+export const MAX_TEST_DATA = 10;
+export const MAX_TEST_PACKAGES = 200;
+
+export interface NewTestPackage {
+  name: string;
+  /** The shape's JSON text. */
+  shape: string;
+  data?: { gzip: Buffer; bytes: number };
+  by: string;
+}
+
+export interface AddedTestPackage {
+  id: string;
+  new_structure: boolean;
+  existing: boolean;
+}
+
+export interface TestPackageList {
+  packages: {
+    id: string;
+    name: string;
+    structure_hash: string;
+    has_data: boolean;
+    data_bytes: number;
+    added: number;
+    added_by: string | null;
+  }[];
+  shapes: { hash: string; shape: unknown }[];
 }
 
 export interface DraftSummary {
@@ -284,8 +317,122 @@ export class Projects {
   }
 
   deletePlatform(id: string, platform: string): void {
-    if (changes(this.db.delete(projectPlatforms).where(this.isPlatform(id, platform)).run()) === 0) fail('not_found');
-    this.touch(id);
+    this.db.transaction((tx) => {
+      if (changes(tx.delete(projectPlatforms).where(this.isPlatform(id, platform)).run()) === 0) fail('not_found');
+      tx.delete(testPackages).where(and(eq(testPackages.projectId, id), eq(testPackages.platformId, platform))).run();
+      this.touch(id, tx);
+    });
+  }
+
+  // Test packages of a platform (docs/security.md#test-packages). They are the researchers' own
+  // material for setting up the tree, not part of what participants get: changing them does not
+  // change the draft's revision.
+
+  private requirePlatform(id: string, platform: string, db: Queries = this.db): void {
+    if (!validPlatformId(platform) || !db.select({ id: projectPlatforms.id }).from(projectPlatforms).where(this.isPlatform(id, platform)).get()) {
+      fail('not_found');
+    }
+  }
+
+  private isTestPackage(id: string, platform: string, pkg: string) {
+    return and(eq(testPackages.projectId, id), eq(testPackages.platformId, platform), eq(testPackages.id, pkg));
+  }
+
+  /** The platform's test packages, oldest first, and each distinct structure once. */
+  testPackages(id: string, platform: string): TestPackageList {
+    this.requirePlatform(id, platform);
+    const rows = this.db
+      .select({
+        id: testPackages.id,
+        name: testPackages.name,
+        hash: testPackages.structureHash,
+        shape: testPackages.shape,
+        hasData: sql<number>`${testPackages.data} is not null`,
+        dataBytes: testPackages.dataBytes,
+        added: testPackages.added,
+        email: researchers.email,
+      })
+      .from(testPackages)
+      .leftJoin(researchers, eq(researchers.id, testPackages.addedBy))
+      .where(and(eq(testPackages.projectId, id), eq(testPackages.platformId, platform)))
+      // In the order they were added (`added` is in seconds, so ties are common).
+      .orderBy(asc(testPackages.added), sql`${testPackages}.rowid`)
+      .all();
+    const shapes = new Map<string, unknown>();
+    for (const row of rows) if (!shapes.has(row.hash)) shapes.set(row.hash, JSON.parse(row.shape));
+    return {
+      packages: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        structure_hash: r.hash,
+        has_data: Boolean(r.hasData),
+        data_bytes: r.dataBytes,
+        added: r.added,
+        added_by: r.email ?? null,
+      })),
+      shapes: [...shapes].map(([hash, shape]) => ({ hash, shape })),
+    };
+  }
+
+  /**
+   * Add a test package: its shape (JSON text) and, if the researcher declared it fine to keep, its
+   * content (gzip of the JSON text). The same structure under the same name is one package: adding
+   * it again only adds content it did not have yet.
+   */
+  addTestPackage(id: string, platform: string, added: NewTestPackage): AddedTestPackage | 'too_many' {
+    const hash = sha256Hex(added.shape);
+    return this.db.transaction((tx) => {
+      this.requirePlatform(id, platform, tx);
+      const onPlatform = and(eq(testPackages.projectId, id), eq(testPackages.platformId, platform));
+      const withData = () =>
+        tx.select({ n: sql<number>`count(*)` }).from(testPackages).where(and(onPlatform, sql`${testPackages.data} is not null`)).get()!.n;
+      const same = tx
+        .select({ id: testPackages.id, hasData: sql<number>`${testPackages.data} is not null` })
+        .from(testPackages)
+        .where(and(onPlatform, eq(testPackages.structureHash, hash), eq(testPackages.name, added.name)))
+        .get();
+      if (same) {
+        if (added.data && !same.hasData) {
+          if (withData() >= MAX_TEST_DATA) return 'too_many';
+          tx.update(testPackages)
+            .set({ data: added.data.gzip, dataBytes: added.data.bytes })
+            .where(this.isTestPackage(id, platform, same.id))
+            .run();
+        }
+        return { id: same.id, new_structure: false, existing: true };
+      }
+      if (added.data && withData() >= MAX_TEST_DATA) return 'too_many';
+      if (tx.select({ n: sql<number>`count(*)` }).from(testPackages).where(onPlatform).get()!.n >= MAX_TEST_PACKAGES) return 'too_many';
+      const known = tx.select({ id: testPackages.id }).from(testPackages).where(and(onPlatform, eq(testPackages.structureHash, hash))).get();
+      const pkg = random(16).toString('base64url');
+      tx.insert(testPackages)
+        .values({
+          projectId: id,
+          platformId: platform,
+          id: pkg,
+          name: added.name,
+          structureHash: hash,
+          shape: added.shape,
+          data: added.data?.gzip ?? null,
+          dataBytes: added.data?.bytes ?? 0,
+          addedBy: added.by,
+          added: nowSecs(),
+        })
+        .run();
+      return { id: pkg, new_structure: known === undefined, existing: false };
+    });
+  }
+
+  /** The stored content of a test package, gzipped JSON; `no_data` if it only has a structure. */
+  testPackageData(id: string, platform: string, pkg: string): Buffer | 'no_data' {
+    this.requirePlatform(id, platform);
+    const row = this.db.select({ data: testPackages.data }).from(testPackages).where(this.isTestPackage(id, platform, pkg)).get() ?? fail('not_found');
+    return row.data ?? 'no_data';
+  }
+
+  deleteTestPackage(id: string, platform: string, pkg: string): void {
+    this.requirePlatform(id, platform);
+    if (changes(this.db.delete(testPackages).where(this.isTestPackage(id, platform, pkg)).run()) === 0) fail('not_found');
   }
 
   /** Copy the draft to the live version. Returns the new version number. */

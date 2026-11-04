@@ -5,6 +5,7 @@ import { localize } from '@combray/core';
 
 import { ImportCard } from '../components/ImportCard';
 import { foldedPath } from '../format';
+import { RawData } from './Explore';
 import type { DatasetSummary, TableSummary, UploadPoint } from '../worker/api';
 import { data } from '../worker/client';
 
@@ -13,7 +14,6 @@ interface Props {
   /** The project's upload points, one uploader each; without them, the YAML importers run. */
   points?: UploadPoint[];
   onChanged: () => Promise<void>;
-  onOpen: (dataset: DatasetSummary) => void;
   onOpenTable: (table: TableSummary) => void;
 }
 
@@ -42,7 +42,7 @@ function TableButton({ table, onOpen, path }: { table: TableSummary; onOpen: (t:
   );
 }
 
-export function Home({ datasets, points, onChanged, onOpen, onOpenTable }: Props) {
+export function Home({ datasets, points, onChanged, onOpenTable }: Props) {
   const { t, i18n } = useTranslation();
   const [busy, setBusy] = useState(false);
 
@@ -69,60 +69,92 @@ export function Home({ datasets, points, onChanged, onOpen, onOpenTable }: Props
         ) : (
           <ul className="datasets">
             {datasets.map((d) => (
-              <li key={d.id} className="card">
-                <div className="dataset">
-                  <div>
-                    <h3>{d.name}</h3>
-                    <div className="meta">
-                      {t('datasets.files', { count: d.fileCount })} · {t('datasets.items', { count: d.nodeCount })} ·{' '}
-                      {t('datasets.imported', { date: date(d.importedAt) })}
-                    </div>
-                  </div>
-                  <div className="topbar-actions">
-                    <button className="button quiet" type="button" onClick={() => onOpen(d)}>
-                      {t('datasets.browse')}
-                    </button>
-                    <button className="button danger" type="button" onClick={() => remove(d)}>
-                      {t('datasets.delete')}
-                    </button>
-                  </div>
-                </div>
-                {collections(d.tables).length > 0 ? (
-                  <>
-                    <h4 className="found-title">{t('datasets.found')}</h4>
-                    <ul className="found">
-                      {collections(d.tables).map((table) => (
-                        <li key={table.id}>
-                          <TableButton table={table} onOpen={onOpenTable} />
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p className="meta found-title">{t('datasets.nothingFound')}</p>
-                )}
-                {d.tables.some((table) => table.derived && !table.derived.collection) && (
-                  <details className="other-data">
-                    <summary>
-                      {t('datasets.other', { count: d.tables.filter((x) => x.derived && !x.derived.collection).length })}
-                    </summary>
-                    <p className="meta">{t('datasets.otherIntro')}</p>
-                    <ul className="found">
-                      {d.tables
-                        .filter((table) => table.derived && !table.derived.collection)
-                        .map((table) => (
-                          <li key={table.id}>
-                            <TableButton table={table} onOpen={onOpenTable} path />
-                          </li>
-                        ))}
-                    </ul>
-                  </details>
-                )}
-              </li>
+              <DatasetCard key={d.id} dataset={d} date={date(d.importedAt)} onRemove={() => void remove(d)} onOpenTable={onOpenTable} />
             ))}
           </ul>
         )}
       </section>
     </>
+  );
+}
+
+/**
+ * One upload: what the researchers' settings make of it (processed), or everything in it as it
+ * is (raw data). Both are read from this computer only.
+ */
+function DatasetCard({
+  dataset: d,
+  date,
+  onRemove,
+  onOpenTable,
+}: {
+  dataset: DatasetSummary;
+  date: string;
+  onRemove: () => void;
+  onOpenTable: (table: TableSummary) => void;
+}) {
+  const { t } = useTranslation();
+  const [view, setView] = useState<'processed' | 'raw'>('processed');
+  const others = d.tables.filter((table) => table.derived && !table.derived.collection);
+  return (
+    <li className="card">
+      <div className="dataset">
+        <div>
+          <h3>{d.name}</h3>
+          <div className="meta">
+            {t('datasets.files', { count: d.fileCount })} · {t('datasets.items', { count: d.nodeCount })} ·{' '}
+            {t('datasets.imported', { date })}
+          </div>
+        </div>
+        <div className="topbar-actions">
+          <span className="segmented" role="group" aria-label={t('datasets.view', { name: d.name })}>
+            {(['processed', 'raw'] as const).map((v) => (
+              <button key={v} type="button" className="seg" aria-pressed={view === v} onClick={() => setView(v)}>
+                {t(`datasets.${v}`)}
+              </button>
+            ))}
+          </span>
+          <button className="button danger" type="button" onClick={onRemove}>
+            {t('datasets.delete')}
+          </button>
+        </div>
+      </div>
+      {view === 'raw' ? (
+        <>
+          <p className="meta found-title">{t('datasets.rawIntro')}</p>
+          <RawData dataset={d} />
+        </>
+      ) : (
+        <>
+          {collections(d.tables).length > 0 ? (
+            <>
+              <h4 className="found-title">{t('datasets.found')}</h4>
+              <ul className="found">
+                {collections(d.tables).map((table) => (
+                  <li key={table.id}>
+                    <TableButton table={table} onOpen={onOpenTable} />
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="meta found-title">{t('datasets.nothingFound')}</p>
+          )}
+          {others.length > 0 && (
+            <details className="other-data">
+              <summary>{t('datasets.other', { count: others.length })}</summary>
+              <p className="meta">{t('datasets.otherIntro')}</p>
+              <ul className="found">
+                {others.map((table) => (
+                  <li key={table.id}>
+                    <TableButton table={table} onOpen={onOpenTable} path />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+    </li>
   );
 }

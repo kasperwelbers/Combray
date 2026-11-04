@@ -380,6 +380,8 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
     [],
   );
 
+  const packages = useMemo(() => projectApi.testPackages(projectId, platformId), [projectId, platformId]);
+
   const store = useMemo((): DraftStore | 'unreadable' | undefined => {
     if (!platform || platform === 'failed') return undefined;
     let initial: DraftStore['initial'] = { pending: [] };
@@ -430,7 +432,7 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
           {t('studio.project.removePlatform')}
         </button>
       </div>
-      <Studio draft={store} {...(platform.pack ? { pack: platform.pack } : {})} />
+      <Studio draft={store} packages={packages} {...(platform.pack ? { pack: platform.pack } : {})} />
     </div>
   );
 }

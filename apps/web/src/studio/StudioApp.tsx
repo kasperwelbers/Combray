@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { studioPath, type StudioTab } from '../route';
-import { localDraft } from './draft';
+import { STUDIO_LEARN_PATH, studioPath, type StudioTab } from '../route';
+import { Learn } from './Learn';
 import { Project } from './Project';
 import { ApiFailure, projectApi, SIGNED_OUT_EVENT } from './projectApi';
-import { Studio } from './Studio';
 
 /**
  * The researcher workspace: sign in, pick a project, work on it (docs/researcher-keys.md).
@@ -15,8 +14,8 @@ import { Studio } from './Studio';
  * key page can also send researchers here with a one-time code in the fragment
  * (`/studio/#handoff=…`), traded for the same kind of session.
  *
- * On a server without researcher accounts, or without a server, the workspace opens without
- * sign-in and keeps one local draft.
+ * `/studio/learn/` is a practice tree editor with example data, open without sign-in. On a server
+ * without researcher accounts, or without a server, that is all the studio shows.
  */
 
 interface Site {
@@ -89,7 +88,7 @@ async function load(handoff?: string): Promise<State> {
   return { kind: 'signed-in', site, email: me.email, projects: list?.projects ?? [] };
 }
 
-export function StudioApp({ projectId, tab }: { projectId?: string; tab?: StudioTab }) {
+export function StudioApp({ projectId, tab, learn }: { projectId?: string; tab?: StudioTab; learn?: boolean }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [state, setState] = useState<State>({ kind: 'loading' });
 
@@ -101,6 +100,7 @@ export function StudioApp({ projectId, tab }: { projectId?: string; tab?: Studio
   }, []);
 
   useEffect(() => {
+    if (learn) return;
     let cancelled = false;
     void load(takeHandoff())
       .catch((): State => ({ kind: 'local' }))
@@ -110,10 +110,12 @@ export function StudioApp({ projectId, tab }: { projectId?: string; tab?: Studio
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [learn]);
+
+  if (learn) return <Learn />;
 
   if (state.kind === 'loading') return null;
-  if (state.kind === 'local') return <Studio title={t('studio.title')} draft={localDraft()} />;
+  if (state.kind === 'local') return <Learn noServer />;
   if (state.kind === 'signed-out') {
     return (
       <SignIn site={state.site} {...(state.handoffFailed ? { handoffFailed: true } : {})} />
@@ -154,6 +156,7 @@ export function StudioApp({ projectId, tab }: { projectId?: string; tab?: Studio
           </ul>
         )}
         <NewProject />
+        <LearnLink />
         <p className="meta">
           {t('studio.keysElsewhere')}{' '}
           {state.site.keys_url && <a href={state.site.keys_url}>{t('studio.openKeyPage')}</a>}
@@ -263,6 +266,18 @@ function SignIn({ site, handoffFailed }: { site: Site; handoffFailed?: boolean }
         )}
         <p className="meta">{t('studio.signInFirstTime')}</p>
       </section>
+      <LearnLink />
     </div>
+  );
+}
+
+/** To the practice page, which needs no account or passkey. */
+function LearnLink() {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  return (
+    <section className="card">
+      <a href={STUDIO_LEARN_PATH}>{t('studio.learn.link')}</a>
+      <p className="meta">{t('studio.learn.linkHelp')}</p>
+    </section>
   );
 }

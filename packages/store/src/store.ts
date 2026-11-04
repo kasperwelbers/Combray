@@ -207,7 +207,6 @@ export class LocalStore<M = unknown> {
       const slice = items.slice(i * chunkSize, (i + 1) * chunkSize);
       chunks.push(await encrypt(dek, encode(slice), aad('combray', FORMAT_VERSION, storeId, id, i)));
     }
-    const bytes = chunks.reduce((n, c) => n + c.ciphertext.byteLength, 0);
     await this.write({ id, kind: 'items', chunks, manifest: encryptedManifest });
     return id;
   }

@@ -113,11 +113,11 @@ function TreeBrowser({ dataset }: { dataset: DatasetSummary }) {
   return (
     <>
       <form className="search" role="search" onSubmit={runSearch}>
-        <label className="visually-hidden" htmlFor="search">
+        <label className="visually-hidden" htmlFor={`search-${dataset.id}`}>
           {t('explore.search')}
         </label>
         <input
-          id="search"
+          id={`search-${dataset.id}`}
           type="search"
           placeholder={t('explore.search')}
           value={query}
@@ -242,33 +242,32 @@ function ShapeView({ dataset }: { dataset: DatasetSummary }) {
   );
 }
 
-export function Explore({ dataset, onBack }: { dataset: DatasetSummary; onBack: () => void }) {
+/**
+ * A participant's raw data: everything in the upload as it is, whatever the researchers chose,
+ * to browse or to see as a structure. Read from the local store; nothing is sent.
+ */
+export function RawData({ dataset }: { dataset: DatasetSummary }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<'browse' | 'structure'>('browse');
+  const id = (part: string) => `${part}-${dataset.id}`;
   return (
     <>
-      <p>
-        <button type="button" className="link-button" onClick={onBack}>
-          ← {t('explore.back')}
-        </button>
-      </p>
-      <h1>{dataset.name}</h1>
       <div className="tabs" role="tablist">
-        {(['browse', 'structure'] as const).map((id) => (
+        {(['browse', 'structure'] as const).map((key) => (
           <button
-            key={id}
+            key={key}
             type="button"
             role="tab"
-            id={`tab-${id}`}
-            aria-selected={tab === id}
-            aria-controls={`panel-${id}`}
-            onClick={() => setTab(id)}
+            id={id(`tab-${key}`)}
+            aria-selected={tab === key}
+            aria-controls={id(`panel-${key}`)}
+            onClick={() => setTab(key)}
           >
-            {t(`explore.${id}`)}
+            {t(`explore.${key}`)}
           </button>
         ))}
       </div>
-      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+      <div role="tabpanel" id={id(`panel-${tab}`)} aria-labelledby={id(`tab-${tab}`)}>
         {tab === 'browse' ? <TreeBrowser dataset={dataset} /> : <ShapeView dataset={dataset} />}
       </div>
     </>

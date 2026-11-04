@@ -26,7 +26,6 @@ export function Preview({ tables, hasExports }: Props) {
   const [stack, setStack] = useState<Open[]>([]);
   const name = (table: PreviewTable) => localize(table.name, i18n.language) || t('studio.unnamedTable');
 
-  if (!hasExports) return <p className="meta">{t('studio.previewEmpty')}</p>;
   if (tables.length === 0) return <p className="meta">{t('studio.noTables')}</p>;
 
   // Tables with requested fields first, the record of loose fields last.
@@ -62,7 +61,11 @@ export function Preview({ tables, hasExports }: Props) {
             >
               {name(item)}
             </button>{' '}
-            <span className="meta">{t('studio.size', { rows: item.rowCount, columns: item.columns.length })}</span>
+            <span className="meta">
+              {hasExports
+                ? t('studio.size', { rows: item.rowCount, columns: item.columns.length })
+                : t('studio.columnsOnly', { count: item.columns.length })}
+            </span>
             {item.state === 'donate' && <span className="tag donate-tag">{t('studio.requested')}</span>}
             {tableMap(index)}
           </li>
@@ -96,7 +99,9 @@ export function Preview({ tables, hasExports }: Props) {
         )}
         <h3>{name(table)}</h3>
         <p className="meta">
-          {table.record
+          {!hasExports
+            ? t('studio.structurePreview')
+            : table.record
             ? t('studio.recordTable')
             : current.parentRow === undefined
               ? t('studio.rowsShown', { shown: rows.length, count: table.rowCount })
@@ -104,11 +109,23 @@ export function Preview({ tables, hasExports }: Props) {
         </p>
         <div className="preview-scroll">
           <table className="preview-table">
-            <thead>
+            <thead
+              className={
+                table.columns.every((c) => c.unnamed && c.state !== 'donate') && !(table.headerRow && !hasExports)
+                  ? 'visually-hidden'
+                  : undefined
+              }
+            >
               <tr>
-                {table.columns.map((c) => (
+                {table.columns.map((c, i) => (
                   <th key={c.id} scope="col" title={c.id}>
-                    {columnName(c)}
+                    {c.unnamed && table.headerRow && !hasExports ? (
+                      <span className="value-placeholder">{t('studio.placeholder.fromFirstRow')}</span>
+                    ) : c.unnamed ? (
+                      <span className="visually-hidden">{t('table.column', { n: i + 1 })}</span>
+                    ) : (
+                      columnName(c)
+                    )}
                     {c.state === 'donate' && (
                       <>
                         {' '}
@@ -120,6 +137,16 @@ export function Preview({ tables, hasExports }: Props) {
               </tr>
             </thead>
             <tbody>
+              {!hasExports && (
+                // Without a test package: one row that says what kind of value each column holds.
+                <tr className="placeholder-row">
+                  {table.columns.map((c) => (
+                    <td key={c.id}>
+                      <Placeholder column={c} />
+                    </td>
+                  ))}
+                </tr>
+              )}
               {rows.map((row) => (
                 <tr key={row.index}>
                   {table.columns.map((c) => (
@@ -151,6 +178,22 @@ export function Preview({ tables, hasExports }: Props) {
       </div>
     </div>
   );
+}
+
+/** What a column would hold: its type, as a grey placeholder instead of a value. */
+function Placeholder({ column }: { column: ColumnDef }) {
+  const { t } = useTranslation();
+  const kind =
+    column.type === 'table'
+      ? t('studio.placeholder.table')
+      : column.type === 'list'
+        ? t('studio.placeholder.list')
+        : column.as
+          ? t(`studio.as.${column.as}`)
+          : column.types?.length
+            ? column.types.map((type) => t(`type.${type}`)).join(' / ')
+            : t('studio.placeholder.value');
+  return <span className="value-placeholder">{kind}</span>;
 }
 
 function Cell({ value }: { value: PreviewValue }) {

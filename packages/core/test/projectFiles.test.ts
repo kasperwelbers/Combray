@@ -110,4 +110,26 @@ describe('project files', () => {
     expect(() => parseImporterFile(importer({ ...root, newChildren: 'never' }))).toThrow('ask or skip');
     expect(() => parseImporterFile(importer({ ...root, required: false }))).toThrow('required');
   });
+
+  it('keeps a header row on the rows of a table only', () => {
+    const tree = decided();
+    getNode(tree, ['[*]'])!.headerRow = true;
+    const { structure, importer: settings } = splitProjectTree(tree);
+    const parsed = parseImporterFile(JSON.parse(JSON.stringify(settings)));
+    expect(getNode(joinProjectTree(structure, parsed).tree, ['[*]'])!.headerRow).toBe(true);
+    expect(() => parseImporterFile(importer({ path: [], kind: 'list', headerRow: true }))).toThrow('only the rows');
+    expect(() => parseImporterFile(importer({ path: ['[*]'], kind: 'map', headerRow: 'yes' }))).toThrow('headerRow must be true');
+  });
+
+  it('keeps whether participants see undecided parts, on the root only', () => {
+    const tree = decided();
+    tree.undecided = 'show';
+    const { structure, importer: settings } = splitProjectTree(tree);
+    expect(settings.entries[0]).toMatchObject({ path: [], undecided: 'show' });
+    const parsed = parseImporterFile(JSON.parse(JSON.stringify(settings)));
+    expect(joinProjectTree(structure, parsed).tree.undecided).toBe('show');
+
+    expect(() => parseImporterFile(importer({ path: [], kind: 'list', undecided: 'hide' }))).toThrow('undecided must be show');
+    expect(() => parseImporterFile(importer({ path: ['a'], kind: 'map', undecided: 'show' }))).toThrow('only the root');
+  });
 });

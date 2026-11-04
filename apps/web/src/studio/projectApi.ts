@@ -1,6 +1,8 @@
 /** The studio's calls to the project API on its own site (`/api/v1`), with the studio session cookie. */
 import type { Localized } from '@combray/core';
 
+import type { PackageStore } from './api';
+
 export interface ProjectDetails {
   name: Localized;
   description?: Localized;
@@ -95,4 +97,15 @@ export const projectApi = {
   project: (id: string) => call<ProjectInfo>('GET', project(id)),
   members: (id: string) => call<{ members: Member[] }>('GET', project(id)).then((p) => p.members),
   donations: (id: string) => call<Donations>('GET', `${project(id)}/donations`),
+  /** A platform's test packages, as a store for the tree editor. */
+  testPackages: (id: string, platform: string): PackageStore => {
+    const base = `${project(id)}/draft/platforms/${encodeURIComponent(platform)}/test-packages`;
+    return {
+      list: () => call('GET', base),
+      add: (name, shape, data) =>
+        call('POST', base, data === undefined ? { name, shape } : { name, shape, data, declaration: 'synthetic-or-not-sensitive' }),
+      data: (pkg) => call('GET', `${base}/${encodeURIComponent(pkg)}/data`),
+      remove: (pkg) => call('DELETE', `${base}/${encodeURIComponent(pkg)}`),
+    };
+  },
 };

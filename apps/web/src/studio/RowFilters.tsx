@@ -2,6 +2,7 @@ import { localize, type ColumnDef, type ProjectNode, type RowFilter } from '@com
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { SectionHead } from './Popover';
 import type { NodePatch } from './model';
 
 type TestKind = 'empty' | 'filled' | 'contains' | 'matches';
@@ -75,9 +76,8 @@ export function RowFilters({
 
   if (usable.length === 0) return null;
   return (
-    <fieldset className="panel-group">
-      <legend>{t('studio.filterTitle')}</legend>
-      <p className="meta">{t('studio.filterHelp')}</p>
+    <div className="panel-group">
+      <SectionHead title={t('studio.filterTitle')} help={t('studio.filterHelp')} />
       {filters.length > 0 && (
         <ul className="alias-list">
           {filters.map((f, i) => (
@@ -134,6 +134,6 @@ export function RowFilters({
           {t('studio.badRegex')}
         </p>
       )}
-    </fieldset>
+    </div>
   );
 }

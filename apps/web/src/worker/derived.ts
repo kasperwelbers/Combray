@@ -10,6 +10,7 @@ import {
   deriveRows,
   deriveTables,
   getNode,
+  headerNames,
   joinProjectTree,
   mergeShape,
   parseImporterFile,
@@ -94,6 +95,7 @@ function columnInfo(
   const info: ColumnInfo = { id: column.id, name: column.name, type: column.type, state: column.state };
   if (isNew) info.new = true;
   if (column.role) info.role = column.role;
+  if (column.unnamed) info.unnamed = true;
   if (column.as === 'datetime' || column.as === 'url') info.as = column.as;
   if (column.type === 'table') {
     const nested = tables[column.table!]!;
@@ -121,13 +123,38 @@ function displayOf(columns: ColumnInfo[]): DerivedTable['display'] {
   return display;
 }
 
+/**
+ * Drop the columns the researcher has not decided on (new parts included), in nested tables too,
+ * and their values from the rows; a nested table left without columns goes as well. Returns the
+ * columns that are left.
+ */
+function withoutUndecided(columns: ColumnInfo[], rows: Row[]): ColumnInfo[] {
+  const kept: ColumnInfo[] = [];
+  for (const column of columns) {
+    if (column.type === 'table') {
+      const nested = rows.flatMap((row) => (Array.isArray(row[column.id]) ? (row[column.id] as Row[]) : []));
+      const inner = withoutUndecided(column.columns ?? [], nested);
+      if (inner.length > 0) {
+        kept.push({ ...column, columns: inner });
+        continue;
+      }
+    } else if (!column.undecided) {
+      kept.push(column);
+      continue;
+    }
+    for (const row of rows) delete row[column.id];
+  }
+  return kept;
+}
+
 function anyColumn(columns: ColumnInfo[], test: (c: ColumnInfo) => boolean): boolean {
   return columns.some((c) => test(c) || anyColumn(c.columns ?? [], test));
 }
 
 /**
  * The tables of a root found for an upload point, `prepared` (normalised) as `locateRoot`
- * returns it.
+ * returns it. Parts the researcher has not decided on are left out, columns and values, unless
+ * the tree's root says participants see them (`undecided: 'show'`); the raw data still has them.
  */
 export function deriveImport(
   root: { prepared: TreeNode; shape: Shape },
@@ -139,12 +166,30 @@ export function deriveImport(
   const merged = mergeShape(projectTree, root.shape, { skipClosed: true });
   const added = new Set(merged.added.map(pathKey));
   const defs = deriveTables(merged.tree);
+  // Undecided parts are hidden unless the researcher lets participants see them.
+  const hideUndecided = merged.tree.undecided !== 'show';
   const nested = nest(defs, deriveRows(root.prepared, merged.tree, defs));
   const tables: DerivedImport['tables'] = [];
   defs.forEach((def, i) => {
     if (def.parent !== undefined || nested[i]!.length === 0) return;
     const rowsPath = def.rows ?? [];
-    const columns = def.columns.map((c) => columnInfo(c, defs, rowsPath, merged.tree, added));
+    let columns = def.columns.map((c) => columnInfo(c, defs, rowsPath, merged.tree, added));
+    if (hideUndecided) {
+      columns = withoutUndecided(columns, nested[i]!);
+      if (columns.length === 0) return;
+    }
+    // The researcher says the first row holds the column names: shown as names, kept as data.
+    let headerRow: Row | undefined;
+    if (def.headerRow && nested[i]!.length > 0) {
+      headerRow = nested[i]!.shift()!;
+      const names = headerNames(merged.tree, def, headerRow);
+      columns = columns.map((c) => {
+        const name = names.get(c.id);
+        if (name === undefined) return c;
+        const { unnamed: _unnamed, ...named } = c;
+        return { ...named, name };
+      });
+    }
     const collection = anyColumn(columns, (c) => c.type !== 'table' && !c.undecided);
     const table: DerivedTable = {
       name: def.name,
@@ -156,6 +201,7 @@ export function deriveImport(
       display: displayOf(columns),
     };
     if (anyColumn(columns, (c) => c.new === true)) table.new = true;
+    if (headerRow) table.headerRow = headerRow;
     tables.push({ table, rows: nested[i]! });
   });
   return { point, tables };

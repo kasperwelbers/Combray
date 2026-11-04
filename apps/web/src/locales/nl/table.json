@@ -6,5 +6,6 @@
   "requested": "gevraagd",
   "new": "nieuw",
   "newHelp": "Dit deel van de gegevens kennen de onderzoekers nog niet. Je kunt het zien, maar er wordt nooit om gevraagd.",
-  "back": "Terug naar {{name}}"
+  "back": "Terug naar {{name}}",
+  "column": "Kolom {{n}}"
 }

@@ -45,10 +45,14 @@ export interface ImporterEntry {
   format?: string;
   role?: Role;
   filter?: RowFilter[];
+  /** Rows of a table only: the first row holds the column names (shown so, never changed). */
+  headerRow?: true;
   required?: true;
   newChildren?: NewChildren;
   /** The root's entry only. */
   find?: string[];
+  /** The root's entry only: participants see undecided parts. */
+  undecided?: 'show';
 }
 
 export interface ImporterFile {
@@ -79,6 +83,8 @@ const SETTINGS = [
   'required',
   'newChildren',
   'find',
+  'undecided',
+  'headerRow',
 ] as const;
 
 function shapeOf(node: ProjectNode): Shape {
@@ -263,6 +269,14 @@ export function parseImporterFile(json: unknown): ImporterFile {
         const problem = typeof pattern === 'string' ? findPatternProblem(pattern) : 'not text';
         check(problem === undefined, `${at}: find pattern ${JSON.stringify(pattern)}: ${problem}`);
       }
+    }
+    if (e.headerRow !== undefined) {
+      check(e.headerRow === true, `${at}: headerRow must be true`);
+      check((e.path as unknown[]).at(-1) === '[*]', `${at}: only the rows of a table ([*]) have a header row`);
+    }
+    if (e.undecided !== undefined) {
+      check((e.path as unknown[]).length === 0, `${at}: only the root has the undecided setting`);
+      check(e.undecided === 'show', `${at}: undecided must be show`);
     }
     if (e.lifter !== undefined) check(typeof e.lifter === 'string', `${at}: lifter must be a string`);
     if (e.label !== undefined) checkLocalized(e.label, `${at}: label`);

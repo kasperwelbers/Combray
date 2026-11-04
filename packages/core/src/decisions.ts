@@ -63,6 +63,13 @@ export interface ProjectNode {
   /** Repeated nodes (`[*]`, `{*}`): conditions a row must meet, all of them, to be imported. */
   filter?: RowFilter[];
   /**
+   * The rows of a table (`[*]`) only: its first row holds the column names, as in an HTML table
+   * whose header is written as an ordinary row. Only how the table is shown changes: the first
+   * row names the columns that have no label and is not shown as a row. The data itself, and
+   * so a donation, keep the row.
+   */
+  headerRow?: true;
+  /**
    * An upload only fits the tree when this node is there, by its name or any alias
    * (docs/tree-decisions.md#finding-the-export-in-an-upload).
    */
@@ -78,6 +85,12 @@ export interface ProjectNode {
    * the upload itself does not fit. See `findPatternProblem` for what a pattern must be.
    */
   find?: string[];
+  /**
+   * The root only: whether participants see the parts the researcher has not decided on
+   * (`show`). Absent: they are hidden from the processed view; participants can still see
+   * everything in their raw data.
+   */
+  undecided?: 'show';
   label?: Localized;
   /** One participant-facing sentence, for donated leaves. */
   description?: Localized;

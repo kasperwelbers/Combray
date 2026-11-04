@@ -11,6 +11,7 @@ import {
   deriveRows,
   defaultRoot,
   deriveTables,
+  headerNames,
   extractShape,
   normalizeTree,
   readSpot,
@@ -28,6 +29,8 @@ import type { PreviewRow, PreviewTable, PreviewValue, StudioApi, StudioExport } 
 
 const MAX_TEXT = 300;
 const MAX_ITEMS = 10;
+/** Example values on the rows of the tree are cut to this many characters. */
+const EXAMPLE_LENGTH = 40;
 // Nested rows kept per preview, so a deep tree cannot flood the main thread.
 const MAX_NESTED = 2000;
 
@@ -53,10 +56,14 @@ function previewRow(row: DerivedRow, index: number): PreviewRow {
   return row.parent === undefined ? { index, values } : { index, values, parent: row.parent };
 }
 
-/** The rows of all exports, one after the other; nested rows' parents shift with each export. */
-function allRows(projectTree: ProjectNode, tables: TableDef[]): DerivedRow[][] {
+/**
+ * The rows of all exports, one after the other (nested rows' parents shift with each export),
+ * or of one export only.
+ */
+function allRows(projectTree: ProjectNode, tables: TableDef[], only?: number): DerivedRow[][] {
   const all: DerivedRow[][] = tables.map(() => []);
-  for (const { tree } of exports.values()) {
+  for (const [id, { tree }] of exports) {
+    if (only !== undefined && id !== only) continue;
     const offsets = all.map((rows) => rows.length);
     deriveRows(tree, projectTree, tables).forEach((rows, i) => {
       const parent = tables[i]!.parent;
@@ -83,23 +90,53 @@ const api: StudioApi = {
     return { export: info, shape: extractShape(tree) };
   },
 
+  async addTree(name, tree) {
+    const info: StudioExport = { id: nextId++, name, nodeCount: countNodes(tree) };
+    exports.set(info.id, { info, tree });
+    return { export: info, shape: extractShape(tree) };
+  },
+
+  async exportTree(id) {
+    const found = exports.get(id);
+    if (!found) throw new Error('not-loaded');
+    return found.tree;
+  },
+
   async removeExport(id) {
     exports.delete(id);
   },
 
-  async preview(projectTree, rowLimit) {
+  async preview(projectTree, rowLimit, source) {
     const tables = deriveTables(projectTree);
     const out: PreviewTable[] = tables.map((t) => ({
       name: t.name,
       keyed: t.keyed === true,
       record: t.rows === undefined,
+      ...(t.headerRow ? { headerRow: true as const } : {}),
       ...(t.parent !== undefined ? { parent: t.parent } : {}),
       state: t.state,
       columns: t.columns,
       rowCount: 0,
       rows: [],
     }));
-    const all: PreviewRow[][] = allRows(projectTree, tables).map((rows) => rows.map((row, i) => previewRow(row, i)));
+    // Without a source, the structure only: tables and columns without rows.
+    const derived = source === undefined || !exports.has(source) ? tables.map(() => []) : allRows(projectTree, tables, source);
+    // A first row that holds the column names names them and is not shown as a row (top-level
+    // tables, as in the participant client); its nested rows go with it.
+    tables.forEach((table, i) => {
+      if (!table.headerRow || table.parent !== undefined || derived[i]!.length === 0) return;
+      const names = headerNames(projectTree, table, derived[i]![0]!.values);
+      out[i]!.columns = table.columns.map((c) => {
+        const name = names.get(c.id);
+        if (name === undefined) return c;
+        const { unnamed: _unnamed, ...named } = c;
+        return { ...named, name };
+      });
+    });
+    const all: PreviewRow[][] = derived.map((rows, i) => {
+      const shown = rows.map((row, index) => previewRow(row, index));
+      return tables[i]!.headerRow && tables[i]!.parent === undefined ? shown.slice(1) : shown;
+    });
     // Tables come parents first, so nested rows can be kept only under parent rows that are.
     const kept: Set<number>[] = [];
     out.forEach((table, i) => {
@@ -134,6 +171,25 @@ const api: StudioApi = {
       .slice(0, limit)
       .map(([value, count]) => ({ value, count }));
     return { total, empty, distinct: counts.size, top };
+  },
+
+  async examples(projectTree, paths, perField) {
+    const out: Record<string, string[]> = {};
+    for (const path of paths) {
+      const counts = new Map<string, number>();
+      for (const { tree } of exports.values()) {
+        for (const value of valuesAt(tree, projectTree, path)) {
+          const shown = text(value);
+          if (shown) counts.set(shown, (counts.get(shown) ?? 0) + 1);
+        }
+      }
+      if (counts.size === 0) continue;
+      out[JSON.stringify(path)] = [...counts]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, perField)
+        .map(([value]) => (value.length > EXAMPLE_LENGTH ? `${value.slice(0, EXAMPLE_LENGTH)}…` : value));
+    }
+    return out;
   },
 
   async chart(projectTree, spec) {

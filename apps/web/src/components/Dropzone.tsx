@@ -29,7 +29,7 @@ async function droppedFiles(event: DragEvent): Promise<Upload[]> {
   return files;
 }
 
-function fromInput(list: FileList | null): Upload[] {
+export function fromInput(list: FileList | null): Upload[] {
   return [...(list ?? [])].map((file) => ({ file, path: file.webkitRelativePath || file.name }));
 }
 

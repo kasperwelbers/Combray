@@ -156,6 +156,8 @@ export type NodePatch = Partial<
     | 'required'
     | 'newChildren'
     | 'find'
+    | 'undecided'
+    | 'headerRow'
   >
 >;
 
@@ -267,4 +269,94 @@ export function fromFiles(
   importer: ImporterFile,
 ): { tree: ProjectNode; pending: ImporterEntry[] } {
   return joinProjectTree(structure, importer);
+}
+
+/** A name shortened for the tree: the shortest form that no other node in the list could have. */
+export interface ShortName {
+  short: string;
+  full: string;
+  /** Whether `short` leaves out part of the path, so the full path is worth showing. */
+  shortened: boolean;
+}
+
+/** Combinations tried per name before falling back to the full form of each step. */
+const MAX_FORMS = 64;
+const ELEMENT = /^([a-z][a-z0-9-]*)(#[^./]+)?((?:\.[^./]+)*)$/;
+
+/** Ways to write one step, shortest first: an element by its tag, its id or one class. */
+function stepForms(name: string, kind: ProjectNode['kind']): string[] {
+  const match = kind === 'element' ? ELEMENT.exec(name) : null;
+  if (!match || (!match[2] && !match[3])) return [name];
+  const [, tag, id, classes] = match;
+  const forms = [tag!, ...(id ? [`${tag}${id}`] : []), ...classes!.split('.').filter(Boolean).map((c) => `${tag}.${c}`), name];
+  return [...new Set(forms)];
+}
+
+/** Every way to write the last `k` steps, shortest first. */
+function suffixForms(steps: { name: string; kind: ProjectNode['kind'] }[], k: number): string[] {
+  let out = [''];
+  for (const step of steps.slice(-k)) {
+    const forms = stepForms(step.name, step.kind);
+    const next = out.length * forms.length > MAX_FORMS ? [step.name] : forms;
+    out = out.flatMap((head) => next.map((form) => (head ? `${head}/${form}` : form)));
+  }
+  return out.sort((a, b) => a.length - b.length);
+}
+
+/**
+ * Names for `paths` (each below `base`) as short as they can be while telling them apart,
+ * read from the end: `div.mdl-cell--12-col.mdl-typography--caption/#text[0]` becomes
+ * `div.mdl-typography--caption`, or `div` when no other field has a div. The text of an
+ * element (a last `#text[0]`) is named by its element. A name is used only when it could not
+ * be the name of another path in the list.
+ */
+export function shortNames(tree: ProjectNode, paths: NodePath[], base: NodePath = []): ShortName[] {
+  const steps = paths.map((path) => {
+    const out = path.slice(base.length).flatMap((name, i) => {
+      const node = getNode(tree, path.slice(0, base.length + i + 1));
+      const parent = getNode(tree, path.slice(0, base.length + i));
+      // Repeated elements are a list named after the element.
+      const kind = node?.kind === 'list' && parent?.kind === 'element' ? 'element' : (node?.kind ?? 'map');
+      return isRepeatedName(name) ? [] : [{ name, kind }];
+    });
+    // The text of an element is what the element says.
+    if (out.length > 1 && out.at(-1)!.name === '#text[0]' && out.at(-2)!.kind === 'element') out.pop();
+    return out;
+  });
+  const candidates = steps.map((s) => {
+    const all: string[] = [];
+    for (let k = 1; k <= s.length; k++) all.push(...suffixForms(s, k));
+    return all;
+  });
+  const owners = new Map<string, Set<number>>();
+  candidates.forEach((list, i) => list.forEach((c) => owners.set(c, (owners.get(c) ?? new Set()).add(i))));
+  return paths.map((path, i) => {
+    const full = path.slice(base.length).filter((n) => !isRepeatedName(n)).join(' / ') || path.join(' / ');
+    const short = candidates[i]!.find((c) => owners.get(c)!.size === 1) ?? steps[i]!.map((s) => s.name).join('/');
+    const shown = short.split('/').join(' / ');
+    return { short: shown || full, full, shortened: shown !== full };
+  });
+}
+
+/** Whether a node, or anything below it, has a show or donate decision. */
+const hasDecided = (node: ProjectNode): boolean =>
+  node.decision === 'show' || node.decision === 'donate' || (node.children ?? []).some(hasDecided);
+
+/**
+ * The tree as participants' processed view uses it: unless the platform lets participants see
+ * undecided parts (`undecided: show` on the root), undecided fields count as ignored, as in
+ * the participant client (`worker/derived.ts`). Keys that are data (`{*}`) stay when something
+ * below them is decided, since their key column belongs to those rows.
+ */
+export function asParticipantsSee(tree: ProjectNode): ProjectNode {
+  if (tree.undecided === 'show') return tree;
+  const visit = (node: ProjectNode): ProjectNode => {
+    if (node.decision !== undefined) return node.decision === 'ignore' ? node : withChildren(node);
+    if (isLeaf(node)) return { ...node, decision: 'ignore' };
+    if (isDecidable(node) && !hasDecided(node)) return { ...node, decision: 'ignore' };
+    return withChildren(node);
+  };
+  const withChildren = (node: ProjectNode): ProjectNode =>
+    node.children && !isLeaf(node) ? { ...node, children: node.children.map(visit) } : node;
+  return visit(tree);
 }

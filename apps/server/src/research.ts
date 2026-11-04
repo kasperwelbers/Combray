@@ -14,6 +14,8 @@
  * a page on the main site cannot drive the key page's API, even though both are the same site for
  * cookies.
  */
+import { gzipSync } from 'node:zlib';
+
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -627,6 +629,58 @@ export class Research {
         return empty(204);
       },
 
+      // Test packages of a platform: structures, and content the researcher declared fine to keep.
+
+      listTestPackages: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        return noStore(json(call(() => r.projects.testPackages(req.params.id!, req.params.platform!))));
+      },
+
+      addTestPackage: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        const body = jsonBody(req);
+        const name = typeof body.name === 'string' ? body.name.trim() : '';
+        if (!name || name.length > MAX_TEST_NAME || /[\u0000-\u001f]/.test(name)) throw fail(400, 'invalid');
+        const shape = body.shape;
+        if (!shape || typeof shape !== 'object' || Array.isArray(shape)) throw fail(400, 'invalid');
+        const shapeText = JSON.stringify(shape);
+        if (Buffer.byteLength(shapeText) > MAX_TREE_BYTES) throw fail(413, 'too_big');
+        let data: { gzip: Buffer; bytes: number } | undefined;
+        if (body.data !== undefined && body.data !== null) {
+          // Content is only kept on the researcher's word that it is synthetic or not sensitive.
+          if (body.declaration !== TEST_DATA_DECLARATION) throw fail(400, 'declaration_required');
+          const dataText = JSON.stringify(body.data);
+          const bytes = Buffer.byteLength(dataText);
+          if (bytes > MAX_TEST_DATA_BYTES) throw fail(413, 'too_big');
+          data = { gzip: gzipSync(dataText), bytes };
+        }
+        const added = call(() =>
+          r.projects.addTestPackage(req.params.id!, req.params.platform!, { name, shape: shapeText, ...(data ? { data } : {}), by: who.researcherId }),
+        );
+        if (added === 'too_many') throw fail(409, 'too_many');
+        return noStore(json(added, added.existing ? 200 : 201));
+      },
+
+      getTestPackageData: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        if (!TEST_PACKAGE_ID.test(req.params.package ?? '')) throw fail(404, 'not_found');
+        const data = call(() => r.projects.testPackageData(req.params.id!, req.params.platform!, req.params.package!));
+        if (data === 'no_data') throw fail(404, 'no_data');
+        // Stored compressed; sent as it is, for the browser to unpack.
+        return noStore({ status: 200, headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: data });
+      },
+
+      deleteTestPackage: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        if (!TEST_PACKAGE_ID.test(req.params.package ?? '')) throw fail(404, 'not_found');
+        call(() => r.projects.deleteTestPackage(req.params.id!, req.params.platform!, req.params.package!));
+        return empty(204);
+      },
+
       /**
        * Make the draft live: what participants see and are asked to donate. Only on the key page,
        * with a passkey session: a studio session (from an email code alone) cannot change it.
@@ -832,3 +886,11 @@ export { hostOf };
 
 /** Platform drafts carry two project tree files. */
 export const PLATFORM_BODY_LIMIT = 2 * MAX_TREE_BYTES + 64 * 1024;
+
+/** What a researcher declares before a test package's content is kept on the server. */
+export const TEST_DATA_DECLARATION = 'synthetic-or-not-sensitive';
+/** The largest content of one test package (its JSON text, before compression). */
+export const MAX_TEST_DATA_BYTES = 25 * 1024 * 1024;
+const MAX_TEST_NAME = 200;
+const TEST_PACKAGE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+export const TEST_PACKAGE_BODY_LIMIT = MAX_TEST_DATA_BYTES + 2 * MAX_TREE_BYTES + 64 * 1024;

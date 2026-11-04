@@ -9,7 +9,7 @@ import type { TFunction } from 'i18next';
 /** Shared symbols. Render once per page, before any scene. */
 export function FaqSymbols() {
   return (
-    <svg className="faq-faq-symbols" width="0" height="0" aria-hidden="true" focusable="false">
+    <svg className="faq-symbols" width="0" height="0" aria-hidden="true" focusable="false">
       <defs>
         <marker
           id="faq-ah"

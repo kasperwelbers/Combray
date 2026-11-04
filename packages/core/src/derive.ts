@@ -52,6 +52,12 @@ export interface ColumnDef {
   as?: FieldType;
   format?: string;
   role?: Role;
+  /**
+   * The name is only structure: no label, and every step is a position (`#cell[0]`,
+   * `#text[1]`), an attribute (`@href`) or an HTML element. Such columns have no name worth
+   * showing; tables leave their header empty.
+   */
+  unnamed?: true;
 }
 
 export interface TableDef {
@@ -68,6 +74,8 @@ export interface TableDef {
   columns: ColumnDef[];
   /** Conditions rows must meet to be imported, from the repeated node. */
   filter?: RowFilter[];
+  /** The first row holds the column names (`ProjectNode.headerRow`): see `headerNames`. */
+  headerRow?: true;
   /**
    * Columns filters need that the table does not show (an ignored "from ads" field): read to
    * test rows, never kept in them.
@@ -178,6 +186,23 @@ function conversion(node: ProjectNode): Pick<ColumnDef, 'transform' | 'as' | 'fo
   return out;
 }
 
+/**
+ * Whether the path from `base` to a leaf says nothing but structure: positions, attributes and
+ * HTML elements (lists of repeated elements included), so a name made of it means nothing to
+ * people. Keys from JSON or CSV, and header text that became a key, are names.
+ */
+function structuralPath(root: ProjectNode, base: NodePath, leaf: NodePath): boolean {
+  for (let i = base.length; i < leaf.length; i++) {
+    const name = leaf[i]!;
+    if (name === ITEM_NAME || name === COLLAPSED_NAME || /^[#@]/.test(name)) continue;
+    const node = getNode(root, leaf.slice(0, i + 1));
+    const parent = getNode(root, leaf.slice(0, i));
+    if (node?.kind === 'element' || (node?.kind === 'list' && parent?.kind === 'element')) continue;
+    return false;
+  }
+  return true;
+}
+
 function labelOr(node: ProjectNode, fallback: string): Localized {
   return node.label ?? fallback;
 }
@@ -207,6 +232,7 @@ export function deriveTables(root: ProjectNode): TableDef[] {
         state,
         columns: [],
         ...(node.filter?.length ? { filter: node.filter } : {}),
+        ...(node.headerRow && node.name === ITEM_NAME ? { headerRow: true as const } : {}),
       });
       table = tables.length - 1;
     }
@@ -255,6 +281,7 @@ export function deriveTables(root: ProjectNode): TableDef[] {
         type: rel.includes(ITEM_NAME) ? 'list' : 'value',
         state,
         ...info,
+        ...(node.label === undefined && structuralPath(root, base, leaf) ? { unnamed: true as const } : {}),
       };
     });
     if (table.keyed) {
@@ -483,4 +510,26 @@ export function outline(root: ProjectNode): OutlineGroup {
   };
   name(top);
   return top;
+}
+
+/** Header text longer than this is cut: a column name, not a paragraph. */
+const MAX_HEADER_NAME = 80;
+
+/**
+ * Column names read from the first row of a table whose rows say so (`headerRow`): the text of
+ * each value column, for columns without a label (a label is the researcher's own name and
+ * wins). Empty and non-text cells give no name. Only for showing the table: the row itself
+ * stays in the data.
+ */
+export function headerNames(root: ProjectNode, table: TableDef, first: Record<string, unknown>): Map<string, string> {
+  const names = new Map<string, string>();
+  const rows = table.rows ?? [];
+  for (const column of table.columns) {
+    if (column.type !== 'value' || getNode(root, [...rows, ...column.path])?.label !== undefined) continue;
+    const value = first[column.id];
+    if (typeof value !== 'string' && typeof value !== 'number') continue;
+    const text = String(value).replace(/\s+/g, ' ').trim().slice(0, MAX_HEADER_NAME);
+    if (text) names.set(column.id, text);
+  }
+  return names;
 }

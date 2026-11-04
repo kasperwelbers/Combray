@@ -650,41 +650,8 @@ main.wide {
   width: min(1400px, 100% - 2rem);
 }
 
-.studio-top {
-  display: grid;
-  gap: 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
-  margin-bottom: 1.5rem;
-}
-
-.studio-top .actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
 .studio-section {
   margin-top: 2.5rem;
-}
-
-.studio-grid {
-  display: grid;
-  gap: 1.5rem;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-
-@media (min-width: 1000px) {
-  .studio-grid {
-    grid-template-columns: minmax(0, 1fr) 24rem;
-  }
-
-  .node-panel {
-    position: sticky;
-    top: 1rem;
-    max-height: calc(100vh - 2rem);
-    overflow-y: auto;
-  }
 }
 
 .export-list {
@@ -736,6 +703,7 @@ main.wide {
 }
 
 .decision-line {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -767,7 +735,6 @@ main.wide {
 
 .state-ignore > .decision-line {
   color: var(--ink-soft);
-  opacity: 0.55;
 }
 
 .state-ignore > .decision-line .decision-name {
@@ -896,30 +863,6 @@ main.wide {
   background: var(--paper-deep);
 }
 
-.seg-donate[aria-pressed='true'] {
-  background: var(--madeleine);
-  color: #2b1d0f;
-}
-
-.seg-show[aria-pressed='true'] {
-  background: var(--tilleul);
-  color: #2b1d0f;
-}
-
-.node-panel h2 {
-  word-break: break-word;
-}
-
-/* Fieldsets size to their content by default; a long option would push the panel wider. */
-.node-panel fieldset {
-  min-width: 0;
-}
-
-.node-panel select {
-  min-width: 0;
-  max-width: 100%;
-}
-
 .panel-group {
   border: none;
   padding: 0;
@@ -1011,11 +954,6 @@ main.wide {
 .cell-items {
   margin: 0.25rem 0 0;
   padding-left: 1.2rem;
-}
-
-.table-tag {
-  border-color: var(--dusk);
-  color: var(--dusk);
 }
 
 .preview {
@@ -1553,15 +1491,6 @@ main.wide {
   gap: 0.5rem;
 }
 
-.studio-advanced {
-  margin-top: 2rem;
-}
-
-.studio-advanced summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-
 .member-list {
   list-style: none;
   padding: 0;
@@ -1576,22 +1505,9 @@ main.wide {
   gap: 0.5rem 1rem;
 }
 
-/* A field's values in the researcher's test packages, next to its settings. */
-.node-side {
-  display: grid;
-  gap: 1rem;
-  align-content: start;
-}
-
+/* A field's values in the researcher's test packages. */
 .field-values {
-  background: var(--paper);
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-}
-
-.field-values h3 {
-  margin-top: 0;
+  margin: 0;
 }
 
 .value-list {
@@ -1647,4 +1563,314 @@ main.wide {
 
 .setup-steps p {
   margin: 0.25rem 0 0;
+}
+
+/* Studio popovers: a row's settings below its line, and the decision menu below its pill. */
+.popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow), 0 12px 32px rgb(59 47 42 / 14%);
+  padding: 0.75rem 0.9rem;
+  color: var(--ink);
+  opacity: 1;
+  text-align: left;
+  font-weight: 400;
+}
+
+.popover:focus {
+  outline: none;
+}
+
+.row-popover {
+  left: 1.6rem;
+  width: min(30rem, calc(100vw - 3rem));
+  max-height: min(32rem, 70vh);
+  overflow-y: auto;
+  cursor: auto;
+}
+
+.platform-popover {
+  left: auto;
+  right: 0;
+}
+
+.decision-menu-anchor {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+}
+
+.tree-controls .decision-menu-anchor {
+  margin-left: 0;
+}
+
+.decision-menu {
+  right: 0;
+  min-width: 13rem;
+  padding: 0.35rem;
+  display: grid;
+}
+
+.pill-button {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  margin-left: 0;
+}
+
+.pill-button:hover {
+  border-color: var(--ink-soft);
+}
+
+.pill-below {
+  border-style: dotted;
+}
+
+/* Ignored rows are faded, but their menu and settings are not. */
+.state-ignore > .decision-line > :not(.decision-menu-anchor, .popover) {
+  opacity: 0.55;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--paper-deep);
+}
+
+.menu-item[aria-pressed='true'] {
+  font-weight: 600;
+}
+
+.menu-item kbd {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.menu-label {
+  margin: 0.4rem 0.5rem 0.1rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.decision-menu .meta {
+  margin: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  flex: none;
+}
+
+.dot-undecided {
+  border: 1px dashed var(--madeleine);
+}
+
+.dot-ignore {
+  background: var(--line);
+}
+
+.dot-show {
+  background: var(--tilleul);
+  border-color: var(--tilleul);
+}
+
+.dot-donate {
+  background: var(--madeleine);
+  border-color: var(--madeleine);
+}
+
+.node-details-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  word-break: break-word;
+}
+
+.node-details-head .meta {
+  font-size: 0.8rem;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.details-tabs {
+  margin: 0.6rem 0 0.2rem;
+  flex-wrap: wrap;
+}
+
+.details-body {
+  margin-top: 0.5rem;
+}
+
+.details-body .panel-group {
+  margin: 0;
+}
+
+.details-body select,
+.details-body input:not([type='checkbox']),
+.details-body textarea {
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+}
+
+.details-body select {
+  padding: 0.35em 0.5em;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.field.compact {
+  margin: 0.25rem 0;
+}
+
+/* A title or checkbox with a "?"; the explanation opens on its own line below. */
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  margin: 0.8rem 0 0.3rem;
+}
+
+.section-head .check {
+  margin: 0;
+}
+
+.help-button {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  border: 1px solid var(--ink-soft);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+}
+
+.help-button[aria-expanded='true'] {
+  background: var(--dusk);
+  border-color: var(--dusk);
+  color: var(--paper);
+}
+
+.help-text {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  background: var(--paper-deep);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
+.help-text[hidden] {
+  display: none;
+}
+
+/* The name is the end of a longer path; hovering or opening the row shows all of it. */
+.path-more {
+  color: var(--ink-soft);
+  font-size: 0.85em;
+  margin-right: 0.1em;
+}
+
+/* Whether the studio works from the tree alone or with values from test packages. */
+.data-status {
+  border-left: 4px solid var(--line);
+  background: var(--paper-deep);
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.9rem;
+  max-width: 60rem;
+}
+
+.data-status.with-data {
+  border-left-color: var(--tilleul);
+}
+
+.data-status.structure-only {
+  border-left-color: var(--dusk);
+}
+
+.data-status-badge {
+  font-weight: 700;
+}
+
+/* A preview without values: what kind of value each column holds. */
+.value-placeholder {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  background: repeating-linear-gradient(-45deg, transparent 0 4px, rgb(59 47 42 / 4%) 4px 8px);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 0.1em 0.5em;
+}
+
+.preview-source select {
+  max-width: 28rem;
+}
+
+/* Common values of a field in the loaded test packages, after its name. */
+.row-examples {
+  min-width: 0;
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.temporary-upload {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.temporary-upload .help-text {
+  flex-basis: 100%;
 }

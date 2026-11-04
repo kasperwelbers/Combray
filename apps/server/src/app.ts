@@ -18,7 +18,7 @@ import { dispatch, errorReply, HttpError, json, logRequest, noStore, type Reply,
 import { KeyService, loadStoreMasterKey } from './keys.ts';
 import { log } from './log.ts';
 import { Projects } from './projects.ts';
-import { PLATFORM_BODY_LIMIT, Research } from './research.ts';
+import { PLATFORM_BODY_LIMIT, Research, TEST_PACKAGE_BODY_LIMIT } from './research.ts';
 import { projectError, storeHandlers } from './stores.ts';
 
 /**
@@ -154,6 +154,10 @@ export function createApp(config: Config): (req: IncomingMessage, res: ServerRes
     .add('GET', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.getPlatform), 0)
     .add('PUT', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.putPlatform), PLATFORM_BODY_LIMIT)
     .add('DELETE', '/projects/{id}/draft/platforms/{platform}', on('main', (x) => x.deletePlatform), MAIN_RESEARCH_LIMIT)
+    .add('GET', '/projects/{id}/draft/platforms/{platform}/test-packages', on('main', (x) => x.listTestPackages), 0)
+    .add('POST', '/projects/{id}/draft/platforms/{platform}/test-packages', on('main', (x) => x.addTestPackage), TEST_PACKAGE_BODY_LIMIT)
+    .add('GET', '/projects/{id}/draft/platforms/{platform}/test-packages/{package}/data', on('main', (x) => x.getTestPackageData), 0)
+    .add('DELETE', '/projects/{id}/draft/platforms/{platform}/test-packages/{package}', on('main', (x) => x.deleteTestPackage), MAIN_RESEARCH_LIMIT)
     .add('GET', '/projects/{id}/donations', on('main', (x) => x.listDonations), 0)
     .add('POST', '/donations/{id}/withdraw', on('main', (x) => x.withdraw), MAIN_RESEARCH_LIMIT)
     .add('POST', '/p/{id}/donations', on('main', (x) => x.donate), (config.research?.maxDonationBytes ?? 0) + 16 * 1024);

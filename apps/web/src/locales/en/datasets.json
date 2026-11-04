@@ -4,15 +4,17 @@
   "items_one": "{{count}} item",
   "items_other": "{{count}} items",
   "imported": "Added on {{date}}",
-  "open": "Explore",
   "delete": "Remove",
   "confirmDelete": "Remove “{{name}}” from this computer?",
-  "browse": "Browse everything",
   "found": "What we found",
-  "nothingFound": "We did not recognise anything in this yet, but you can still browse everything.",
+  "nothingFound": "We did not recognise anything in this yet, but you can see everything under Raw data.",
   "other_one": "Other data in it ({{count}} part)",
   "other_other": "Other data in it ({{count}} parts)",
   "otherIntro": "Parts of your data the researchers did not choose to look at. You can see them here; they are never asked for.",
   "record": "a few details",
-  "unnamed": "Your data"
+  "unnamed": "Your data",
+  "view": "How to show {{name}}",
+  "processed": "Processed",
+  "raw": "Raw data",
+  "rawIntro": "Everything in your download, just as it is, whatever the researchers chose to look at. It stays on this computer."
 }

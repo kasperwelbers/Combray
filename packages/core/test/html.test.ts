@@ -10,6 +10,9 @@ import {
   deriveRows,
   deriveTables,
   extractShape,
+  getNode,
+  headerNames,
+  jsonToTree,
   localize,
   normalizeTree,
   parseFile,
@@ -189,6 +192,96 @@ describe('Account page (<dl> and a table without a header)', () => {
     expect(names).toEqual(['#cell[0]', '#cell[1]', '#cell[2]']);
     expect(types['#cell[0]']).toEqual(['date-like']);
     expect(records.map((r) => r['#cell[1]'])).toEqual(['Paris', 'Cabourg']);
+  });
+});
+
+describe('a header row written with <td>', () => {
+  const rowsOf = (html: string, options?: NormalizeOptions) => {
+    const tree = normalizeTree(parseFile('t.html', new TextEncoder().encode(`<table>${html}</table>`)), options);
+    const project = projectTreeFromShape(extractShape(tree));
+    const tables = deriveTables(project);
+    const i = tables.findIndex((t) => t.rows !== undefined);
+    const names = tables[i]!.columns.map((c) => localize(c.name, 'en'));
+    const records = deriveRows(tree, project, tables)[i]!.map((r) => tables[i]!.columns.map((c) => r.values[c.id]));
+    return { names, records };
+  };
+  const all = { keys: () => true };
+
+  it('is a header when words stand above values of another type', () => {
+    const { names, records } = rowsOf(
+      '<tr><td>Date</td><td>Place</td></tr><tr><td>2024-01-03</td><td>Paris</td></tr><tr><td>2024-02-01</td><td>Cabourg</td></tr>',
+      all,
+    );
+    expect(names).toEqual(['Date', 'Place']);
+    expect(records).toEqual([
+      ['2024-01-03', 'Paris'],
+      ['2024-02-01', 'Cabourg'],
+    ]);
+  });
+
+  it('is a header when it is set apart in bold or by a class of its own', () => {
+    expect(rowsOf('<tr><td><b>Name</b></td><td><b>City</b></td></tr><tr><td>Marcel</td><td>Paris</td></tr>', all).names.sort()).toEqual(['City', 'Name']);
+    expect(
+      rowsOf('<tr class="top"><td>Name</td><td>City</td></tr><tr><td>Marcel</td><td>Paris</td></tr><tr><td>Odette</td><td>Cabourg</td></tr>', all).names.sort(),
+    ).toEqual(['City', 'Name']);
+  });
+
+  it('stays data, with columns by position, when nothing says it is a header', () => {
+    const { names, records } = rowsOf('<tr><td>Name</td><td>City</td></tr><tr><td>Marcel</td><td>Paris</td></tr>', all);
+    expect(names).toEqual(['#cell[0]', '#cell[1]']);
+    expect(records).toHaveLength(2);
+  });
+
+  it('stays data when its text is a value in its own column, or is not plain words', () => {
+    expect(rowsOf('<tr><td>Date</td><td>A</td></tr><tr><td>2024-01-03</td><td>B</td></tr><tr><td>Date</td><td>C</td></tr>', all).records).toHaveLength(3);
+    expect(rowsOf('<tr><td>2023</td><td>Place</td></tr><tr><td>2024-01-03</td><td>Paris</td></tr>', all).records).toHaveLength(2);
+  });
+
+  it('is left out, with columns by position, when its text may not be used', () => {
+    const { names, records } = rowsOf('<tr><td>Date</td><td>Place</td></tr><tr><td>2024-01-03</td><td>Paris</td></tr>');
+    expect(names).toEqual(['#cell[0]', '#cell[1]']);
+    expect(JSON.stringify(records)).not.toContain('Place');
+  });
+});
+
+describe('a first row the researcher says holds the column names', () => {
+  it('names the columns without a label, and leaves the rows as they are', () => {
+    const html = '<table><tr><td>Name</td><td>City</td></tr><tr><td>Marcel</td><td>Paris</td></tr></table>';
+    const tree = normalizeTree(parseFile('t.html', new TextEncoder().encode(html)));
+    const project = projectTreeFromShape(extractShape(tree));
+    const rows = deriveTables(project).find((t) => t.rows !== undefined)!.rows!;
+    getNode(project, rows)!.headerRow = true;
+    getNode(project, [...rows, '#cell[1]'])!.label = { en: 'Town' };
+    const tables = deriveTables(project);
+    const i = tables.findIndex((t) => t.rows !== undefined);
+    expect(tables[i]!.headerRow).toBe(true);
+    const derived = deriveRows(tree, project, tables)[i]!;
+    expect(derived).toHaveLength(2);
+    const names = headerNames(project, tables[i]!, derived[0]!.values);
+    expect([...names]).toEqual([['#cell[0]', 'Name']]);
+  });
+});
+
+describe('columns without a name', () => {
+  const columns = (html: string, options?: NormalizeOptions) => {
+    const tree = normalizeTree(parseFile('t.html', new TextEncoder().encode(html)), options);
+    const tables = deriveTables(projectTreeFromShape(extractShape(tree)));
+    return tables.find((t) => t.rows !== undefined)!.columns;
+  };
+
+  it('are the ones named by structure only: positions, attributes and elements', () => {
+    const cols = columns('<table><tr><td>Name</td><td>City</td></tr><tr><td>Marcel</td><td>Paris</td></tr></table>');
+    expect(cols.every((c) => c.unnamed)).toBe(true);
+    const activity = columns('<div class="row"><b>x</b><a href="h">y</a></div><div class="row"><b>x</b><a href="h">y</a></div>');
+    expect(activity.length).toBeGreaterThan(0);
+    expect(activity.every((c) => c.unnamed)).toBe(true);
+  });
+
+  it('do not include header text that became a key, nor JSON keys', () => {
+    const cols = columns('<table><tr><th>Name</th><th>City</th></tr><tr><td>Marcel</td><td>Paris</td></tr></table>', { keys: () => true });
+    expect(cols.some((c) => c.unnamed)).toBe(false);
+    const json = deriveTables(projectTreeFromShape(extractShape(jsonToTree('e.json', { rows: [{ a: 1 }, { a: 2 }] }))));
+    expect(json.flatMap((t) => t.columns).some((c) => c.unnamed)).toBe(false);
   });
 });
 

@@ -9,8 +9,7 @@ import type { FieldValues as Values } from './api';
 export function FieldValues({ values, hasPackages }: { values: Values | undefined; hasPackages: boolean }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   return (
-    <section className="field-values" aria-labelledby="field-values">
-      <h3 id="field-values">{t('studio.values.title')}</h3>
+    <section className="field-values" aria-label={t('studio.values.title')}>
       {!hasPackages ? (
         <p className="meta">{t('studio.values.noPackages')}</p>
       ) : !values ? null : values.total === 0 ? (

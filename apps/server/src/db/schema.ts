@@ -5,7 +5,7 @@
  * Change the schema here, then run `pnpm --filter @combray/server db:generate` to write a migration
  * (drizzle/main). The server applies pending migrations when it starts.
  */
-import { blob, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { blob, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const bytes = (name: string) => blob(name, { mode: 'buffer' });
 
@@ -153,6 +153,35 @@ export const projectPlatforms = sqliteTable(
     importer: text('importer'),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.id] })],
+);
+
+/**
+ * Test packages of a draft's platform, added in the studio: the structure (shape) of a researcher's
+ * own export, and, only when the researcher declares it synthetic or not sensitive, its parsed
+ * content (gzip of the JSON), so colleagues can see values without uploading it again. Members
+ * only; deleted with the platform and the project (docs/security.md#test-packages).
+ */
+export const testPackages = sqliteTable(
+  'test_packages',
+  {
+    projectId: projectId(),
+    platformId: text('platform_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    /** SHA-256 (hex) of the shape's JSON text: one structure, however often it is added. */
+    structureHash: text('structure_hash').notNull(),
+    shape: text('shape').notNull(),
+    data: bytes('data'),
+    /** Size of the content's JSON text, before compression; 0 without content. */
+    dataBytes: integer('data_bytes').notNull().default(0),
+    /** The researcher who added it; empty once their account is gone. */
+    addedBy: text('added_by').references(() => researchers.id, { onDelete: 'set null' }),
+    added: integer('added').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.platformId, t.id] }),
+    uniqueIndex('test_packages_structure_name').on(t.projectId, t.platformId, t.structureHash, t.name),
+  ],
 );
 
 /** The project public key; the private key exists only sealed to members (`members`). */

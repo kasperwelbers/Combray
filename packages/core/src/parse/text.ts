@@ -1,5 +1,5 @@
 import { inferType } from '../infer';
-import type { ListNode, TreeNode, ValueNode } from '../tree';
+import type { ListNode, ValueNode } from '../tree';
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
 const LATIN = new TextDecoder('windows-1252');
@@ -25,9 +25,4 @@ export function parseText(name: string, text: string): ListNode {
   const lines = text.split(/\r?\n/);
   if (lines.at(-1) === '') lines.pop();
   return { kind: 'list', name, children: lines.map((line, i) => valueNode(String(i), line)) };
-}
-
-/** Build a list node from items, naming each child by its index. */
-export function listOf(name: string, items: TreeNode[]): ListNode {
-  return { kind: 'list', name, children: items };
 }

@@ -1,4 +1,4 @@
-import type { ChartData, ChartSpec, ColumnDef, Localized, ProjectNode, Shape, TableDef } from '@combray/core';
+import type { ChartData, ChartSpec, ColumnDef, Localized, ProjectNode, Shape, TableDef, TreeNode } from '@combray/core';
 
 import type { ImportProgress, Upload } from '../worker/api';
 
@@ -25,6 +25,8 @@ export interface PreviewTable {
   keyed: boolean;
   /** True for a single record: fields outside any repeated node. */
   record: boolean;
+  /** The first row holds the column names (shown as names when there are rows). */
+  headerRow?: true;
   parent?: number;
   state: TableDef['state'];
   columns: ColumnDef[];
@@ -49,11 +51,47 @@ export interface StudioApi {
     uploads: Upload[],
     onProgress: (p: ImportProgress) => void,
   ): Promise<{ export: StudioExport; shape: Shape }>;
+  /** A package kept with the project: its tree as read before, from the server. */
+  addTree(name: string, tree: TreeNode): Promise<{ export: StudioExport; shape: Shape }>;
+  /** A loaded package's tree, to keep it with the project. */
+  exportTree(id: number): Promise<TreeNode>;
   removeExport(id: number): Promise<void>;
   /** The derived tables of the loaded exports, with the first rows of each. */
-  preview(tree: ProjectNode, rowLimit: number): Promise<PreviewTable[]>;
+  /**
+   * The participant view of one loaded package (`source`, an export id), or of the structure
+   * alone (no source): tables and columns without rows.
+   */
+  preview(tree: ProjectNode, rowLimit: number, source?: number): Promise<PreviewTable[]>;
   /** A field's values in the loaded test packages, summarised. */
   fieldValues(tree: ProjectNode, path: string[], limit: number): Promise<FieldValues>;
+  /**
+   * The most common values of each field (by path) across all loaded packages, a few per field,
+   * keyed by `JSON.stringify(path)`; fields without values are left out.
+   */
+  examples(tree: ProjectNode, paths: string[][], perField: number): Promise<Record<string, string[]>>;
   /** A chart over all rows of the loaded exports. Only counts and summaries come back. */
   chart(tree: ProjectNode, spec: ChartSpec): Promise<ChartData>;
+}
+
+/** A test package kept with a project's platform on the server (`/test-packages`). */
+export interface StoredPackage {
+  id: string;
+  name: string;
+  structure_hash: string;
+  has_data: boolean;
+  data_bytes: number;
+  added: number;
+  added_by: string | null;
+}
+
+/**
+ * Where a platform's test packages are kept: its structure always, its values when the
+ * researcher declares they are synthetic or not sensitive. Absent on the practice page, where
+ * packages are temporary.
+ */
+export interface PackageStore {
+  list(): Promise<{ packages: StoredPackage[]; shapes: { hash: string; shape: Shape }[] }>;
+  add(name: string, shape: Shape, data?: TreeNode): Promise<{ id: string; new_structure: boolean; existing: boolean }>;
+  data(id: string): Promise<TreeNode>;
+  remove(id: string): Promise<void>;
 }

@@ -8,7 +8,6 @@ import i18n, { LANGUAGES } from './i18n';
 import { saveLanguage } from './language';
 import { uploadPoints } from './projectConfig';
 import { projectPath, readRoute, STUDIES_PATH } from './route';
-import { Explore } from './screens/Explore';
 import { Faq } from './screens/Faq';
 import { Home } from './screens/Home';
 import { Landing } from './screens/Landing';
@@ -66,7 +65,7 @@ export function App() {
     return (
       <Shell wide studio>
         <Suspense fallback={null}>
-          <StudioApp {...(route.projectId ? { projectId: route.projectId } : {})} {...(route.tab ? { tab: route.tab } : {})} />
+          <StudioApp {...(route.learn ? { learn: true } : {})} {...(route.projectId ? { projectId: route.projectId } : {})} {...(route.tab ? { tab: route.tab } : {})} />
         </Suspense>
       </Shell>
     );
@@ -167,7 +166,6 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
   const { t } = useTranslation();
   const [status, setStatus] = useState<StoreStatus>();
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
-  const [open, setOpen] = useState<DatasetSummary>();
   const [table, setTable] = useState<TableSummary>();
   const [notice, setNotice] = useState<string>();
   const [reset, setReset] = useState(resetToken);
@@ -206,7 +204,6 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
   const lock = useCallback(
     async (message?: string) => {
       await data.lock();
-      setOpen(undefined);
       setTable(undefined);
       setNotice(message);
       await refresh();
@@ -219,7 +216,6 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
 
   async function deleteAll() {
     await data.destroy();
-    setOpen(undefined);
     setTable(undefined);
     setNotice(undefined);
     setReset(undefined);
@@ -290,8 +286,6 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
         )
       ) : table ? (
         <Views table={table} onBack={() => setTable(undefined)} />
-      ) : open ? (
-        <Explore dataset={open} onBack={() => setOpen(undefined)} />
       ) : (
         <>
           <h1>{t('app.tagline')}</h1>
@@ -299,7 +293,6 @@ function ProjectApp({ project, participantId, resetToken, page }: ProjectAppProp
             datasets={datasets}
             {...(project.uploads ? { points: project.uploads } : {})}
             onChanged={refresh}
-            onOpen={setOpen}
             onOpenTable={setTable}
           />
           <p style={{ marginTop: '3rem' }}>

@@ -4,15 +4,17 @@
   "items_one": "{{count}} onderdeel",
   "items_other": "{{count}} onderdelen",
   "imported": "Toegevoegd op {{date}}",
-  "open": "Bekijken",
   "delete": "Verwijderen",
   "confirmDelete": "“{{name}}” van deze computer verwijderen?",
-  "browse": "Alles doorbladeren",
   "found": "Wat we vonden",
-  "nothingFound": "We herkennen hier nog niets in, maar je kunt wel alles doorbladeren.",
+  "nothingFound": "We herkennen hier nog niets in, maar onder Ruwe gegevens kun je alles zien.",
   "other_one": "Andere gegevens erin ({{count}} deel)",
   "other_other": "Andere gegevens erin ({{count}} delen)",
   "otherIntro": "Delen van je gegevens waar de onderzoekers niet naar kijken. Je kunt ze hier zien; er wordt nooit om gevraagd.",
   "record": "een paar gegevens",
-  "unnamed": "Je gegevens"
+  "unnamed": "Je gegevens",
+  "view": "Hoe {{name}} te tonen",
+  "processed": "Verwerkt",
+  "raw": "Ruwe gegevens",
+  "rawIntro": "Alles uit je download, precies zoals het is, los van wat de onderzoekers kozen. Het blijft op deze computer."
 }

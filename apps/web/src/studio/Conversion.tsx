@@ -8,6 +8,7 @@ import {
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { SectionHead } from './Popover';
 import type { NodePatch } from './model';
 
 /** Types a researcher can read a field as, in the order the menu shows them. */
@@ -60,9 +61,8 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
   }
 
   return (
-    <fieldset className="panel-group">
-      <legend>{t('studio.readAs')}</legend>
-      <p className="meta">{t('studio.readAsHelp')}</p>
+    <div className="panel-group">
+      <SectionHead title={t('studio.readAs')} help={t('studio.readAsHelp')} />
       <label className="field">
         <span>{t('studio.type')}</span>
         <select
@@ -105,7 +105,7 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
         </select>
       </label>
 
-      <p className="meta">{t('studio.cleanHelp')}</p>
+      <SectionHead title={t('studio.cleanTitle')} help={t('studio.cleanHelp')} />
       {transforms.length > 0 && (
         <ol className="alias-list">
           {transforms.map((transform, i) => (
@@ -156,6 +156,6 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
           {t('studio.badRegex')}
         </p>
       )}
-    </fieldset>
+    </div>
   );
 }

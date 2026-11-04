@@ -89,6 +89,9 @@ function Cell({ value, column, onOpen }: { value: FieldValue | undefined; column
   return <>{s}</>;
 }
 
+/** Whether no header cell would show anything: every column unnamed, without a tag. */
+const headerless = (columns: ColumnInfo[]) => columns.every((c) => c.unnamed && c.state !== 'donate' && !c.new);
+
 interface Level {
   title: string;
   columns: ColumnInfo[];
@@ -101,11 +104,16 @@ function Grid({ level, onOpen }: { level: Level; onOpen: (row: Row, column: Colu
     <div className="preview-scroll">
       <table className="preview-table">
         <caption className="visually-hidden">{level.title}</caption>
-        <thead>
+        {/* Columns named by structure only have no name worth showing: no header row for them. */}
+        <thead className={headerless(level.columns) ? 'visually-hidden' : undefined}>
           <tr>
-            {level.columns.map((c) => (
+            {level.columns.map((c, i) => (
               <th key={c.id} scope="col">
-                {columnName(c, i18n.language, t)}
+                {c.unnamed ? (
+                  <span className="visually-hidden">{t('table.column', { n: i + 1 })}</span>
+                ) : (
+                  columnName(c, i18n.language, t)
+                )}
                 {c.state === 'donate' && <span className="tag">{t('table.requested')}</span>}
                 {c.new && (
                   <span className="tag" title={t('table.newHelp')}>

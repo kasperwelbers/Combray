@@ -109,6 +109,10 @@ Language: **TypeScript on Node**, without a framework, see [ADR 0010](decisions/
 | `POST /api/v1/projects` | Studio | Register a project: signed config, public key, signing key |
 | `PUT /api/v1/projects/{id}/config` | Studio | Publish a new signed config version |
 | `POST /api/v1/projects/{id}/participants` | Studio | Create participant codes |
+| `GET /api/v1/projects/{id}/draft/platforms/{p}/test-packages` | Studio | A platform's test packages (name, structure hash, whether content is kept, who added it) and each distinct structure once (built) |
+| `POST /api/v1/projects/{id}/draft/platforms/{p}/test-packages` | Studio | Add a test package: `{ name, shape, data?, declaration? }`; content only with `declaration: "synthetic-or-not-sensitive"`. 201 new, 200 when the same structure and name exist (content is added if it had none), 400 `declaration_required`/`invalid`, 413 `too_big`, 409 `too_many` (built) |
+| `GET /api/v1/projects/{id}/draft/platforms/{p}/test-packages/{t}/data` | Studio | A test package's content: JSON, sent gzipped (`Content-Encoding: gzip`); 404 `no_data` for a structure only (built) |
+| `DELETE /api/v1/projects/{id}/draft/platforms/{p}/test-packages/{t}` | Studio | Delete a test package (built) |
 | `GET /api/v1/projects/{id}/donations` | Researcher tools | List donations and withdrawal tombstones |
 | `GET /api/v1/projects/{id}/donations/{d}` | Researcher tools | Download one encrypted envelope |
 | `POST /api/v1/projects/{id}/donation-keys` | Researcher tools | Fetch the sealed keys for a list of donations, on every use ([ADR 0006](decisions/0006-revocable-donation-keys.md)) |

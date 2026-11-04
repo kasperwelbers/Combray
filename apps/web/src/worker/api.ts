@@ -48,6 +48,8 @@ export interface ColumnInfo {
   role?: Role;
   /** Read as a date and time, or as a link: shown as such. */
   as?: 'datetime' | 'url';
+  /** Named by structure only (`#cell[0]`, `div/#text[1]`): its header is left empty. */
+  unnamed?: true;
   /** The researcher has not decided on it: shown, never requested. */
   undecided?: true;
   /** Not in the project's structure yet: new to the researchers too. */
@@ -70,6 +72,11 @@ export interface DerivedTable {
   new?: true;
   columns: ColumnInfo[];
   display: DisplayHints;
+  /**
+   * The first row, when the researcher says it holds the column names: shown as the names and
+   * left out of the rows, but kept here so a donation can give the data as it was.
+   */
+  headerRow?: Row;
 }
 
 /** The rows an importer found in a source. Encrypted; never sent anywhere. */

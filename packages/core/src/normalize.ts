@@ -219,10 +219,56 @@ function keyFor(text: string, options: Required<NormalizeOptions>): string | und
   return key !== '' && !key.includes('/') && !/^[#@]/.test(key) && options.keys(key) ? key : undefined;
 }
 
+/** Header text longer than this is a sentence, not a column name. */
+const MAX_HEADER_TEXT = 60;
+/** Share of a column's filled cells that must be of another type than the header text. */
+const TYPED_SHARE = 0.8;
+
+const hasData = (el: ElementNode): boolean =>
+  el.children.some((c) => c.kind === 'element' && (DATA_ATTRIBUTES.some((a) => c.attrs[a] !== undefined) || hasData(c)));
+
+/** Whether all text of a cell sits in one `<b>` or `<strong>`. */
+const bold = (el: ElementNode): boolean => {
+  const elements = el.children.filter((c): c is ElementNode => c.kind === 'element');
+  const loose = el.children.some((c) => c.kind === 'text' && c.value.trim() !== '');
+  return !loose && elements.length === 1 && ['b', 'strong'].includes(elements[0]!.name) && textOf(elements[0]!) === textOf(el);
+};
+
+/**
+ * Whether the first row of a table without `<thead>` or `<th>` cells is a header written with
+ * `<td>`. It must name every column once, in plain words that are not also values in their own
+ * column, with as many cells as most rows. Then it needs a sign: it is set apart (bold cells, or
+ * a class no other row has), or a column's text is plain words above values of another type
+ * (numbers, dates, links), as in `Date | 2024-01-03`. Without such signs the row stays data
+ * and columns are named by position: a table without names rather than wrong ones.
+ */
+function firstRowIsHeader(rows: ElementNode[]): boolean {
+  const [first, ...data] = rows;
+  if (!first || data.length === 0) return false;
+  const heads = elementChildren(first, 'th', 'td');
+  if (heads.length === 0 || heads.some(hasData)) return false;
+  const titles = heads.map(textOf);
+  if (titles.some((t) => t === '' || t.length > MAX_HEADER_TEXT || inferType(t) !== 'string')) return false;
+  if (new Set(titles).size !== titles.length) return false;
+  const cells = data.map((r) => elementChildren(r, 'th', 'td'));
+  if (cells.filter((c) => c.length === heads.length).length * 2 < data.length) return false;
+  if (titles.some((title, i) => cells.some((c) => c[i] !== undefined && textOf(c[i]!) === title))) return false;
+
+  const firstClass = first.attrs.class?.trim();
+  const setApart = heads.every(bold) || (!!firstClass && data.every((r) => r.attrs.class?.trim() !== firstClass));
+  const typed = titles.some((_, i) => {
+    const filled = cells.map((c) => (c[i] ? textOf(c[i]!) : '')).filter((t) => t !== '');
+    const other = filled.filter((t) => inferType(t) !== 'string').length;
+    return filled.length > 0 && other >= filled.length * TYPED_SHARE;
+  });
+  return setApart || typed;
+}
+
 /**
  * A `<table>`: a list of rows, each a map from column to cell. The header is the `<thead>` row,
- * or else a first row of only `<th>` cells. Columns are keyed by their header text where that
- * is allowed, else by position. Spanning cells are not expanded.
+ * a first row of only `<th>` cells, or a first row that looks like one (`firstRowIsHeader`).
+ * Columns are keyed by their header text where that is allowed, else by position. Spanning
+ * cells are not expanded.
  */
 function normalizeTable(table: ElementNode, options: Required<NormalizeOptions>): ListNode | undefined {
   const sections = elementChildren(table, 'thead', 'tbody', 'tfoot');
@@ -232,7 +278,8 @@ function normalizeTable(table: ElementNode, options: Required<NormalizeOptions>)
     ...sections.filter((s) => s.name !== 'thead').flatMap((s) => elementChildren(s, 'tr')),
   ];
   let header = head[0];
-  if (!header && rows[0] && elementChildren(rows[0], 'td').length === 0 && elementChildren(rows[0], 'th').length > 0) {
+  const thOnly = rows[0] && elementChildren(rows[0], 'td').length === 0 && elementChildren(rows[0], 'th').length > 0;
+  if (!header && rows[0] && (thOnly || firstRowIsHeader(rows))) {
     header = rows[0];
     rows = rows.slice(1);
   }
