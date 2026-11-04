@@ -1,6 +1,6 @@
 # Plan: names and matches (separating the researcher's tree from the seen structures)
 
-Status: **being built** (started 2026-11-04 evening). Written 2026-11-04 with Kasper; the decisions are in [ADR 0012](../decisions/0012-names-and-matches.md), which wins where this plan differs. See [Answers (2026-11-04)](#answers-2026-11-04) at the end. Read this whole file first, then [CLAUDE.md](../../CLAUDE.md), [tree-decisions.md](../tree-decisions.md) and [structure-versions.md](../structure-versions.md). Kasper's working preference: commit and push directly to `main`, no PRs.
+Status: **built** (2026-11-04; the participant donate step that sends `donationValues` is still to come). Written 2026-11-04 with Kasper; the decisions are in [ADR 0012](../decisions/0012-names-and-matches.md), which wins where this plan differs. See [Answers (2026-11-04)](#answers-2026-11-04) at the end. Read this whole file first, then [CLAUDE.md](../../CLAUDE.md), [tree-decisions.md](../tree-decisions.md) and [structure-versions.md](../structure-versions.md). Kasper's working preference: commit and push directly to `main`, no PRs.
 
 ## Why
 

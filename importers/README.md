@@ -4,7 +4,7 @@ Platform packs, in two forms while we move from one to the other:
 
 - **Project trees** (`importer.json` and `structure.json` per platform), as described in
   [docs/tree-decisions.md](../docs/tree-decisions.md). `structure.json` is the union of the
-  platform's fixtures; `importer.json` holds labels, aliases, conversions, row filters and
+  platform's fixtures; `importer.json` holds names, matches, conversions, row filters and
   decisions, and is what the researcher workspace (`/studio/`) opens and saves. Projects start
   from these.
 - **YAML importer specs**, one per file, as described in
@@ -21,7 +21,7 @@ importers/
 ```
 
 `test/packs.test.ts` checks that each `structure.json` is the union of its platform's fixtures
-(fixtures named `<platform>-…`, merged in name order with the pack's aliases), that every
+(fixtures named `<platform>-…`, merged in name order into the seen structure), that every
 setting in `importer.json` finds its node, and that the tables derived through the pack give
 the same rows as the YAML importers' `expected.json`.
 

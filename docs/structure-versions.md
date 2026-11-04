@@ -1,23 +1,23 @@
 # Structure reports: knowing which nodes occur together
 
-Status: **designed; the merge check is built for the studio's own exports** (`together.ts`, see point 5). The rest is not built. Agreed with Kasper on 2026-11-01. It replaces the "only new paths" consent flow in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent) and [security.md](security.md#structure-metadata-and-consent).
+Status: **designed; the check is built in the studio** (`combineConflicts` in `joins.ts`, see point 5), and the server keeps test packages' structures. Sharing after upload is not built. Point 1 was changed on 2026-11-04 by [ADR 0012](decisions/0012-names-and-matches.md). Agreed with Kasper on 2026-11-01. It replaces the "only new paths" consent flow in [tree-decisions.md](tree-decisions.md#unknown-paths-and-consent) and [security.md](security.md#structure-metadata-and-consent).
 
 ## Why
 
-Exports of one platform come in several real structures (format changes, account languages), and every person's export is a partial copy of one of them, because people only have the data they produced. Researchers combine variants with [aliases](tree-decisions.md#aliases-and-merging). One rule keeps that safe:
+Exports of one platform come in several real structures (format changes, account languages), and every person's export is a partial copy of one of them, because people only have the data they produced. Researchers join variants with [names and matches](tree-decisions.md#names-and-matches). One rule keeps that safe:
 
-> **Two nodes that occur together in one export are never the same node.** They must not be merged.
+> **Two nodes that occur side by side in one export are never the same node.** They must not be combined into one.
 
 To apply it, researchers need to know which nodes occur together. A plain union of shapes (today's `structure.json`) does not say that. Absence proves nothing (a missing branch can be a platform change, a language, or a person without that data), so only full structures, side by side, give the answer. They also give counts: how common each part is.
 
 ## The design
 
-1. **Clients only get the published tree.** That is the nodes the researcher has decided on (`ignore`, `show` or `donate`), with their labels and aliases. `structure.json` holds unreviewed paths from other participants, which could by accident carry data, so it stays with the researchers.
+1. **Clients get the configuration and the seen structures** (`importer.json` and `structure.json`), so they can tell parts that are new from parts the researcher has seen. The seen structures hold names only, which participants reviewed before sharing them (originally only the published tree went to clients; ADR 0012 changed that).
 2. **Right after an upload, the participant is asked to share its structure**: the names of the parts of their data, never the content. Asking right away lets researchers spot platform changes early. In a lab, the researcher can decide on new paths while the participant explores, and later the server can help with automated suggestions.
-3. **New names are reviewed.** If the structure contains paths that are not in the published tree, the prompt lists them for review, because only those can carry something unexpected. Every other name is one the researcher already approved. The text says that the shared structure also shows which known parts they have (such as whether they have uploads). Below a node set to skip new parts (`newChildren: 'skip'`, see [tree-decisions.md](tree-decisions.md#new-parts-ask-or-skip)) new paths are never read, so they are never listed or shared; `compareShape` leaves them out.
+3. **New names are reviewed.** If the structure contains paths that are not in the seen structures, the prompt lists them for review, because only those can carry something unexpected. Every other name is one the researcher already approved. The text says that the shared structure also shows which known parts they have (such as whether they have uploads). Below a node set to skip new parts (`newChildren: 'skip'`, see [tree-decisions.md](tree-decisions.md#new-parts-ask-or-skip)) new paths are never read, so they are never listed or shared; `compareShape` leaves them out.
 4. **The server stores each structure** without any participant id, session or exact time, and keeps one copy of identical structures with a count. New paths are added to `structure.json` as undecided.
-5. **The studio refuses to merge nodes that occur together** in a stored structure, and merge suggestions skip them. The researcher's own exports count too. Built for the exports loaded in the studio (`seenTogether` in `packages/core/src/together.ts`); matching goes by canonical name and alias, so evidence survives earlier merges. Stored participant structures come with the server work.
-6. **Before donating, the client refreshes the published tree** (a conditional request with an ETag, so it is cheap when nothing changed), so decisions the researcher made during the session apply.
+5. **The studio refuses to combine nodes that occur side by side** in a stored structure, and suggestions skip them. The researcher's own exports count too. Built for the structures known to the studio (`combineConflicts` in `packages/core/src/joins.ts`): it combines the nodes and checks each structure for a node that matches two keys. Giving the same name is always allowed. Stored participant structures come with the server work.
+6. **Before donating, the client refreshes the configuration** (a conditional request with an ETag, so it is cheap when nothing changed), so decisions the researcher made during the session apply.
 
 A participant who has paths the researcher has not decided on yet will be asked to review them again, until the researcher decides. That is accepted: it is one consent step, and it adds evidence.
 
@@ -36,7 +36,6 @@ Answers: *Yes, share*, *No, these names contain private information* (the refusa
 These were discussed and parked:
 
 - Hash ids for paths, ids of paths waiting for review (to stop asking again), and a threshold of *k* reports before publishing them.
-- Flagging alias conflicts (two names in one export that resolve to the same node).
 - Grouping nodes that always switch together into variants (a whole language at once), and showing how much evidence a "never together" claim rests on.
 - Using the shape item of donations as extra structures, after decryption in the key tool.
 

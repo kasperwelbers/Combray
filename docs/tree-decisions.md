@@ -1,6 +1,6 @@
 # Tree decisions: importers as filters on the tree
 
-Status: **partly built** (see [Implementation plan](#implementation-plan)). Agreed with Kasper on 2026-10-29. It replaces the table-oriented importer spec ([importer-spec.md](importer-spec.md)) over time. It builds on the tree model and shapes in [universal-importer.md](universal-importer.md) and on the structure-metadata consent flow in [security.md](security.md#structure-metadata-and-consent). **Planned change:** aliases and merging below are to be replaced by names and matches, with the seen structures kept apart from the researcher's tree; see [the plan](plans/2026-11-04-names-and-matches.md).
+Status: **partly built** (see [Implementation plan](#implementation-plan)). Agreed with Kasper on 2026-10-29. It replaces the table-oriented importer spec ([importer-spec.md](importer-spec.md)) over time. It builds on the tree model and shapes in [universal-importer.md](universal-importer.md) and on the structure-metadata consent flow in [security.md](security.md#structure-metadata-and-consent). Names and matches replaced aliases and merging on 2026-11-04 ([ADR 0012](decisions/0012-names-and-matches.md)): the seen structures are kept apart from the researcher's configuration.
 
 ## Idea
 
@@ -10,7 +10,7 @@ The current spec still thinks in tables: it selects a row path and named field p
 
 ## The project tree
 
-Each project has one **project tree** per upload point (see [Upload points](#upload-points-and-the-nameless-root)). It is the union of the shapes the project has seen: the researcher's own test exports and the structure metadata participants agreed to send. It holds structure only, never values ([CLAUDE.md](../CLAUDE.md) rule 4). Participants' clients never get this union, only the **published tree**: the nodes the researcher has decided on (see [structure-versions.md](structure-versions.md)).
+Each project has one **project tree** per upload point (see [Upload points](#upload-points-and-the-nameless-root)). It is the union of the shapes the project has seen: the researcher's own test exports and the structure metadata participants agreed to send. It holds structure only, never values ([CLAUDE.md](../CLAUDE.md) rule 4). The researcher's settings are a separate **configuration** whose nodes match keys in it ([Names and matches](#names-and-matches)). Participants' clients get both, so they can tell new parts from seen ones (see [structure-versions.md](structure-versions.md)).
 
 Each project owns its own tree. A researcher can export theirs and another project can import it as a starting point, so platform packs become shared project trees rather than a separate format.
 
@@ -43,15 +43,14 @@ Besides the decision, a node in the project tree can have:
 
 | Property | On | Purpose |
 | --- | --- | --- |
-| `label` | any | Display name per language (`{en: Date, nl: Datum}`): table names, column names |
-| `description` | donated leaves | One participant-facing sentence ("the time you watched each video"), used in donation previews and in [missing-field requests](#missing-requested-fields) |
-| `aliases` | any | Other names for the same node: literal, glob or regular expression (see [Aliases](#aliases-and-merging)) |
+| `match` | any | The keys this node stands for: exact keys and regular expressions. A node that matches several keys is a combined node (see [Names and matches](#names-and-matches)) |
+| `nameId` | any | The name participants see, shared by every node that has it. A name holds the label (`Date`) and, for donated leaves, a participant-facing description ("the time you watched each video"), used in donation previews and in [missing-field requests](#missing-requested-fields) |
 | `as`, `format`, `transform` | leaves | Conversion, as in the current field spec, now attached to the node: "Read as" in the researcher UI. Scripts are not ported yet |
 | `role` | leaves | View hint: `date`, `title`, `url`, `group` (replaces `display`) |
 | `raw` | donated leaves | Donate the value as it is in the file instead of transformed ([What is donated](#what-is-donated)) |
 | `lifter` | inner | A sandboxed script that turns each row subtree into a map ([HTML](#html), layer 3) |
 | `filter` | repeated (`[*]`, `{*}`) | Which rows to import: a list of tests on columns (`equals`, `in`, `contains`, `matches`, `empty`, `min`, `max`, each with an optional `not`), all of which must pass. A filter may test a column that is not shown, such as an ignored leaf or the size of a nested table |
-| `required` | any | An upload only fits the tree when this node is there, by its name or any alias ([Finding the export](#finding-the-export-in-an-upload)) |
+| `required` | any | An upload only fits the tree when this node is there, by any of its matches ([Finding the export](#finding-the-export-in-an-upload)) |
 | `newChildren` | inner | `ask` (the default) or `skip`: whether parts this node has never seen below it are read, shown and offered for structure sharing. Passed down until a node sets its own ([New parts](#new-parts-ask-or-skip)) |
 | `find` | the root | Name patterns for finding the export inside a bigger upload, such as `Takeout` or `watch-history*.json` ([Finding the export](#finding-the-export-in-an-upload)) |
 | derived fields, enrichers | table | Planned: fields computed from other columns (`from` + transform or script), and which columns may be enriched |
@@ -67,7 +66,7 @@ Tables are **inferred from the structure**; researchers do not mark them. (An ea
 5. **Column names** are the leaf's label, or else the *shortest unique suffix* of its path from the row: `url` and `timestamp` normally, `h2/url` and `span/url` only when two would collide.
 6. **Table names** are the label of the list (or of its items), or else the list's name. A table in an HTML file is named after the file, not after `div.mdl-grid`.
 
-What researchers do is the same as for any node: decide on the leaves, and give tables and columns labels and aliases. Tables that the same structure produces in several files (a language variant, a renamed file) are combined with aliases, like any other node.
+What researchers do is the same as for any node: decide on the leaves, and give tables and columns names. Tables that the same structure produces in several files (a language variant, a renamed file) are combined into one node or given the same name, like any other node.
 
 ### Nested tables
 
@@ -92,7 +91,7 @@ These maps become `{*}` positions, so the names never reach the structure metada
 
 - **Within one map**, the shape extractor already collapses maps whose keys look like data (dates, numbers, emails, ids) or that have many entries with the same structure.
 - **Across rows**, the extractor now also looks at maps inside list items. If there are at least 5 different keys across the rows, and no key appears in more than half of the rows that have the map, the keys are data. Optional fields do not trigger this, because the same keys come back in many rows.
-- **By hand.** With few rows this cannot be told apart from coincidence, so the researcher UI has a "the keys are data" action on any map or folder. It merges the children into one `{*}` position and drops their names; it does not keep them as aliases, because they are data.
+- **By hand.** With few rows this cannot be told apart from coincidence, so the researcher UI has a "the keys are data" action on any map or folder. It merges the children into one `{*}` position and drops their names; it does not keep them as matches, because they are data.
 
 The keys themselves can be shown or donated: the `{*}` node has its own decision, separate from the values inside it. Below a `{*}` node, every key matches the one position, so new keys never add paths and are never offered in a consent request.
 
@@ -100,7 +99,7 @@ The keys themselves can be shown or donated: the `{*}` node has its own decision
 
 In JSON the keys say what a value is. In HTML the structure is positional and the labels are often values themselves: "Gezocht naar", a link and "5 mrt 2024" sit next to each other as text in one `div.content-cell`. The current shape makes this worse. Sibling elements with the same tag and classes merge without a count, so 3000 `div.outer-cell`s look like one, and all `#text` siblings merge into one node.
 
-We handle HTML in three layers. Each produces a tree, so decisions, tables and aliases work the same afterwards. We start with layers 1 and 2 and look at real exports before deciding how much to automate further.
+We handle HTML in three layers. Each produces a tree, so decisions, tables and names work the same afterwards. We start with layers 1 and 2 and look at real exports before deciding how much to automate further.
 
 **Layer 1: normalisation (automatic).** A normalised view on top of the parsed tree. The raw tree is unchanged.
 
@@ -109,7 +108,7 @@ We handle HTML in three layers. Each produces a tree, so decisions, tables and a
 - **Single or repeated.** An element that is single in one place and repeated in another (one link in a row, or three) is one node in the project tree: the single element counts as the list's only item. The same goes for a JSON key that is `null` in some records and a list or map in others.
 - **Positional text.** Text nodes are numbered among their text siblings: `#text[0]`, `#text[1]` (`<br>` already separates them). Each becomes a value with an inferred type, so the shape says "text 1 is date-like".
 - **Data attributes.** `href`, `src`, `datetime`, `title`, `alt`, `value` and `content` become values named `@href` and so on. Empty elements (`<br>`, empty cells) are dropped.
-- **Semantic HTML.** A `<table>` becomes a list of rows, each a map from column to cell. The header is the `<thead>` row, a first row of only `<th>` cells, or a first row of `<td>` cells that looks like a header: it names every column once in plain words that are not also values in their column, has as many cells as most rows, and has a sign, either set apart (bold cells, or a class no other row has) or words above values of another type in some column (`Date` above dates). Without such signs the first row stays data and columns are named by position: a table without names rather than wrong ones (`firstRowIsHeader` in `normalize.ts`). A column without a label whose name is only structure (positions such as `#cell[0]` and `#text[1]`, attributes such as `@href`, HTML elements) is `unnamed`: tables leave its header cell empty, and leave out the header row when no column has a name (screen readers still hear "Column 2"). Naming such columns automatically, with a classifier, is for later. When the importer cannot tell, the researcher can say so on the table: `headerRow` on its rows (`[*]`) means the first row holds the column names. Participants then see that row's text as the names of the columns without a label, and not as a row; the data keeps the row (the participant client stores it with the table, `DerivedTable.headerRow`), so a donation gives the table as it was. Top-level tables only, for now. A `<dl>` becomes a map from term to description. Header and term text is only used as a key when it is a name or alias in the project tree (`knownKeys`), because the participant's shape never contains text (see the privacy note below). Otherwise cells are named by position (`#cell[0]`) and a term stays a value next to its description (`#dt[0]`, `#dd[0]`). The researcher UI allows any header text as a key, because researchers work on their own exports; that is how header names get into the project tree.
+- **Semantic HTML.** A `<table>` becomes a list of rows, each a map from column to cell. The header is the `<thead>` row, a first row of only `<th>` cells, or a first row of `<td>` cells that looks like a header: it names every column once in plain words that are not also values in their column, has as many cells as most rows, and has a sign, either set apart (bold cells, or a class no other row has) or words above values of another type in some column (`Date` above dates). Without such signs the first row stays data and columns are named by position: a table without names rather than wrong ones (`firstRowIsHeader` in `normalize.ts`). A column without a label whose name is only structure (positions such as `#cell[0]` and `#text[1]`, attributes such as `@href`, HTML elements) is `unnamed`: tables leave its header cell empty, and leave out the header row when no column has a name (screen readers still hear "Column 2"). Naming such columns automatically, with a classifier, is for later. When the importer cannot tell, the researcher can say so on the table: `headerRow` on its rows (`[*]`) means the first row holds the column names. Participants then see that row's text as the names of the columns without a label, and not as a row; the data keeps the row (the participant client stores it with the table, `DerivedTable.headerRow`), so a donation gives the table as it was. Top-level tables only, for now. A `<dl>` becomes a map from term to description. Header and term text is only used as a key when a node of the project tree matches it (`knownKeys`), because the participant's shape never contains text (see the privacy note below). Otherwise cells are named by position (`#cell[0]`) and a term stays a value next to its description (`#dt[0]`, `#dd[0]`). The researcher UI allows any header text as a key, because researchers work on their own exports; that is how header names get into the project tree.
 - **Running text.** Inline elements mixed with text (`Watched <a>video</a> by <a>channel</a>`) are numbered by position (`a[0]`, `a[1]`) instead of becoming a list, so the video and the channel are separate columns.
 - **Bare siblings.** Two siblings with the same tag and no classes only become a list when they hold the same kinds of things. Otherwise (a caption `div` and a date `div`) they are positions: `div[0]`, `div[1]`. Elements that are items by nature (`li`, `tr`, `option`, `article`) and three or more alike siblings are always a list.
 - **Wrapping links.** A link around a single element, present in some rows and not in others, gives its `@href` to that element, so the element keeps one position.
@@ -123,7 +122,7 @@ After normalisation, Google My Activity is a list of `outer-cell` rows with leav
 
 A node with a lifter hides its children from the decision tree. The lifter node itself gets one decision (ignore, show or donate), and every key it outputs is a leaf with that same decision. Its output shape is not stored in the project tree. A researcher who wants only some fields writes the lifter to output only those.
 
-**Privacy note.** Text that is the same in every row ("Producten:", "Gezocht naar") is structure in practice, but it can also be personal, such as a header with an account name. So participant shapes never include text, not even constant text. The client can match constant text locally against labels and aliases in the project tree, which come from the researcher's own exports.
+**Privacy note.** Text that is the same in every row ("Producten:", "Gezocht naar") is structure in practice, but it can also be personal, such as a header with an account name. So participant shapes never include text, not even constant text. The client can match constant text locally against the keys and names in the project tree, which come from the researcher's own exports.
 
 Layer 1 needs changes to `extractShape` (counts for repeated siblings, positional text, stable classes) and a normalisation pass in `@combray/core`. The thresholds need tuning on real exports.
 
@@ -132,7 +131,7 @@ Layer 1 needs changes to `extractShape` (counts for repeated siblings, positiona
 A project defines **upload points**, each for one platform: "TikTok", "Google Takeout". Participants get **one uploader per upload point**, and each uploader only matches its own platform's tree. One tree could technically hold several platforms, but we recommend one platform per upload point: the messages to participants name the platform, and matching stays predictable.
 
 - **The upload is a nameless root.** The name of the uploaded file or folder is never recorded or sent, and nothing checks it. `kaspers_tiktok.json` and `mygoogledata/` reveal nothing, and renaming does not create a new tree.
-- **There are no file nodes.** Files and folders inside the root are ordinary nodes, matched by name and aliases like keys inside a file. Paths start at the root: `YouTube and YouTube Music/history/watch-history.json/[*]/title` for a Takeout, or `Activity/Like List/ItemFavoriteList/[*]/Date` for TikTok, whose root is the JSON file itself.
+- **There are no file nodes.** Files and folders inside the root are ordinary nodes, matched by their matches like keys inside a file. Paths start at the root: `YouTube and YouTube Music/history/watch-history.json/[*]/title` for a Takeout, or `Activity/Like List/ItemFavoriteList/[*]/Date` for TikTok, whose root is the JSON file itself.
 - **The format comes from sniffing the content**, with the extension as a hint, not from the name.
 - **Split archives merge.** Google Takeout can come as `takeout-…-001.zip`, `-002.zip`. Picking several archives merges them into one root.
 - **Per-user names inside the root** (`messages/inbox/johnsmith_1234/`) go through the existing dictionary collapse and name screening, so they become `inbox/{*}/`.
@@ -154,14 +153,14 @@ Agreed with Kasper on 2026-11-02. Participants pick a file, a folder or zips. Us
 
 A candidate fits the tree when:
 
-- **every required node is there**, by its name or any of its aliases, and
+- **every required node is there**, by any of its matches, and
 - **something the study shows or asks for is there**: a path to a leaf with a `show` or `donate` decision.
 
 A folder is checked on names alone: a file in it must lead, through folders the tree knows, to a file the study uses, and required folders and files must be present. A file root (TikTok's JSON) has no name to check, so it is opened and its structure compared; it must be the same kind as the tree's root (a map, a list, an HTML page). Required nodes inside files are checked once the root is read.
 
 There is no threshold to tune. Researchers who want a stricter match mark more nodes required.
 
-**Required nodes.** `required` is a toggle on any node. Because matching goes by name *or* alias, a required node that was merged with another (`history` and `geschiedenis`) is satisfied by either name: a Dutch export with only `geschiedenis` still fits. A merge keeps the node required if either side was. There is no unmerge yet; if one is added, both nodes keep the setting. Use it for parts every export has. A participant whose export lacks a required part cannot add it, so a required leaf deep inside a list (every export must have at least one row with it) is rarely a good idea.
+**Required nodes.** `required` is a toggle on any node. A combined node (matching `history` and `geschiedenis`) is satisfied by either key: a Dutch export with only `geschiedenis` still fits. Combining keeps the node required if either side was; taking a match off leaves the setting on the node. Use it for parts every export has. A participant whose export lacks a required part cannot add it, so a required leaf deep inside a list (every export must have at least one row with it) is rarely a good idea.
 
 ### Names first, and fixed limits
 
@@ -183,25 +182,29 @@ When nothing fits, the participant is told that this does not look like an expor
 
 ### New parts: ask or skip
 
-`newChildren: 'skip'` on an inner node means parts it has never seen below it (by name or alias) are **not read, not shown, and not offered** for structure sharing. It is passed down: every node below follows it until one sets `ask` again. Known children are unaffected. The researcher accepts missing renamed or new parts there in return for a smaller, safer upload and shorter questions. New paths are never donated anyway (clients only get decided paths), so this only changes what is read, shown and asked about.
+`newChildren: 'skip'` on an inner node means parts it has never seen below it (in the seen structures) are **not read, not shown, and not offered** for structure sharing. It is passed down: every node below follows it until one sets `ask` again. Known children are unaffected. The researcher accepts missing renamed or new parts there in return for a smaller, safer upload and shorter questions. New paths are never donated anyway (clients only get decided paths), so this only changes what is read, shown and asked about.
 
 The Takeout pack sets `skip` on the root, because a Takeout holds every Google product the participant exported, and `ask` on the products it knows (Chrome, My Activity, YouTube), so new files there still come up. We start with this plain toggle; a glob of allowed new names is parked until a case needs it.
 
 ### Packs
 
 - **Google Takeout**: the root is the Takeout folder's contents; `find`: `Takeout`, `takeout-*.zip`; skips unknown products.
-- **TikTok**: the root is the JSON export itself, so `user_data.json` and `user_data_tiktok.json` need no names or aliases; `find`: `user_data*.json`, for a JSON inside a bigger folder.
+- **TikTok**: the root is the JSON export itself, so `user_data.json` and `user_data_tiktok.json` need no matches; `find`: `user_data*.json`, for a JSON inside a bigger folder.
 
 The researcher workspace reads the researcher's own exports without a tree to match: a file or picked folder as it is, a zip stepped into once if it holds one entry. The code is in `packages/core/src/locate.ts`.
 
-## Aliases and merging
+## Names and matches
 
-- A node has one canonical name and a set of aliases. A participant's path matches the canonical name first, then the aliases. The current `{watch-history.json,kijkgeschiedenis.json}` becomes a node `watch-history.json` with the alias `kijkgeschiedenis.json`.
-- **Merging.** A new undecided node `date` next to a known `timestamp` can be merged into it in the researcher UI. This adds `date` as an alias and merges the children recursively. Children that exist on both sides with different decisions are listed for the researcher to resolve.
-- **Nodes seen together are never merged.** Two nodes that occur in one export are different nodes. The server keeps every structure participants share, and the researcher workspace refuses merges, and skips suggestions, for nodes that occur in one of them. See [structure-versions.md](structure-versions.md).
-- **The tree view shows merged nodes once**, with their aliases as small tags.
-- **Suggestions.** When a new export adds nodes next to known ones of the same kind, the researcher UI suggests merging ("is `date` the same as `timestamp`?"). Candidates are scored on their structure (the last three steps of every path below them) and, for inner nodes, also on name similarity; suggestions below 0.35 are not shown. After a merge, the children of the merged pair are compared the same way. This catches renames and translations (`kijkgeschiedenis.json`, `Your Activity` and `Je activiteit`). The code is in `suggest.ts`.
-- Regular expression aliases also let researchers collapse dictionary-like keys that the extractor missed.
+The seen structures are facts: the union of every shape the project has seen, never edited. The researcher's configuration is a tree of its own, whose nodes say which keys they **match** (exact keys or regular expressions). Positions in the seen structures that no configured node matches show as unconfigured rows, and become configured as soon as the researcher sets something on them. See [ADR 0012](decisions/0012-names-and-matches.md).
+
+There are two ways to join variants, because both are common:
+
+- **Combine into one node.** Siblings of the same kind (`watch-history.json` and `kijkgeschiedenis.json`) become one node with all their matches, one set of settings and one subtree. Use it when the variants need the same settings. Where both had a setting, the kept node's wins and the studio lists the conflict. Taking a match off splits it again: the key it matched is unconfigured again.
+- **Give the same name.** Nodes keep their own settings and subtrees (Dutch and English dates are written differently) and share a name, so participants see one table or one column.
+- **Nodes side by side are never combined.** A node that would match two keys in one structure is wrong. The studio checks every seen structure, not the union, and refuses with a count ("both are in 3 packages"); suggestions skip such pairs. Absence is no evidence: structures that have only one of the keys do not count. Giving the same name is always allowed.
+- **Every matching node gets the data.** If a regular expression on one node and an exact key on another match the same key, both get the value. That is rare and visible in the studio, and simpler than precedence rules.
+- **Suggestions.** When a structure has nodes next to known ones of the same kind, the studio suggests combining them or giving them the same name ("is `date` the same as `timestamp`?"). Candidates are scored on their structure (the last three steps of every path below them) and, for inner nodes, also on name similarity; suggestions below 0.35 are not shown. This catches renames and translations (`kijkgeschiedenis.json`, `Your Activity` and `Je activiteit`). The code is in `suggest.ts`, the joins in `joins.ts`.
+- **Regular expressions** also let researchers collapse dictionary-like keys that the extractor missed. The studio shows which seen keys a regular expression matches.
 
 ## How participants see the tree
 
@@ -221,7 +224,7 @@ The researcher UI has a "view as participant" tab that renders the researcher's 
 
 This is the flow from [security.md](security.md#structure-metadata-and-consent), with the decisions above:
 
-- A path is **unknown** when it is not in the published tree: the nodes the researcher has decided on, by canonical name or alias. Undecided nodes are never sent to clients, because unreviewed structure could by accident carry data. Unknown leaves are treated as undecided: never requested, and shown only with `undecided: show`.
+- A path is **unknown** when it is not in the seen structures. Clients get the configuration and the seen structures (names only, which participants shared or researchers loaded), so they can tell new parts apart from parts the researcher has seen but not decided on. Unknown leaves are treated as undecided: never requested, and shown only with `undecided: show`.
 - **Donate never applies to unknown paths**, because show and donate are set on leaves the researcher has seen. New structure can never be donated by accident.
 - Right after an upload, the client asks whether it may share the structure of the data (names only). Unknown paths are listed for the participant to review. The server stores each structure, so researchers know which nodes occur together and how common they are, and the researcher sees the unknown paths as new undecided nodes. See [structure-versions.md](structure-versions.md).
 
@@ -235,20 +238,18 @@ The sentence in italics is the missing leaf's `description`. Only unknown leaves
 
 ## What is donated
 
-The donation contains the **transformed values, exactly as the participant sees them in the preview**. Consent is given for what the participant saw. Transformations can make data less sensitive (a domain instead of a full URL), and sending the raw value as well would undo that. Most conversions (dates, numbers) lose nothing. The donation records the importer version, so researchers can reproduce the transformation.
+The donation contains the **transformed values, exactly as the participant sees them in the preview**, in long format: one entry per value, with its table, row, parent row, field (the name's id) and its path in the participant's data (`[i]` for list items, `{i}` for keys that are data), so nothing depends on how tables were grouped. The key page pivots it into one CSV per table. Consent is given for what the participant saw. Transformations can make data less sensitive (a domain instead of a full URL), and sending the raw value as well would undo that. Most conversions (dates, numbers) lose nothing. The donation records the importer version, so researchers can reproduce the transformation.
 
-When a study needs a raw value, the researcher sets `raw` on that donated leaf. The preview then shows it raw, so the participant still sees exactly what is sent.
+When a study needs the value as it is in the file too, the researcher sets `raw` on a donated leaf that is converted. The value is then donated both ways, and the preview shows both, so the participant still sees exactly what is sent.
 
 ## Storage
 
 A project tree is kept as two JSON documents, combined into one tree in the browser:
 
-- **`structure.json`**, owned by the server: the union of every shape the project has seen. It grows as participants share their structure. It is for researchers only.
-- **`importer.json`**, owned by the researcher: decisions, labels, descriptions, aliases, conversions, lifters and scripts (as strings), keyed by canonical path. This is the part that is signed with the project config and shared between projects.
+- **`structure.json`**: the seen structures, the union of every shape the project has seen. It grows as participants share their structure and researchers load test packages, and is never edited by hand.
+- **`importer.json`**, owned by the researcher: the names and the configuration tree (matches, decisions, conversions, filters, lifters and scripts as strings). This is the part that is shared between projects.
 
-Keeping them apart means the server adding new paths never collides with the researcher's edits. Merging nodes rewrites the paths in `importer.json`.
-
-Next to these, the server keeps every structure participants shared, without any participant id, one copy per distinct structure with a count. Participants' clients receive neither, only the **published tree** made from `importer.json` (decided nodes only). See [structure-versions.md](structure-versions.md).
+Keeping them apart means new structure never collides with the researcher's edits, and joining nodes changes only `importer.json`. Clients receive both. Next to these, the server keeps every structure participants shared, without any participant id, one copy per distinct structure with a count. See [structure-versions.md](structure-versions.md).
 
 ## What happens to importer specs
 
@@ -256,7 +257,7 @@ Platform packs become shared `importer.json` files plus a reference `structure.j
 
 | Current spec | Project tree |
 | --- | --- |
-| `match.file` with `{a,b}` | Nodes under the root, with aliases |
+| `match.file` with `{a,b}` | Nodes under the root with several matches |
 | `select.rows` | Nothing: the list it points at is a table anyway |
 | `fields.*.path` | Donated or shown leaves, with labels |
 | `as`, `format`, `transform`, `script` | The same, on the leaf |
@@ -268,20 +269,20 @@ The current runner stays until the derivation covers all platform packs. Dataset
 
 ## Feasibility
 
-- **JSON, JSON Lines, CSV**: straightforward. Lists and maps already say where rows and keys are. The work is the decision model, table derivation, aliases and the researcher UI.
+- **JSON, JSON Lines, CSV**: straightforward. Lists and maps already say where rows and keys are. The work is the decision model, table derivation, names and matches and the researcher UI.
 - **Directories and zips**: straightforward once the root is nameless and split archives merge.
 - **HTML**: feasible with normalisation and researcher labels. The risk is in tuning: class noise, inconsistent nesting between rows, and very large files (an open question already in [universal-importer.md](universal-importer.md#open-questions)). Lifters cover the cases that resist.
 - **Performance**: matching a participant tree against a project tree is one pass and runs in the data worker. Deriving tables reuses the unfold planned for views.
 
 ## Implementation plan
 
-1. **Core** (built: `decisions.ts`, `projectFiles.ts`). Project tree types, effective decisions, alias matching, merging, comparing a participant shape with a project tree (known, unknown, missing), and the two JSON files.
+1. **Core** (built: `config.ts`, `decisions.ts`, `joins.ts`, `projectFiles.ts`). The configuration and the working tree built from it with the seen structures, effective decisions, matches, combining and names, comparing a participant shape with a project tree (known, unknown, missing), and the two JSON files.
 2. **Nameless root and upload points** (built: `locate.ts`, `mergeDirs`, `uploads` in the project config). Root without a name, merging split zips, one uploader per upload point, and [finding the export](#finding-the-export-in-an-upload): wrapper levels, `find` patterns, required nodes, names first with fixed limits, and the participant choosing between candidates. `newChildren` is respected when reading, showing and comparing structure.
 3. **Table inference** (built: `derive.ts`). Every list of objects is a table, nested where it sits; maps whose keys are data become key and value tables; shortest unique suffix. Conversions and row filters are applied (`deriveRows` with `raw: true` turns both off).
 4. **HTML normalisation** (built: `normalize.ts`). Implicit lists, stable classes, positional text, data attributes, single-or-repeated twins, `<table>` and `<dl>`, running text, bare siblings, wrapping links. Still to do: tuning on team members' own exports.
-5. **Researcher UI** (built: `/studio/` in the web client, in a project's data explorer and on the practice page `/studio/learn/`; tabs for test packages, decisions, view as participant, charts and importer files). Tree with decisions, labels, descriptions, aliases, merging, "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in a menu on each row and settings in a popover, value formats and a first chart builder are described in [exploration.md](exploration.md). Merge suggestions (skipping nodes that occur together in a loaded export, which also cannot be merged), "Read as" conversions, roles and row filters are built. Still to do: lifter editing, registering the files with a server project.
+5. **Researcher UI** (built: `/studio/` in the web client, in a project's data explorer and on the practice page `/studio/learn/`; tabs for test packages, decisions, view as participant, charts and importer files). Tree with decisions, names, matches, combining and giving the same name (one by one or in select mode), "the keys are data", and "view as participant" with a map of all tables, saving and opening `structure.json` and `importer.json`. Exports stay in a worker's memory; only structure and settings are kept as a draft in `localStorage`. A "tables and fields" view, rows coloured by state with decisions in a menu on each row and settings in a popover, value formats and a first chart builder are described in [exploration.md](exploration.md). Suggestions to combine or name (skipping nodes that occur side by side in a seen structure, which also cannot be combined), "Read as" conversions, roles and row filters are built. Still to do: lifter editing, registering the files with a server project.
 6. **Participant UI** (built: `worker/derived.ts`, `screens/TableView.tsx`). Collections, other data, breadcrumbs with folding, nested table navigation, new paths marked locally.
-7. **Consent flows.** Sharing structure after upload, the published tree, and merge checks against shared structures ([structure-versions.md](structure-versions.md)); then missing-field requests in the donation step.
+7. **Consent flows.** Sharing structure after upload and checking joins against shared structures ([structure-versions.md](structure-versions.md)); then missing-field requests in the donation step.
 8. **Conversion** (packs converted; runner kept). Google Takeout and TikTok are project trees whose outputs match the YAML importers. The row/field runner stays as the fallback for projects without upload points, until the consent flows are built and new packs are written as project trees.
 
 ## Decided questions
@@ -298,14 +299,14 @@ Answered by Kasper on 2026-10-29:
 
 Answered by Kasper on 2026-11-01 ([structure-versions.md](structure-versions.md)):
 
-- **Structure versions.** Not stored as named versions. Participants are asked right after upload to share their full structure (names only), reviewing only the names that are new. Each structure is stored, and two nodes that occur in one are never merged.
-- **What clients receive.** Only nodes the researcher has decided on (`ignore`, `show` or `donate`). Unreviewed structure is never sent to participants.
+- **Structure versions.** Not stored as named versions. Participants are asked right after upload to share their full structure (names only), reviewing only the names that are new. Each structure is stored, and two nodes that occur side by side in one are never combined.
+- **What clients receive.** Changed on 2026-11-04 by [ADR 0012](decisions/0012-names-and-matches.md): clients get the configuration and the seen structures (names only), so they can tell new parts from seen ones.
 
 Answered by Kasper on 2026-11-02 ([Finding the export](#finding-the-export-in-an-upload)):
 
 - **Matching the root.** The upload is the root, without a name check, and wrappers are stepped into. Searching a bigger upload needs name patterns on the tree's root (globs, no catch-alls), plus the same structure check. When several candidates fit, the participant chooses.
 - **One platform per uploader.** Recommended, not enforced.
-- **Required nodes.** A toggle on any node; any alias satisfies it, merged nodes keep it.
+- **Required nodes.** A toggle on any node; any match satisfies it, combined nodes keep it.
 - **New parts.** A plain `ask` or `skip` on inner nodes, passed down. No glob of allowed names for now.
 - **Protecting the participant.** Names first, then only name matches are opened, then only the root is read. Combray's limits on files, candidates and bytes are fixed.
 - **Single files placed in a tree.** The client no longer places a single file (`watch-history.json`) into a folder tree by its name. Participants pick the export they downloaded; a project that wants single files gives them an upload point whose tree is that file.
@@ -315,4 +316,4 @@ Answered by Kasper on 2026-11-02 ([Finding the export](#finding-the-export-in-an
 - Whether shared project trees go through a public registry, and how they are reviewed.
 - Whether views should ever pivot a nested table wider (first items as columns), or always keep it nested and unnest while aggregating. For now: always nested.
 - The thresholds for keys that are data across rows (5 keys, at most half of the rows) are first guesses; they need tuning on real exports, like the dictionary thresholds.
-- Combining tables beyond aliases, for example two different files that describe the same events.
+- Combining tables beyond names, for example two different files that describe the same events.

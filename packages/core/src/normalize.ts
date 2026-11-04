@@ -33,7 +33,7 @@ type Normalized = ElementNode | ListNode | ValueNode | MapNode;
 export interface NormalizeOptions {
   /**
    * Whether text from a table header or a `<dl>` term may become a key. Defaults to never.
-   * Participants' clients allow the names and aliases of the project tree; the researcher
+   * Participants' clients allow the keys that the project tree matches; the researcher
    * workspace allows any, since it shows the researcher's own export.
    */
   keys?: (text: string) => boolean;
