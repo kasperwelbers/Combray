@@ -1874,3 +1874,20 @@ main.wide {
 .temporary-upload .help-text {
   flex-basis: 100%;
 }
+
+/* Rows light up under the pointer; a foldable row folds when clicked outside its buttons. */
+.decision-line:hover {
+  background-image: linear-gradient(rgb(59 47 42 / 6%), rgb(59 47 42 / 6%));
+}
+
+.decision-line.foldable {
+  cursor: pointer;
+}
+
+.path-toggle .link-button {
+  font-size: 0.8rem;
+}
+
+.path-toggle .path {
+  word-break: break-all;
+}

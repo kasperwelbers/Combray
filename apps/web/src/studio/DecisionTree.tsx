@@ -166,6 +166,7 @@ function Line({
   toggle,
   title,
   tags,
+  onToggle,
   children,
 }: {
   props: Props;
@@ -175,13 +176,23 @@ function Line({
   toggle?: ReactNode;
   title?: string;
   tags?: ReactNode;
+  /** Fold or unfold the row: also on a click on the row outside its buttons. */
+  onToggle?: () => void;
   children: ReactNode;
 }) {
   const nameButton = useRef<HTMLButtonElement>(null);
   const { selected, actions, states } = props;
   const isSelected = selected !== undefined && pathKey(selected) === pathKey(path);
   return (
-    <div className={`decision-line${isSelected ? ' selected' : ''}`}>
+    // A click on the row itself (not on a button in it) folds it; the toggle button does the
+    // same for the keyboard.
+    <div
+      className={`decision-line${isSelected ? ' selected' : ''}${onToggle ? ' foldable' : ''}`}
+      onClick={(e) => {
+        if (!onToggle || (e.target as HTMLElement).closest('button, input, select, a, .popover')) return;
+        onToggle();
+      }}
+    >
       {toggle ?? <span className="toggle" aria-hidden="true" />}
       <button
         ref={nameButton}
@@ -269,9 +280,10 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
           ) : undefined
         }
         title={name}
+        {...(children.length > 0 ? { onToggle: () => actions.toggleOpen(key) } : {})}
         tags={
           <>
-            {node.count && <span className="tag">× {node.count}</span>}
+            {node.count && node.count !== '1' && <span className="tag">× {node.count}</span>}
             {node.lifter !== undefined && <span className="tag">{t('studio.lifter')}</span>}
             {node.required && <span className="tag">{t('studio.requiredTag')}</span>}
             {node.newChildren === 'skip' && <span className="tag">{t('studio.skipTag')}</span>}
@@ -434,6 +446,7 @@ function GroupRow(props: FieldsProps & { group: OutlineGroup }) {
         path={group.path}
         name={name}
         title={fullPath(group.path, t)}
+        onToggle={() => actions.toggleOpen(key)}
         toggle={
           <button
             type="button"
@@ -447,7 +460,7 @@ function GroupRow(props: FieldsProps & { group: OutlineGroup }) {
         }
         tags={
           <>
-            {(list?.count ?? node.count) && <span className="tag">× {list?.count ?? node.count}</span>}
+            {(list?.count ?? node.count) && (list?.count ?? node.count) !== '1' && <span className="tag">× {list?.count ?? node.count}</span>}
             {group.keyed && <span className="tag">{t('studio.keysTag')}</span>}
             {node.headerRow && <span className="tag">{t('studio.headerRowTag')}</span>}
           </>

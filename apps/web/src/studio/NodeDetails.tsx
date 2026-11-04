@@ -82,7 +82,7 @@ export function NodeDetails(props: Props) {
       <div className="node-details-head">
         <div>
           <strong>{name}</strong>
-          {path.length > 0 && <div className="meta path">{path.map((n) => displayName(n, t)).join(' / ')}</div>}
+          {path.length > 0 && <PathToggle text={path.map((n) => displayName(n, t)).join(' / ')} />}
           {path.length > 0 && (
             <div className="meta">
               {t(`kind.${node.kind}`)}
@@ -382,6 +382,20 @@ function CheckWithHelp({ checked, onChange, label, help }: { checked: boolean; o
         {label}
       </label>
       <Help topic={label}>{help}</Help>
+    </div>
+  );
+}
+
+/** Where the node is in the file: long for HTML, so shown only on request. */
+function PathToggle({ text }: { text: string }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="path-toggle">
+      <button type="button" className="link-button meta" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {open ? t('studio.details.hidePath') : t('studio.details.showPath')}
+      </button>
+      {open && <div className="meta path">{text}</div>}
     </div>
   );
 }

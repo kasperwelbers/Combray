@@ -1,6 +1,6 @@
 # Tree decisions: importers as filters on the tree
 
-Status: **partly built** (see [Implementation plan](#implementation-plan)). Agreed with Kasper on 2026-10-29. It replaces the table-oriented importer spec ([importer-spec.md](importer-spec.md)) over time. It builds on the tree model and shapes in [universal-importer.md](universal-importer.md) and on the structure-metadata consent flow in [security.md](security.md#structure-metadata-and-consent).
+Status: **partly built** (see [Implementation plan](#implementation-plan)). Agreed with Kasper on 2026-10-29. It replaces the table-oriented importer spec ([importer-spec.md](importer-spec.md)) over time. It builds on the tree model and shapes in [universal-importer.md](universal-importer.md) and on the structure-metadata consent flow in [security.md](security.md#structure-metadata-and-consent). **Planned change:** aliases and merging below are to be replaced by names and matches, with the seen structures kept apart from the researcher's tree; see [the plan](plans/2026-11-04-names-and-matches.md).
 
 ## Idea
 

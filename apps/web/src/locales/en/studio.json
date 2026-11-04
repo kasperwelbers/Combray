@@ -359,7 +359,9 @@
     "read": "Read as",
     "rows": "Rows",
     "match": "Matching",
-    "platform": "Platform"
+    "platform": "Platform",
+    "showPath": "Where in the file",
+    "hidePath": "Hide where in the file"
   },
   "tableHelp": "The entries of this become the rows of a table, and this label is the table's name.",
   "dataStatus": {
