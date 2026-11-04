@@ -1,6 +1,5 @@
 <p align="center">
-  <!-- Placeholder until the Madeleine logo exists. See docs/design-identity.md -->
-  <strong>🐚 Combray</strong>
+  <strong>Combray</strong>
 </p>
 
 ---

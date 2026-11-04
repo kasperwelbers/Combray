@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Madeleine, Skyline } from './components/Madeleine';
 import { useIdleLock } from './components/useIdleLock';
 import i18n, { LANGUAGES } from './i18n';
+import { saveLanguage } from './language';
 import { uploadPoints } from './projectConfig';
 import { projectPath, readRoute, STUDIES_PATH } from './route';
 import { Explore } from './screens/Explore';
@@ -130,7 +131,11 @@ function Shell({ project, actions, wide, studio = false, home = STUDIES_PATH, ch
           {!studio && (
             <label>
               <span className="visually-hidden">{t('app.language')}</span>
-              <select value={i18n.resolvedLanguage} onChange={(e) => void i18n.changeLanguage(e.target.value)}>
+              <select value={i18n.resolvedLanguage} onChange={(e) => {
+                  saveLanguage(e.target.value);
+                  void i18n.changeLanguage(e.target.value);
+                }}
+              >
                 {LANGUAGES.map((l) => (
                   <option key={l} value={l}>
                     {l === 'nl' ? 'Nederlands' : 'English'}
