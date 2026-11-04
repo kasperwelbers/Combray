@@ -1,6 +1,6 @@
 # Plan: names and matches (separating the researcher's tree from the seen structures)
 
-Status: **planned, not started.** Written 2026-11-04 with Kasper, to be picked up later (for example by Claude Code in the cloud). Read this whole file first, then [CLAUDE.md](../../CLAUDE.md), [tree-decisions.md](../tree-decisions.md) and [structure-versions.md](../structure-versions.md). Kasper's working preference: commit and push directly to `main`, no PRs.
+Status: **being built** (started 2026-11-04 evening). Written 2026-11-04 with Kasper; the decisions are in [ADR 0012](../decisions/0012-names-and-matches.md), which wins where this plan differs. See [Answers (2026-11-04)](#answers-2026-11-04) at the end. Read this whole file first, then [CLAUDE.md](../../CLAUDE.md), [tree-decisions.md](../tree-decisions.md) and [structure-versions.md](../structure-versions.md). Kasper's working preference: commit and push directly to `main`, no PRs.
 
 ## Why
 
@@ -98,7 +98,7 @@ Rules, per level (children of one matched parent):
 - `deriveTables` works on the resolved tree. Tables and columns are **grouped by name**: config nodes that share a name (B) become one table or column, with the rows of all of them. Nodes joined by matches (A) are already one node.
 - Without a name, a node is its own table or column, named by its first match (as today, the shortest unique suffix for columns).
 - **Column and table ids must be stable** and must not depend on which language variant a participant has: use the name id when there is a name, else the config node id. Today column ids are paths from the row (`ColumnDef.id`). Check everything that stores or sends column ids (participant store manifests, views and queries in `apps/web/src/worker/`, donations in `packages/seal` and `apps/keys`) and migrate.
-- When nodes joined by a name have different decisions, the studio warns; for participants the column takes the strongest (donate over show), until the open question below is settled.
+- When nodes joined by a name have different decisions, each node's decision applies to its own data, and the studio warns that this is an unusual setting.
 
 ## Files and migration
 
@@ -150,15 +150,27 @@ Each step ends with tests passing (`pnpm test`, `pnpm typecheck`) and the docs u
 7. **Packs** — migrate bundled packs; keep `importers/test` green.
 8. **End-to-end check** — as in the last session: a throwaway server (`COMBRAY_*` env in a temp dir, port 8091, `node apps/server/src/cli.ts researcher add …`), Playwright with a CDP virtual passkey (see `apps/keys/test/e2e.test.ts`, `researcherBrowser` and `setUp`), create a project, add Google Takeout, load the English and Dutch examples, combine the two watch histories (A), name timestamp/tijdstip (B), check "View as participant" with each package.
 
-## Open questions (ask Kasper)
+## Answers (2026-11-04)
 
-1. **Decision on the node or on the name?** Kept on the node for now. If two nodes share a name, should they be forced to share show/donate? (Likely yes eventually: one column cannot be half donated.)
-2. **Does naming mean "show"?** Discussed and parked on 2026-11-04: keep undecided/show separate from names for now.
-3. **Combining tables with different structures under one node (A)**: allowed, with their children joined by the usual rules, or only offered when the structures are the same?
-4. **Unconfigured nodes in the stored configuration**: drop them (they come back from seen structures) or keep them for readability?
-5. **Regex scope**: per level only (as today), or should a match be able to span levels (for example a file in any folder)? `find` on the root already covers finding the export.
+Discussed with Kasper before building; these replace the open questions.
+
+1. **Decision on the node or on the name?** On the node. Each node's decision applies to its own data; the studio warns when nodes with the same name differ.
+2. **Does naming mean "show"?** No, decisions and names stay separate.
+3. **Combining nodes with different structures:** allowed for siblings of the same kind; their children are joined by the usual rules, and real clashes are caught by rule 4. Different kinds (HTML and JSON) can only share a name.
+4. **Unconfigured nodes:** never stored. They come back from the seen structures as unmatched (virtual) rows.
+5. **Regex scope:** one level only. `find` covers finding the export.
+6. **Overlapping matches:** every config node that matches a real node gets its data (duplication). This replaces "exact beats regex" and "first regex wins". Valid uses: one value read two ways, one table twice with different filters. The studio shows "also matched by", and flags a node (usually a regex) that matches two keys side by side in one structure.
+7. **Two explicit actions** in the studio: "Combine into one node" and "Give the same name". Settings are per node, never per match.
+8. **Donations are the matched raw data**, in a long format: row path, table, field, value, and the raw value too where a node with a transform asks for it (`raw`). The key page pivots them into tables.
+9. **Clients always get the seen tree**, to tell new parts (never seen) apart from unmatched ones (seen, not configured).
+10. **No versions:** nothing is live, so formats change in place and old drafts are not read.
+11. **Repetition:** `once` or `many`; fixed-length lists are parked.
+12. Work goes straight to `main`, one commit per step. Computed nodes (a value built from siblings in a row) are future work.
 
 ## Not in this plan
+
+- Computed nodes (values built from sibling values in the same row).
+- Fixed-length lists (`fixed n`) in repetition.
 
 - Participants' structure reports and the consent flow (structure-versions.md); this plan only makes room for them as more seen structures.
 - Bulk actions beyond Combine (Kasper: "later").
