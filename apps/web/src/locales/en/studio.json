@@ -238,7 +238,7 @@
   "projectNoKey": "no encryption key yet",
   "projectReady": "ready for donations",
   "projectNoAccess": "waiting for access to the encryption key",
-  "keysElsewhere": "Opening donations, creating encryption keys and publishing happen on the key page, with your passkey.",
+  "keysElsewhere": "Opening donations, creating project encryption keys and publishing happen on the key page, with your passkey.",
   "openKeyPage": "Open the key page",
   "signOut": "Sign out",
   "signInTitle": "Sign in to the researcher workspace",
@@ -295,8 +295,8 @@
     },
     "hasAccess": "has access",
     "waitingForAccess": "waiting for a colleague to give access",
-    "noKeyYet": "has not set up a key yet",
-    "researchersHelp": "Adding colleagues and giving them access to the encryption key happen on the key page, after comparing a short code. Add a trusted backup researcher: someone who can give you access again if you ever lose your passkey and recovery code.",
+    "noKeyYet": "has not set up a passkey yet",
+    "researchersHelp": "Adding colleagues and giving them access to the encryption key happen on the key page, after comparing a short code. Add a trusted backup researcher: someone who can give you access to the encryption key again if you ever lose both your passkey and your recovery code.",
     "donationCounts_one": "{{count}} donation, {{withdrawn}} withdrawn.",
     "donationCounts_other": "{{count}} donations, {{withdrawn}} withdrawn.",
     "day": "Day",
@@ -341,6 +341,6 @@
     "more_other": "and {{count}} other values"
   },
   "signInWithPasskey": "Sign in with your passkey",
-  "signInFirstTime": "First time? The key page sends you a code by email and helps you set up your passkey.",
+  "signInFirstTime": "First time? The key page emails you a code, once, to confirm your address, and helps you set up your passkey and recovery code.",
   "noKeyPage": "This server has no key page set up, so researchers cannot sign in. Ask the server operator."
 }

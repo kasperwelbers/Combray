@@ -84,6 +84,45 @@ describe('the main site', () => {
   });
 });
 
+describe('host names', () => {
+  it('puts the key page on keys. in front of the main host when COMBRAY_KEYS_URL is not set', async () => {
+    const s = await startServer({ env: { COMBRAY_KEYS_URL: undefined } });
+    expect((await s.main.get('/api/v1/site')).json.keys_url).toBe(s.keys.origin);
+    const page = await s.request({ host: s.keysHost, path: '/' });
+    expect(page.text).toContain('<title>Keys</title>');
+  });
+
+  it('turns researcher features off when the key page would share the main host name', async () => {
+    // Another port is not enough: passkeys and cookies ignore ports.
+    const s = await startServer({ env: { COMBRAY_KEYS_URL: 'http://LOCALHOST:1' } });
+    expect((await s.main.get('/api/v1/site')).json).toEqual({ researchers: false });
+    expect(s.logs()).toContain('the key page needs a host name of its own');
+  });
+
+  it('needs COMBRAY_KEYS_URL when the main site is an IP address', async () => {
+    const s = await startServer({ env: { COMBRAY_KEYS_URL: undefined, COMBRAY_PUBLIC_URL: 'http://127.0.0.1:9' } });
+    expect((await s.main.get('/api/v1/site')).json).toEqual({ researchers: false });
+    expect(s.logs()).toContain('set COMBRAY_KEYS_URL');
+  });
+
+  it('refuses host names other than its two, except for the health check', async () => {
+    const s = await startServer();
+    for (const host of ['other.localhost', `x.${s.keysHost}`, `combray.example`]) {
+      for (const path of ['/', '/willow/', '/api/v1/site', '/api/v1/p/willow/config']) {
+        const r = await s.request({ host, path });
+        expect(r.status, `${host}${path}`).toBe(421);
+        expect(r.json).toEqual({ error: 'unknown_host' });
+      }
+      expect((await s.request({ host, path: '/api/v1/health' })).status).toBe(200);
+    }
+  });
+
+  it('answers on any host name when researcher features are off', async () => {
+    const s = await startServer({ research: false });
+    expect((await s.request({ host: 'other.localhost', path: '/api/v1/site' })).status).toBe(200);
+  });
+});
+
 describe('site information', () => {
   it('tells each site where the other is', async () => {
     const s = await startServer();

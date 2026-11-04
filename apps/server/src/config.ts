@@ -8,7 +8,10 @@ export const VERSION = '0.1.0';
 export interface ResearchConfig {
   /** The main site, e.g. `https://combray.uni.nl` (`COMBRAY_PUBLIC_URL`). */
   publicUrl: URL;
-  /** The key page, e.g. `https://keys.combray.uni.nl` (`COMBRAY_KEYS_URL`). Passkeys are bound to its host. */
+  /**
+   * The key page: `keys.` in front of the main site's host (`https://keys.combray.uni.nl`), or
+   * `COMBRAY_KEYS_URL` when set. Passkeys are bound to its host.
+   */
   keysUrl: URL;
   /** The built key page (`apps/keys/dist/index.html`). */
   keysPage: string;
@@ -84,12 +87,39 @@ const int = (name: string, fallback: number): number => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
+/**
+ * The key page's address when `COMBRAY_KEYS_URL` is not set: the main site's address with `keys.`
+ * in front of its host name (`https://combray.uni.nl` gives `https://keys.combray.uni.nl`, and
+ * `http://localhost:8080` gives `http://keys.localhost:8080`). An IP address has no such name.
+ */
+function defaultKeysUrl(publicUrl: URL): URL | undefined {
+  const host = publicUrl.hostname;
+  if (host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return undefined;
+  const url = new URL(publicUrl.origin);
+  url.hostname = `keys.${host}`;
+  return url;
+}
+
+/** The key page's address, or undefined (logged) when it cannot be told or is the main site itself. */
+function keysUrlFor(publicUrl: URL): URL | undefined {
+  const keysUrl = process.env.COMBRAY_KEYS_URL ? envUrl('COMBRAY_KEYS_URL') : defaultKeysUrl(publicUrl);
+  if (!keysUrl) {
+    if (!process.env.COMBRAY_KEYS_URL) log.error({}, 'set COMBRAY_KEYS_URL: the main site has no host name to put keys. in front of');
+    return undefined;
+  }
+  if (keysUrl.hostname.toLowerCase() === publicUrl.hostname.toLowerCase()) {
+    log.error({ variable: 'COMBRAY_KEYS_URL' }, 'the key page needs a host name of its own');
+    return undefined;
+  }
+  return keysUrl;
+}
+
 export function configFromEnv(): Config {
   const env = process.env;
   const dataDir = env.COMBRAY_DATA_DIR ?? 'combray-data';
   const [host, port] = (env.COMBRAY_BIND ?? '127.0.0.1:8080').split(/:(?=\d+$)/);
   const publicUrl = envUrl('COMBRAY_PUBLIC_URL');
-  const keysUrl = envUrl('COMBRAY_KEYS_URL');
+  const keysUrl = publicUrl ? keysUrlFor(publicUrl) : undefined;
   const research: ResearchConfig | undefined =
     publicUrl && keysUrl
       ? {

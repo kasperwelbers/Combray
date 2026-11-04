@@ -52,7 +52,7 @@ function failed(e: unknown): never {
 function researchers(): void {
   const research = config.research;
   if (!research) {
-    console.error('set COMBRAY_PUBLIC_URL and COMBRAY_KEYS_URL to use researcher accounts');
+    console.error('set COMBRAY_PUBLIC_URL (and COMBRAY_KEYS_URL if the key page is not on keys.<host>) to use researcher accounts');
     process.exit(2);
   }
   const accounts = new Accounts(openMainDb(config.dbPath));

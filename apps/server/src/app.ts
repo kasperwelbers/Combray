@@ -1,12 +1,12 @@
 /**
  * The Combray server: serves the web client, a health check, read-only project configs from the data
- * directory, the store key service, and, when both site URLs are set, researcher sign-in, project
+ * directory, the store key service, and, when the main site's URL is set, researcher sign-in, project
  * keys and donations.
  *
  * The server answers on two host names. The main site (`COMBRAY_PUBLIC_URL`) serves the participant
- * app and the studio. The key page (`COMBRAY_KEYS_URL`) serves one small page, the only place where
+ * app and the studio. The key page (`keys.` in front of the main host, or `COMBRAY_KEYS_URL`) serves one small page, the only place where
  * researchers use passkeys and handle keys (docs/researcher-keys.md). Requests are routed by their
- * `Host` header; an unknown host gets the main site.
+ * `Host` header; with researcher features on, any other host gets `421`.
  */
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -192,6 +192,7 @@ export function createApp(config: Config): (req: IncomingMessage, res: ServerRes
     .add('POST', '/projects/{id}/donation-keys', on('keys', (x) => x.donationKeys), KEYS_LIMIT);
 
   const keysHost = config.research ? hostOf(config.research.keysUrl) : undefined;
+  const mainHost = config.research ? hostOf(config.research.publicUrl) : undefined;
   const keysPage = config.research ? loadKeysPage(config.research.keysPage) : undefined;
 
   return (req, res) => {
@@ -204,6 +205,14 @@ export function createApp(config: Config): (req: IncomingMessage, res: ServerRes
     const rawPath = (req.url ?? '/').split('?')[0]!.split('#')[0]!;
     const segments = rawPath.split('/').filter(Boolean);
     const ip = clientIp(config, req);
+
+    // With both addresses known, any other host name is refused (a forgotten DNS record or a
+    // wildcard must not serve the app under a name of its own). The health check answers anywhere.
+    if (mainHost !== undefined && host !== mainHost && host !== keysHost && rawPath !== '/api/v1/health') {
+      send(res, withSecurityHeaders('main', json({ error: 'unknown_host' }, 421)), head);
+      logRequest(method, 'unknown_host', 421, start);
+      return;
+    }
 
     const finish = (reply: Reply, route: string) => {
       send(res, withSecurityHeaders(site, reply), head);

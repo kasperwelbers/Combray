@@ -74,7 +74,7 @@ function signInScreen(note?: string) {
     'section',
     { class: 'card' },
     h('h2', {}, 'New here, or no passkey on this device?'),
-    h('p', {}, 'We email you a code. Then you set up your passkey, or use your recovery code if you lost it.'),
+    h('p', {}, 'The first time, we email you a code to confirm your address, and you set up your passkey. Lost your passkey? The code and your recovery code get you back in.'),
     h('button', { type: 'button', onclick: () => emailScreen() }, 'Sign in with an email code'),
   );
   show(
@@ -116,7 +116,7 @@ function emailScreen(note?: string) {
   show(
     h('h1', {}, 'Sign in with an email code'),
     note && h('p', { class: 'notice' }, note),
-    h('p', {}, 'We email you a code. After it, you set up or use your passkey, or your recovery code.'),
+    h('p', {}, 'You only need this the first time, on a device without your passkey, or when you lost your passkey. After the code, you set up or use your passkey, or your recovery code.'),
     form,
     h('p', { class: 'meta' }, h('button', { type: 'button', class: 'link', onclick: () => signInScreen() }, 'Back to signing in with a passkey')),
   );
@@ -189,7 +189,7 @@ function createPasskeyScreen(me: Me) {
       h(
         'li',
         {},
-        h('strong', {}, 'It unlocks your encryption keys. '),
+        h('strong', {}, 'It unlocks your project encryption keys. '),
         'Donations in a project are locked with that project’s encryption key, and your passkey unlocks your copy of it. Only researchers on the project can open the donations: not the server, and not whoever runs it.',
       ),
     ),
@@ -197,14 +197,20 @@ function createPasskeyScreen(me: Me) {
     h(
       'p',
       {},
-      'Your recovery code gets you back in, with everything intact: you get it in the next step, so keep it safe. Without it you can start over, but you lose access to your projects until a colleague on each project gives it back. So add a trusted backup researcher to each project too.',
+      'Your recovery code gets you back in, with everything intact. You get it in the next step: store it well, on paper or in a safe place of its own. Without it you can start over, but you lose access to the encryption keys of your projects until a colleague on each project gives it back. So add a trusted backup researcher to each project too.',
+    ),
+    h('h2', {}, 'Your passkey is enough to get in'),
+    h(
+      'p',
+      {},
+      'With your passkey, nobody needs your email: whoever can use it can open your projects and their donations. Keep it on your own devices and accounts only, never on someone else’s phone or computer.',
     ),
     h('h2', {}, 'Which passkey'),
     h(
       'p',
       {},
       'Best is a passkey that syncs: in iCloud Keychain, Google Password Manager or a password manager such as 1Password. ',
-      'Then losing a phone does not lose your keys. You can also choose your phone and scan the QR code when your browser asks.',
+      'Then losing a phone does not lock you out. You can also choose your phone and scan the QR code when your browser asks.',
     ),
     !passkeysAvailable() && noPasskeys(),
     h('label', { for: 'passkey-name' }, 'A name for this passkey, so you can tell it apart later'),
@@ -221,7 +227,7 @@ async function setUpKey(me: Me, credentialId: string, prf: Uint8Array | undefine
   if (!prf && prfEnabled) {
     show(
       h('h1', {}, 'One more touch'),
-      h('p', {}, 'Your passkey can hold your key. Use it once more to store your key with it.'),
+      h('p', {}, 'Your passkey can unlock your project encryption keys. Use it once more to finish setting that up.'),
       action('Use passkey', async () => {
         const used = await authenticate();
         await finishKey(me, used.credentialId, used.prf);
@@ -257,10 +263,10 @@ async function recoveryCodeScreen(me: Me, passkeyHoldsKey: boolean, first: boole
       h(
         'p',
         { class: 'notice' },
-        'This passkey cannot hold your key (it does not support the PRF extension). You will need this recovery code every time you open your keys. ',
+        'This passkey cannot unlock your project encryption keys (it does not support the PRF extension). You will need this recovery code every time you open them. ',
         'A synced passkey in iCloud Keychain, Google Password Manager or 1Password usually can; you can add one later.',
       ),
-    h('p', {}, 'This code is the only way back to your keys if you lose your passkey. Nobody else has it, not even the server. Keep it like a passport:'),
+    h('p', {}, 'This code is the only way back to your project encryption keys if you lose your passkey. Nobody else has it, not even the server. Keep it like a passport:'),
     h(
       'ul',
       {},
@@ -289,7 +295,7 @@ function recoveryFile(email: string, code: string): string {
     '',
     code,
     '',
-    'This code opens your Combray keys if you lose your passkey. Keep it safe and private:',
+    'This code opens the encryption keys of your Combray projects if you lose your passkey. Keep it safe and private:',
     'whoever has it and can read your email can read your projects’ donations.',
     '',
   ].join('\n');
@@ -298,7 +304,7 @@ function recoveryFile(email: string, code: string): string {
 function secondStepScreen(me: Me) {
   show(
     h('h1', {}, 'Use your passkey'),
-    h('p', {}, me.signed_in ? `Signed in as ${me.email}. Unlock your keys with your passkey.` : `Signed in by email as ${me.email}. Now confirm it is you with your passkey.`),
+    h('p', {}, me.signed_in ? `Signed in as ${me.email}. Unlock your project encryption keys with your passkey.` : `Signed in by email as ${me.email}. Now confirm it is you with your passkey.`),
     !passkeysAvailable() && noPasskeys(),
     action('Use passkey', async () => {
       const used = await authenticate();
@@ -330,7 +336,7 @@ function recoveryScreen(me: Me, signIn: boolean) {
   });
   show(
     h('h1', {}, signIn ? 'Sign in with your recovery code' : 'Unlock with your recovery code'),
-    h('p', {}, signIn ? 'Type or load the recovery code you saved when you set up your key.' : 'This passkey does not hold your key. Type or load your recovery code to open your keys.'),
+    h('p', {}, signIn ? 'Type or load the recovery code you saved when you set up your first passkey.' : 'This passkey cannot unlock your project encryption keys. Type or load your recovery code instead.'),
     h('label', { for: 'code' }, 'Recovery code'),
     input,
     h('label', { for: 'code-file' }, 'or load the recovery file'),
@@ -346,7 +352,7 @@ function recoveryScreen(me: Me, signIn: boolean) {
   );
 }
 
-/** Lost both passkey and recovery code: start over with a new key, if colleagues can give access again. */
+/** Lost both passkey and recovery code: start over with a new personal key, if colleagues can give access again. */
 /** The researchers on each of your projects: who can give you access again. */
 async function contactsBlock(): Promise<HTMLElement> {
   type Contacts = { projects: { id: string; name: unknown; members: { email: string; has_access: boolean }[] }[] };
@@ -372,18 +378,18 @@ function resetScreen() {
   const contacts = h('div', {});
   void contactsBlock().then((block) => contacts.replaceWith(block));
   show(
-    h('h1', {}, 'Start over with a new key'),
-    h('p', {}, 'If you have lost both your passkey and your recovery code, you can set up a new key. This is what happens:'),
+    h('h1', {}, 'Start over'),
+    h('p', {}, 'If you have lost both your passkey and your recovery code, you can start over. This is what happens:'),
     h(
       'ul',
       {},
-      h('li', {}, 'Your old passkeys and key stop working, and you are signed out everywhere.'),
+      h('li', {}, 'Your old passkeys and recovery code stop working, you lose access to the encryption keys of your projects, and you are signed out everywhere.'),
       h('li', {}, 'You create a new passkey and get a new recovery code.'),
       h('li', {}, 'A colleague on each of your projects gives you access again, after you compare a short code with them.'),
     ),
     h('p', {}, 'This only works if another researcher on each of your projects has access. We check that first, so nothing is lost.'),
     contacts,
-    action('Start over with a new key', async () => {
+    action('Start over', async () => {
       result.replaceChildren();
       try {
         await api.post('/me/reset-key');
@@ -397,7 +403,7 @@ function resetScreen() {
             'p',
             {},
             'Look for your recovery code once more: as a file named combray-recovery-code.txt, or on paper. ',
-            'If it is really gone, your server operator can reset your key, but nobody will be able to open these projects’ donations again.',
+            'If it is really gone, your server operator can reset your account, but nobody will be able to open these projects’ donations again.',
           ),
         );
         return;
@@ -455,7 +461,7 @@ async function home() {
     h(
       'header',
       { class: 'bar' },
-      h('div', {}, h('h1', {}, 'Your keys'), h('p', { class: 'meta' }, `Signed in as ${me.email}`)),
+      h('div', {}, h('h1', {}, 'Your projects'), h('p', { class: 'meta' }, `Signed in as ${me.email}`)),
       h(
         'div',
         { class: 'row' },
@@ -623,7 +629,7 @@ function membersBlock(project: Project, refresh: () => Promise<void>): HTMLEleme
         await refresh();
       }),
     ),
-    h('p', { class: 'meta' }, 'They get an email, sign in and set up their key. Then you give them access here, after comparing a short code.'),
+    h('p', { class: 'meta' }, 'They get an email, sign in and set up their passkey. Then you give them access to the encryption key here, after comparing a short code.'),
   );
 }
 
@@ -700,7 +706,7 @@ function accountSection(me: Me): HTMLElement {
           'li',
           { class: 'member' },
           h('span', {}, p.name),
-          h('span', { class: 'meta' }, p.unlocks_key ? 'holds your key' : 'signs in only; needs the recovery code to unlock'),
+          h('span', { class: 'meta' }, p.unlocks_key ? 'unlocks your encryption keys' : 'signs in only; needs the recovery code to unlock'),
           me.passkeys.length > 1 &&
             action(
               'Remove',

@@ -6,6 +6,20 @@ How researchers sign in, how their keys are made and kept, how a colleague is gi
 
 A researcher signs in with a link sent by email, then with a **passkey** (Face ID, a fingerprint, a phone or a security key). The passkey does double duty: it is the second factor, and through the WebAuthn **PRF** extension it gives the browser a secret that unlocks the researcher's **personal key**. The server keeps the personal key only locked under that secret, so it cannot open it. Each project has one **project key**; every member with access has a copy of it sealed to their personal key. A colleague gets access when an existing member seals a copy for them in their own browser, after both compare a short **key code** by phone or in person. Donations are sealed to the project key and opened on the **key page**, a small page on its own address that does nothing else. A one-time **recovery code**, printed or saved when the key is made, replaces a lost passkey.
 
+## The keys, and what researchers see
+
+The same things have a technical name (in the code and these docs) and a name researchers see on screen. Researchers only ever meet the passkey, the recovery code, the project encryption key and the key code; the personal key is explained in the [researcher explainer](explainers/keys.html#chain), not asked about.
+
+| On screen | In code and docs | What it is |
+| --- | --- | --- |
+| Passkey | Passkey | Signs the researcher in on the key page, alone, without email. Its PRF output unlocks the personal key. Whoever can use it has full access, so it belongs on the researcher's own devices only |
+| Recovery code | Master secret | The researcher's personal key, written out. Replaces a lost passkey; store it well |
+| (explained only) | Personal key | The researcher's own X-Wing key pair (called the researcher key in early notes). Opens their copies of project keys |
+| Project encryption key, or "encryption key" where the project is clear | Project key | The project's X-Wing key pair. Donation keys are sealed to it; each member with access has a copy sealed to their personal key |
+| Key code | Key code | A short fingerprint of a personal key, compared by phone before giving access |
+| (not shown) | Donation key | A fresh key per donation, sealed to the project key |
+| Email code | Email code | Proves the address once: for the first passkey, a device without a passkey, a lost passkey, or starting over |
+
 ## Why not a local tool, and why not keys on the server
 
 The plan was a small local tool for key pairs and decryption. For the researchers Combray is for, installing and keeping a signed desktop tool is a real barrier, and a key file plus passphrase is something people lose. A browser page with a passkey asks for nothing to install and nothing new to remember.
@@ -16,7 +30,7 @@ The honest limit of a browser page: the server serves the page, so a server that
 
 ## Two addresses
 
-The server answers on two host names, set with `COMBRAY_PUBLIC_URL` and `COMBRAY_KEYS_URL` (for example `combray.uni.nl` and `keys.combray.uni.nl`):
+The server answers on two host names: the main site (`COMBRAY_PUBLIC_URL`, for example `combray.uni.nl`) and the key site, by default the same name with `keys.` in front (`keys.combray.uni.nl`; `COMBRAY_KEYS_URL` sets another):
 
 | | Main site | Key site |
 | --- | --- | --- |
@@ -25,7 +39,20 @@ The server answers on two host names, set with `COMBRAY_PUBLIC_URL` and `COMBRAY
 | Sessions | Participant stores; studio sessions (only through a handoff from the key page) | Researcher sign-in: email code, passkey |
 | Key material | Never | Sealed project keys, sealed donation keys, envelopes, wrapped personal keys |
 
-Browsers keep origins apart, so a bug in the large participant app or the studio (React, charts, parsers) cannot read the key page's memory or use its passkeys. Key routes do not exist on the main site at all; asking for them there gives `404`.
+Browsers keep origins apart, so a bug in the large participant app or the studio (React, charts, parsers) cannot read the key page's memory or use its passkeys. Key routes do not exist on the main site at all; asking for them there gives `404`. Any other host name gets `421`.
+
+### Why not one address
+
+Passkeys are usually on a site's own address, so why not serve the key page from the main site, say at `/keys/`? Because there a passkey only signs someone in, while here it unlocks the key to every donation. Within one origin, the browser gives no protection between pages. A script that got into the participant app or the studio, through XSS or, more likely, through one of the hundreds of packages they are built from, could:
+
+- open the key page in a window and reach into it (same-origin windows can call each other's functions, whatever the key page's CSP says), and take the keys once the researcher unlocks;
+- start a passkey request itself, because the passkeys would belong to that origin;
+- send requests to the key API with the researcher's session cookie (`HttpOnly` cookies are sent with its requests too, and a cookie's `Path` is no barrier within an origin);
+- install a service worker that changes the key page on later visits.
+
+Each of these could be patched, but then every response of the main site must get every header right, forever. With two host names the browser does it. The other ways to get a second origin do not work: another port shares passkeys and cookies (both ignore ports), a sandboxed page cannot use passkeys, and suborigins never shipped.
+
+The email code does not come from the second address: any design needs a way to know a researcher before their first passkey exists. What the second address adds is the trip from the studio to the key page and back. Its own risks are covered in [deployment.md](deployment.md#protecting-the-host-names).
 
 ## The key page
 

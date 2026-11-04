@@ -16,7 +16,7 @@ Combray is server first ([ADR 0011](decisions/0011-server-first.md)): there is n
 
 For a first, small study on one VM. Each step is explained below.
 
-1. **Two host names** pointing at the VM, for example `combray.uni.nl` and `keys.combray.uni.nl`. The key page must have its own name: passkeys are bound to it, and it keeps keys away from the larger participant app ([researcher-keys.md](researcher-keys.md#two-addresses)).
+1. **Two host names** pointing at the VM: the Combray name and the same with `keys.` in front, for example `combray.uni.nl` and `keys.combray.uni.nl`. The key page must have its own name: passkeys are bound to it, and it keeps keys away from the larger participant app ([researcher-keys.md](researcher-keys.md#two-addresses)). If IT cannot give you `keys.` under the Combray name, use another name and set `COMBRAY_KEYS_URL`.
 2. **An SMTP account** that may send from an address at the university, for researcher sign-in codes.
 3. **Docker** with compose on the VM, ports 80 and 443 open.
 4. In `deploy/`: create `secrets/store-master.key`, the data folders and `.env` ([below](#docker-compose)).
@@ -44,7 +44,7 @@ cp env.example .env   # set COMBRAY_DOMAIN and the mail settings
 docker compose up -d
 ```
 
-The Caddyfile serves `{$COMBRAY_DOMAIN}` and `keys.{$COMBRAY_DOMAIN}` and passes both to the server, which tells them apart by the `Host` header. Without `COMBRAY_DOMAIN`, Caddy serves `https://localhost` and `https://keys.localhost` with a local certificate.
+The Caddyfile serves `{$COMBRAY_DOMAIN}` and `keys.{$COMBRAY_DOMAIN}` and passes both to the server, which tells them apart by the `Host` header and refuses any other name. Without `COMBRAY_DOMAIN`, Caddy serves `https://localhost` and `https://keys.localhost` with a local certificate.
 
 The server container runs as a non-root user, with a read-only root filesystem, all capabilities dropped and `no-new-privileges`. The store master key comes in as a Docker secret.
 
@@ -53,7 +53,7 @@ The server container runs as a non-root user, with a read-only root filesystem, 
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `COMBRAY_PUBLIC_URL` | (none) | The participant app and studio, e.g. `https://combray.uni.nl` |
-| `COMBRAY_KEYS_URL` | (none) | The key page, e.g. `https://keys.combray.uni.nl`. Researcher sign-in and donations are on only when both URLs are set |
+| `COMBRAY_KEYS_URL` | `keys.` in front of the public host | The key page, e.g. `https://keys.combray.uni.nl`. Set it only for another name, such as `https://combray-keys.uni.nl`; it must be a different host name, not just another port. Researcher sign-in and donations are on when `COMBRAY_PUBLIC_URL` is set. Requests for any other host name then get `421` (the health check answers on any name) |
 | `COMBRAY_SMTP_URL` | (none) | `smtps://user:password@host:465`, or `smtp://user:password@host:587?tls=required` for STARTTLS |
 | `COMBRAY_MAIL_FROM` | (none) | `Combray <combray@uni.nl>` |
 | `COMBRAY_MAIL_OUTBOX` | (none) | Development only: write mails to this folder instead of sending them |
@@ -120,6 +120,18 @@ curl -s https://keys.combray.uni.nl/ | sha256sum
 
 The hash must match the release. Researchers can do the same, or compare the version in the page footer. See [researcher-keys.md](researcher-keys.md#the-key-page).
 
+## Protecting the host names
+
+Whoever controls the DNS of the key page's name can serve their own key page there, with a valid certificate, and the researchers' passkeys will work on it. The server cannot tell, and no check by the server can: an attacker can serve the real page to anyone who checks. This is true of every web application, and of the main site too. What helps:
+
+- **Protect the DNS and registrar account** as well as the server: two-factor sign-in (a security key if possible), few people with access, and the registrar's transfer lock on.
+- **Certificate alerts.** Turn on Certificate Transparency monitoring for the domain (Cloudflare and several other DNS providers offer it, or a service such as Cert Spotter), so you hear when anyone gets a certificate for one of its names.
+- **Keep both names in one DNS zone** with one provider, so there is only one account to protect.
+- **No names under the key host** (`x.keys.combray.uni.nl`): a page there could use the key page's passkeys. Avoid wildcard records that would cover them.
+- **Remove DNS records before the server or address they point at.** A record left pointing at an address someone else later gets lets them serve pages under your name.
+
+Ideas for going further (serving the key page from somewhere the server cannot change, or checking its hash on the way) are in [open-questions.md](open-questions.md).
+
 ## Password reset links
 
 Until the researcher UI exists, the operator creates reset links on the researcher's behalf, after the researcher has verified who the participant is:
@@ -132,7 +144,7 @@ It prints a one-time link (valid for 72 hours) that the participant opens on the
 
 ## Development
 
-`pnpm serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Its settings are in `deploy/dev.env`; databases, the store master key and sign-in mails go to `.dev/`. Sign-in mails (with the code) are written to `.dev/outbox/`, and the pages say so. Add yourself first with `pnpm admin project add-researcher example you@example.org` (`pnpm admin` runs the operator commands of the table above on the development server), and send a synthetic donation with `pnpm synthetic-donation http://localhost:8080 example`. `pnpm e2e` runs the key page end to end with a virtual passkey. For hot reload, use `pnpm dev`: the web client on http://localhost:5173 next to the same server, which then treats :5173 as the main site (`deploy/dev-hot.env`), so studio sign-in works there too.
+`pnpm serve` builds the web client and key page and runs the server with the example projects: the app on `http://localhost:8080`, the key page on `http://keys.localhost:8080` (browsers resolve `*.localhost` to the local machine and treat it as secure, so passkeys work). Its settings are in `deploy/dev.env`; databases, the store master key and sign-in mails go to `.dev/`. Sign-in mails (with the code) are written to `.dev/outbox/`, and the pages say so. Add yourself first with `pnpm admin project add-researcher example you@example.org` (`pnpm admin` runs the operator commands of the table above on the development server), and send a synthetic donation with `pnpm synthetic-donation http://localhost:8080 example` (under `pnpm dev`, use `http://localhost:5173`, the main site there). `pnpm e2e` runs the key page end to end with a virtual passkey. For hot reload, use `pnpm dev`: the web client on http://localhost:5173 next to the same server, which then treats :5173 as the main site (`deploy/dev-hot.env`), so studio sign-in works there too.
 
 ## Later
 
