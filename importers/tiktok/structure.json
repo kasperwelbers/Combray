@@ -120,6 +120,48 @@
       },
       {
         "kind": "map",
+        "name": "Likes and Favorites",
+        "children": [
+          {
+            "kind": "map",
+            "name": "Like List",
+            "children": [
+              {
+                "kind": "list",
+                "name": "ItemFavoriteList",
+                "repeat": "once",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "date",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DD HH:mm:ss"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "link",
+                        "types": [
+                          "url-like"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "map",
         "name": "Profile",
         "children": [
           {
@@ -135,6 +177,84 @@
                     "name": "userName",
                     "types": [
                       "string"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "map",
+        "name": "Your Activity",
+        "children": [
+          {
+            "kind": "map",
+            "name": "Searches",
+            "children": [
+              {
+                "kind": "list",
+                "name": "SearchList",
+                "repeat": "once",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "Date",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DD HH:mm:ss"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "SearchTerm",
+                        "types": [
+                          "string"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "map",
+            "name": "Watch History",
+            "children": [
+              {
+                "kind": "list",
+                "name": "VideoList",
+                "repeat": "once",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "Date",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DD HH:mm:ss"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Link",
+                        "types": [
+                          "url-like"
+                        ]
+                      }
                     ]
                   }
                 ]

@@ -8,9 +8,9 @@ import {
   extractShape,
   normalizeTree,
   parseFile,
-  projectTreeFromShape,
   type Shape,
 } from '../src';
+import { keyedTree } from './trees';
 import { activityHtml } from './fixtures';
 
 const takeoutHtml = new URL(
@@ -48,7 +48,7 @@ describe('normalizeTree', () => {
     expect(tree).toBeDefined();
 
     // The rows become an implicit table with the date as a column.
-    const project = projectTreeFromShape({ ...shape, name: '' });
+    const project = keyedTree({ ...shape, name: '' });
     const tables = deriveTables(project);
     const rows = tables.find((t) => t.rows?.at(-1) === '[*]')!;
     expect(rows).toBeDefined();
@@ -68,7 +68,7 @@ describe('single elements where other files repeat them', () => {
       `<div class="r"><p>a</p></div><div class="r">${Array.from({ length: n }, (_, i) => `<a href="https://e.com/${i}">x</a>`).join('')}</div>`;
     const many = normalizeTree(parseFile('a.html', new TextEncoder().encode(page(3))));
     const one = normalizeTree(parseFile('b.html', new TextEncoder().encode(page(1))));
-    const project = projectTreeFromShape(extractShape(many));
+    const project = keyedTree(extractShape(many));
     const tables = deriveTables(project);
     const rows = deriveRows(one, project, tables);
     const hrefs = rows.flat().flatMap((r) => Object.entries(r.values).filter(([k]) => k.endsWith('@href')).map(([, v]) => v));

@@ -1,20 +1,41 @@
 {
   "format": "combray-importer@1",
   "name": {"en": "TikTok", "nl": "TikTok"},
-  "entries": [
-    {"path": [], "kind": "map", "find": ["user_data*.json"]},
-    {"path": ["Activity"], "kind": "map", "aliases": ["Your Activity", "Likes and Favorites"]},
-    {"path": ["Activity", "Like List"], "kind": "map"},
-    {"path": ["Activity", "Like List", "ItemFavoriteList"], "kind": "list", "aliases": ["itemFavoriteList"], "label": {"en": "TikTok likes", "nl": "TikTok-likes"}},
-    {"path": ["Activity", "Like List", "ItemFavoriteList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
-    {"path": ["Activity", "Like List", "ItemFavoriteList", "[*]", "Link"], "kind": "value", "decision": "show", "aliases": ["link", "VideoLink"], "label": {"en": "Video", "nl": "Video"}, "role": "url", "as": "url"},
-    {"path": ["Activity", "Search History"], "kind": "map", "aliases": ["Searches"]},
-    {"path": ["Activity", "Search History", "SearchList"], "kind": "list", "aliases": ["searchList"], "label": {"en": "TikTok searches", "nl": "TikTok-zoekopdrachten"}},
-    {"path": ["Activity", "Search History", "SearchList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
-    {"path": ["Activity", "Search History", "SearchList", "[*]", "SearchTerm"], "kind": "value", "decision": "show", "aliases": ["searchTerm"], "label": {"en": "Search", "nl": "Zoekopdracht"}, "role": "title"},
-    {"path": ["Activity", "Video Browsing History"], "kind": "map", "aliases": ["Watch History"]},
-    {"path": ["Activity", "Video Browsing History", "VideoList"], "kind": "list", "aliases": ["videoList"], "label": {"en": "TikTok watch history", "nl": "TikTok-kijkgeschiedenis"}},
-    {"path": ["Activity", "Video Browsing History", "VideoList", "[*]", "Date"], "kind": "value", "decision": "show", "aliases": ["date"], "label": {"en": "Time", "nl": "Tijd"}, "role": "date", "format": "YYYY-MM-DD HH:mm:ss", "as": "datetime"},
-    {"path": ["Activity", "Video Browsing History", "VideoList", "[*]", "Link"], "kind": "value", "decision": "show", "aliases": ["link", "VideoLink"], "label": {"en": "Video", "nl": "Video"}, "role": "url", "as": "url"}
-  ]
+  "names": [
+    {"id": "tiktok-likes", "text": "TikTok likes", "label": {"nl": "TikTok-likes"}},
+    {"id": "time", "text": "Time", "label": {"nl": "Tijd"}},
+    {"id": "video", "text": "Video"},
+    {"id": "tiktok-searches", "text": "TikTok searches", "label": {"nl": "TikTok-zoekopdrachten"}},
+    {"id": "search", "text": "Search", "label": {"nl": "Zoekopdracht"}},
+    {"id": "tiktok-watch-history", "text": "TikTok watch history", "label": {"nl": "TikTok-kijkgeschiedenis"}}
+  ],
+  "root":
+  {"id": "root", "kind": "map", "match": [], "find": ["user_data*.json"], "children": [
+    {"id": "Activity", "kind": "map", "match": ["Activity", "Your Activity", "Likes and Favorites"], "children": [
+      {"id": "Like List", "kind": "map", "match": ["Like List"], "children": [
+        {"id": "ItemFavoriteList", "kind": "list", "match": ["ItemFavoriteList", "itemFavoriteList"], "nameId": "tiktok-likes", "children": [
+          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
+            {"id": "Date", "kind": "value", "match": ["Date", "date"], "nameId": "time", "decision": "show", "as": "datetime", "format": "YYYY-MM-DD HH:mm:ss", "role": "date"},
+            {"id": "Link", "kind": "value", "match": ["Link", "link", "VideoLink"], "nameId": "video", "decision": "show", "as": "url", "role": "url"}
+          ]}
+        ]}
+      ]},
+      {"id": "Search History", "kind": "map", "match": ["Search History", "Searches"], "children": [
+        {"id": "SearchList", "kind": "list", "match": ["SearchList", "searchList"], "nameId": "tiktok-searches", "children": [
+          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
+            {"id": "Date", "kind": "value", "match": ["Date", "date"], "nameId": "time", "decision": "show", "as": "datetime", "format": "YYYY-MM-DD HH:mm:ss", "role": "date"},
+            {"id": "SearchTerm", "kind": "value", "match": ["SearchTerm", "searchTerm"], "nameId": "search", "decision": "show", "role": "title"}
+          ]}
+        ]}
+      ]},
+      {"id": "Video Browsing History", "kind": "map", "match": ["Video Browsing History", "Watch History"], "children": [
+        {"id": "VideoList", "kind": "list", "match": ["VideoList", "videoList"], "nameId": "tiktok-watch-history", "children": [
+          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
+            {"id": "Date", "kind": "value", "match": ["Date", "date"], "nameId": "time", "decision": "show", "as": "datetime", "format": "YYYY-MM-DD HH:mm:ss", "role": "date"},
+            {"id": "Link", "kind": "value", "match": ["Link", "link", "VideoLink"], "nameId": "video", "decision": "show", "as": "url", "role": "url"}
+          ]}
+        ]}
+      ]}
+    ]}
+  ]}
 }

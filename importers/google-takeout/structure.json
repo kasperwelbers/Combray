@@ -80,70 +80,12 @@
       },
       {
         "kind": "dir",
-        "name": "My Activity",
+        "name": "Mijn activiteit",
         "children": [
           {
             "kind": "dir",
-            "name": "Search",
+            "name": "Zoeken",
             "children": [
-              {
-                "kind": "list",
-                "name": "MyActivity.json",
-                "repeat": "many",
-                "children": [
-                  {
-                    "kind": "map",
-                    "name": "[*]",
-                    "children": [
-                      {
-                        "kind": "value",
-                        "name": "header",
-                        "types": [
-                          "string"
-                        ]
-                      },
-                      {
-                        "kind": "list",
-                        "name": "products",
-                        "repeat": "once",
-                        "children": [
-                          {
-                            "kind": "value",
-                            "name": "[*]",
-                            "types": [
-                              "string"
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "kind": "value",
-                        "name": "time",
-                        "types": [
-                          "date-like"
-                        ],
-                        "formats": [
-                          "YYYY-MM-DDTHH:mm:ss.SSSZ"
-                        ]
-                      },
-                      {
-                        "kind": "value",
-                        "name": "title",
-                        "types": [
-                          "string"
-                        ]
-                      },
-                      {
-                        "kind": "value",
-                        "name": "titleUrl",
-                        "types": [
-                          "url-like"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
               {
                 "kind": "element",
                 "name": "MijnActiviteit.html",
@@ -269,6 +211,76 @@
                               }
                             ]
                           }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "dir",
+        "name": "My Activity",
+        "children": [
+          {
+            "kind": "dir",
+            "name": "Search",
+            "children": [
+              {
+                "kind": "list",
+                "name": "MyActivity.json",
+                "repeat": "many",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "header",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "list",
+                        "name": "products",
+                        "repeat": "once",
+                        "children": [
+                          {
+                            "kind": "value",
+                            "name": "[*]",
+                            "types": [
+                              "string"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "time",
+                        "types": [
+                          "date-like"
+                        ],
+                        "formats": [
+                          "YYYY-MM-DDTHH:mm:ss.SSSZ"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "title",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "titleUrl",
+                        "types": [
+                          "url-like"
                         ]
                       }
                     ]
@@ -449,7 +461,99 @@
                     ]
                   }
                 ]
-              },
+              }
+            ]
+          },
+          {
+            "kind": "dir",
+            "name": "subscriptions",
+            "children": [
+              {
+                "kind": "list",
+                "name": "subscriptions.csv",
+                "repeat": "many",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "Channel Id",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Channel URL",
+                        "types": [
+                          "url-like"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Channel title",
+                        "types": [
+                          "string"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "dir",
+        "name": "YouTube en YouTube Music",
+        "children": [
+          {
+            "kind": "dir",
+            "name": "abonnementen",
+            "children": [
+              {
+                "kind": "list",
+                "name": "abonnementen.csv",
+                "repeat": "once",
+                "children": [
+                  {
+                    "kind": "map",
+                    "name": "[*]",
+                    "children": [
+                      {
+                        "kind": "value",
+                        "name": "Kanaal-ID",
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Kanaal-URL",
+                        "types": [
+                          "url-like"
+                        ]
+                      },
+                      {
+                        "kind": "value",
+                        "name": "Kanaaltitel",
+                        "types": [
+                          "string"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "dir",
+            "name": "geschiedenis",
+            "children": [
               {
                 "kind": "element",
                 "name": "kijkgeschiedenis.html",
@@ -615,46 +719,6 @@
                               }
                             ]
                           }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "kind": "dir",
-            "name": "subscriptions",
-            "children": [
-              {
-                "kind": "list",
-                "name": "subscriptions.csv",
-                "repeat": "many",
-                "children": [
-                  {
-                    "kind": "map",
-                    "name": "[*]",
-                    "children": [
-                      {
-                        "kind": "value",
-                        "name": "Channel Id",
-                        "types": [
-                          "string"
-                        ]
-                      },
-                      {
-                        "kind": "value",
-                        "name": "Channel URL",
-                        "types": [
-                          "url-like"
-                        ]
-                      },
-                      {
-                        "kind": "value",
-                        "name": "Channel title",
-                        "types": [
-                          "string"
                         ]
                       }
                     ]

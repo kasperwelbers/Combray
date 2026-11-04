@@ -1,10 +1,12 @@
 /**
- * Platform packs as project trees: per platform a reference `structure.json`, built from the
- * synthetic fixtures, and an `importer.json` with labels, aliases, conversions and decisions.
- * A project starts from a pack and makes its own decisions (docs/tree-decisions.md).
+ * Platform packs as project trees: per platform a reference `structure.json`, the structures seen
+ * in the synthetic fixtures, and an `importer.json`, the configuration: names, matches,
+ * conversions and decisions (docs/decisions/0012-names-and-matches.md). A project starts from a
+ * pack and makes its own decisions (docs/tree-decisions.md).
  */
 import {
-  joinProjectTree,
+  buildTree,
+  configOf,
   parseImporterFile,
   parseStructureFile,
   type ImporterFile,
@@ -35,7 +37,7 @@ export const PACK_IDS = ['google-takeout', 'tiktok'] as const;
 /** The bundled packs, validated. */
 export const packs: PlatformPack[] = PACK_IDS.flatMap((id) => pack(id) ?? []);
 
-/** A pack's project tree: its structure with its settings. */
+/** A pack's project tree: its configuration laid over the structures it has seen. */
 export function packTree(pack: PlatformPack): ProjectNode {
-  return joinProjectTree(pack.structure, pack.importer).tree;
+  return buildTree(configOf(pack.importer), pack.structure.root).tree;
 }

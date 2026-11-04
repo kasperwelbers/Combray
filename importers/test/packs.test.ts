@@ -6,18 +6,19 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  buildTree,
+  configOf,
   deriveRows,
   deriveTables,
   extractShape,
-  joinProjectTree,
   locateRoot,
-  mergeShape,
   normalizeTree,
-  projectTreeFromShape,
-  splitProjectTree,
-  type ImporterFile,
+  parseImporterFile,
+  structureFile,
+  unionShape,
   type ProjectNode,
   type Row,
+  type TableDef,
 } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
@@ -27,29 +28,37 @@ import { FIXTURES, fixtureListing, fixtureNames, readFixture } from './load';
 const ROOT = join(import.meta.dirname, '..');
 const fixturesOf = (pack: string) => fixtureNames().filter((f) => f.startsWith(`${pack}-`));
 
-/** The union of a pack's fixtures, merged in order so the importer's aliases join languages. */
-async function buildStructure(pack: string, importer: ImporterFile) {
-  let tree: ProjectNode | undefined;
+/** The structures seen in a pack's fixtures: their union, as facts (no configuration). */
+async function buildStructure(pack: string) {
+  const shapes = [];
   for (const fixture of fixturesOf(pack)) {
     // The researcher's own (here: synthetic) exports, so header text may name columns.
-    const shape = extractShape(normalizeTree(await readFixture(fixture), { keys: () => true }));
-    tree = tree ? mergeShape(tree, shape).tree : projectTreeFromShape(shape);
-    tree = joinProjectTree(splitProjectTree(tree).structure, importer).tree;
+    shapes.push(extractShape(normalizeTree(await readFixture(fixture), { keys: () => true })));
   }
-  const { structure } = splitProjectTree(tree!);
-  return { structure, pending: joinProjectTree(structure, importer).pending };
+  return structureFile(unionShape(shapes)!);
+}
+
+/** Config nodes that matched nothing in the structure: a typo in a match would leave them unused. */
+function unseen(tree: ProjectNode): string[] {
+  const out: string[] = [];
+  const visit = (node: ProjectNode, path: string[]) => {
+    if (path.length > 0 && !node.virtual && !node.keys?.length) out.push(path.join('/'));
+    for (const child of node.children ?? []) visit(child, [...path, child.name]);
+  };
+  visit(tree, []);
+  return out;
 }
 
 describe.each(PACK_IDS)('pack %s', (id) => {
-  const importer = JSON.parse(readFileSync(join(ROOT, id, 'importer.json'), 'utf8')) as ImporterFile;
+  const importer = parseImporterFile(JSON.parse(readFileSync(join(ROOT, id, 'importer.json'), 'utf8')));
 
   it('has a structure built from its fixtures', async () => {
-    const { structure, pending } = await buildStructure(id, importer);
-    // Every setting finds its node: a typo in a path would leave it waiting forever.
-    expect(pending.map((e) => e.path.join('/'))).toEqual([]);
+    const structure = await buildStructure(id);
     const path = join(ROOT, id, 'structure.json');
     if (process.env.UPDATE_EXPECTED) writeFileSync(path, `${JSON.stringify(structure, null, 2)}\n`);
     expect(structure).toEqual(JSON.parse(readFileSync(path, 'utf8')));
+    // Every config node matches something the fixtures have.
+    expect(unseen(buildTree(configOf(importer), structure.root).tree)).toEqual([]);
   });
 
   it('is bundled and valid', () => {
@@ -63,7 +72,7 @@ const HTML_ROWS = ['html', 'body', 'div.mdl-grid', 'div.mdl-cell.mdl-cell--12-co
 const BODY = 'div.mdl-grid/div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1';
 const TIKTOK = ['Activity'];
 
-/** Where each YAML importer's rows are in the pack's tree, and which column gives each field. */
+/** Where each YAML importer's rows are in the pack's tree (by ids), and the path of each field. */
 const OLD: Record<string, { rows: string[]; fields: Record<string, string> }> = {
   'google-takeout/browser-history': {
     rows: ['Chrome', 'BrowserHistory.json', 'Browser History', '[*]'],
@@ -122,17 +131,30 @@ describe.each(fixtureNames())('fixture %s through its pack', (fixture) => {
     expect(index, `no table at ${path.join('/')}`).toBeGreaterThanOrEqual(0);
     const actual = rows[index]!.map((row, r) =>
       Object.fromEntries(
-        Object.entries(fields).map(([field, column]) => {
-          if (column in row.values) return [field, row.values[column]];
-          // A column of a nested table (the channel): its first row for this row.
-          const nested = tables.findIndex((t) => t.parent === index && column.startsWith(t.rows!.slice(path.length).join('/')));
-          const prefix = tables[nested]!.rows!.slice(path.length).join('/');
-          const first = rows[nested]!.find((n) => n.parent === r);
-          return [field, first?.values[column.slice(prefix.length + 1)] ?? null];
-        }),
+        Object.entries(fields).map(([field, column]) => [field, valueAt(tables, rows, index, r, row.values, column)]),
       ),
     );
     const want = expected[old]!.map((row) => Object.fromEntries(Object.keys(fields).map((f) => [f, row[f] ?? null])));
     expect(actual).toEqual(want);
   });
 });
+
+/** The value of the field at a path below a table's rows; in a nested table, its first row's. */
+function valueAt(
+  tables: TableDef[],
+  rows: ReturnType<typeof deriveRows>,
+  index: number,
+  r: number,
+  values: Record<string, unknown>,
+  path: string,
+): unknown {
+  const table = tables[index]!;
+  const column = table.columns.find((c) => c.type !== 'table' && c.path.join('/') === path);
+  if (column) return values[column.id];
+  // A column of a nested table (the channel): its first row for this row.
+  const nested = tables.findIndex((t) => t.parent === index && path.startsWith(`${t.rows!.slice(table.rows!.length).join('/')}/`));
+  if (nested < 0) throw new Error(`no column at ${path}`);
+  const prefix = tables[nested]!.rows!.slice(table.rows!.length).join('/');
+  const first = rows[nested]!.find((n) => n.parent === r);
+  return first ? valueAt(tables, rows, nested, -1, first.values, path.slice(prefix.length + 1)) : null;
+}

@@ -16,15 +16,15 @@ import {
   localize,
   normalizeTree,
   parseFile,
-  projectTreeFromShape,
   type NormalizeOptions,
   type TableDef,
 } from '../src';
+import { keyedTree } from './trees';
 
 function load(file: string, options?: NormalizeOptions) {
   const bytes = new Uint8Array(readFileSync(new URL(`./html/${file}`, import.meta.url)));
   const tree = normalizeTree(parseFile(file, bytes), options);
-  const project = projectTreeFromShape(extractShape(tree));
+  const project = keyedTree(extractShape(tree));
   const tables = deriveTables(project);
   const rows = deriveRows(tree, project, tables);
   /** The largest table, with its rows as objects keyed by column name. */
@@ -198,7 +198,7 @@ describe('Account page (<dl> and a table without a header)', () => {
 describe('a header row written with <td>', () => {
   const rowsOf = (html: string, options?: NormalizeOptions) => {
     const tree = normalizeTree(parseFile('t.html', new TextEncoder().encode(`<table>${html}</table>`)), options);
-    const project = projectTreeFromShape(extractShape(tree));
+    const project = keyedTree(extractShape(tree));
     const tables = deriveTables(project);
     const i = tables.findIndex((t) => t.rows !== undefined);
     const names = tables[i]!.columns.map((c) => localize(c.name, 'en'));
@@ -248,7 +248,7 @@ describe('a first row the researcher says holds the column names', () => {
   it('names the columns without a label, and leaves the rows as they are', () => {
     const html = '<table><tr><td>Name</td><td>City</td></tr><tr><td>Marcel</td><td>Paris</td></tr></table>';
     const tree = normalizeTree(parseFile('t.html', new TextEncoder().encode(html)));
-    const project = projectTreeFromShape(extractShape(tree));
+    const project = keyedTree(extractShape(tree));
     const rows = deriveTables(project).find((t) => t.rows !== undefined)!.rows!;
     getNode(project, rows)!.headerRow = true;
     getNode(project, [...rows, '#cell[1]'])!.label = { en: 'Town' };
@@ -265,7 +265,7 @@ describe('a first row the researcher says holds the column names', () => {
 describe('columns without a name', () => {
   const columns = (html: string, options?: NormalizeOptions) => {
     const tree = normalizeTree(parseFile('t.html', new TextEncoder().encode(html)), options);
-    const tables = deriveTables(projectTreeFromShape(extractShape(tree)));
+    const tables = deriveTables(keyedTree(extractShape(tree)));
     return tables.find((t) => t.rows !== undefined)!.columns;
   };
 
@@ -280,7 +280,7 @@ describe('columns without a name', () => {
   it('do not include header text that became a key, nor JSON keys', () => {
     const cols = columns('<table><tr><th>Name</th><th>City</th></tr><tr><td>Marcel</td><td>Paris</td></tr></table>', { keys: () => true });
     expect(cols.some((c) => c.unnamed)).toBe(false);
-    const json = deriveTables(projectTreeFromShape(extractShape(jsonToTree('e.json', { rows: [{ a: 1 }, { a: 2 }] }))));
+    const json = deriveTables(keyedTree(extractShape(jsonToTree('e.json', { rows: [{ a: 1 }, { a: 2 }] }))));
     expect(json.flatMap((t) => t.columns).some((c) => c.unnamed)).toBe(false);
   });
 });

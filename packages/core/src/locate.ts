@@ -13,11 +13,11 @@
  */
 import { unzipSync } from 'fflate';
 
-import { closedNodes, isDecidable, knownKeys, matchChild, matchShape, nameMatches, type ProjectNode } from './decisions';
+import { closedNodes, isDecidable, knownKeys, matchesPosition, matchShape, type ProjectNode } from './decisions';
 import { normalizeTree } from './normalize';
 import { isNoise, mergeDirs, parseEntries, parseFile, type ParseOptions } from './parse';
 import { globMatch } from './path';
-import { COLLAPSED_NAME, extractShape, type Shape } from './shape';
+import { extractShape, type Shape } from './shape';
 import type { DirNode, TreeNode } from './tree';
 
 /** How much of an upload Combray looks at. Fixed: not a project setting. */
@@ -286,12 +286,12 @@ function treeFacts(tree: ProjectNode): TreeFacts {
   return { tree, study, studyLeaves, required, holdsRequired, closed: closedNodes(tree) };
 }
 
-/** The project node a file or folder name in a folder maps to (by name or alias). */
+/** The project node a file or folder name in a folder maps to (by any of its matches). */
 function childByName(node: ProjectNode, name: string, folder: boolean): ProjectNode | undefined {
-  if (folder) return matchChild(node, 'dir', name);
-  const wanted = node.collapsed ? COLLAPSED_NAME : name;
-  const files = (node.children ?? []).filter((c) => c.kind !== 'dir' || isZip(name));
-  return files.find((c) => c.name === wanted) ?? files.find((c) => nameMatches(c, wanted));
+  const children = node.children ?? [];
+  if (folder) return children.find((c) => matchesPosition(node, c, 'dir', name));
+  // A file is any kind of node, by its name; an archive may also be a folder.
+  return children.find((c) => (c.kind !== 'dir' || isZip(name)) && matchesPosition(node, c, c.kind, name));
 }
 
 /** The project nodes along a path of folder and file names, as far as the tree knows them. */

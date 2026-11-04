@@ -1,62 +1,64 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildTree,
+  configOf,
   extractShape,
-  getNode,
-  joinProjectTree,
+  importerFile,
   parseImporterFile,
   parseStructureFile,
   ProjectFileError,
-  projectTreeFromShape,
   setDecision,
-  splitProjectTree,
+  structureFile,
+  type ConfigNode,
 } from '../src';
 import { watchHistory } from './fixtures';
+import { at, nodeAt, treeOf } from './trees';
+
+const shape = extractShape(watchHistory);
 
 function decided() {
-  let tree = projectTreeFromShape(extractShape(watchHistory));
-  tree = setDecision(tree, ['[*]', 'time'], 'donate');
-  getNode(tree, ['[*]', 'time'])!.label = { en: 'Watched at', nl: 'Bekeken op' };
-  getNode(tree, ['[*]', 'title'])!.aliases = ['titel', { regex: '^Title$', flags: 'i' }];
+  let tree = treeOf(shape);
+  tree = setDecision(tree, at(tree, '[*]', 'time'), 'donate');
+  Object.assign(nodeAt(tree, '[*]', 'time'), { nameId: 'when' });
+  nodeAt(tree, '[*]', 'title').match = ['title', 'titel', { regex: '^Title$', flags: 'i' }];
   return tree;
 }
+const names = [{ id: 'when', text: 'Watched at', label: { nl: 'Bekeken op' } }, { id: 'unused', text: 'Unused' }];
 
-const importer = (...entries: object[]) => ({ format: 'combray-importer@1', entries });
+/** An importer file with these nodes below the root. */
+const importer = (children: object[], root: object = {}) => ({
+  format: 'combray-importer@1',
+  names: [{ id: 'n', text: 'A name' }],
+  root: { id: 'root', kind: 'map', match: [], ...root, children },
+});
+const leaf = (extra: object = {}) => ({ id: 'a', kind: 'value', match: ['a'], ...extra });
 
 describe('project files', () => {
-  it('split into structure and settings, and join back to the same tree', () => {
+  it('keep the configuration apart from the structure, and lay over it to the same tree', () => {
     const tree = decided();
-    const { structure, importer } = splitProjectTree(tree, 'YouTube');
-    expect(JSON.stringify(structure)).not.toMatch(/decision|label|aliases/);
-    expect(importer.entries.map((e) => e.path)).toEqual([['[*]', 'time'], ['[*]', 'title']]);
-    const roundTrip = JSON.parse(JSON.stringify({ structure, importer }));
-    const { tree: joined, pending } = joinProjectTree(
-      parseStructureFile(roundTrip.structure),
-      parseImporterFile(roundTrip.importer),
-    );
-    expect(pending).toEqual([]);
-    expect(joined).toEqual(tree);
-  });
-
-  it('keeps settings for paths the structure does not have yet', () => {
-    const { importer } = splitProjectTree(decided());
-    const empty = { format: 'combray-structure@1' as const, root: { kind: 'list' as const, name: '' } };
-    const { pending } = joinProjectTree(empty, importer);
-    expect(pending.map((e) => e.path)).toEqual([['[*]', 'time'], ['[*]', 'title']]);
+    const file = importerFile(tree, names, 'YouTube');
+    expect(file.names.map((n) => n.id)).toEqual(['when']);
+    // Only nodes someone touched: the untouched title is configured because its matches changed.
+    expect(JSON.stringify(file)).not.toMatch(/subtitles|titleUrl|types/);
+    const roundTrip = parseImporterFile(JSON.parse(JSON.stringify(file)));
+    const again = buildTree(configOf(roundTrip), parseStructureFile(JSON.parse(JSON.stringify(structureFile(shape)))).root).tree;
+    expect(nodeAt(again, '[*]', 'time')).toMatchObject({ decision: 'donate', label: { en: 'Watched at', nl: 'Bekeken op' } });
+    expect(nodeAt(again, '[*]', 'title').keys).toEqual(['title']);
   });
 
   it('rejects malformed files', () => {
     expect(() => parseStructureFile({ format: 'nope' })).toThrow(ProjectFileError);
-    expect(() => parseStructureFile({ format: 'combray-structure@1', root: { kind: 'x', name: '' } })).toThrow(
-      'unknown kind',
-    );
-    expect(() => parseImporterFile(importer({ path: ['a'], kind: 'value', decision: 'maybe' }))).toThrow(
-      'unknown decision',
-    );
-    expect(() => parseImporterFile(importer({ path: ['a'], kind: 'value', aliases: [{ regex: '(' }] }))).toThrow(
-      'invalid regular expression',
-    );
-    expect(() => parseImporterFile(importer({ path: 'a', kind: 'value' }))).toThrow('path');
+    expect(() => parseStructureFile({ format: 'combray-structure@1', root: { kind: 'x', name: '' } })).toThrow('unknown kind');
+    expect(() => parseStructureFile({ format: 'combray-structure@1', root: { kind: 'list', name: '', repeat: '2-10' } })).toThrow('repeat');
+    expect(() => parseImporterFile(importer([leaf({ decision: 'maybe' })]))).toThrow('unknown decision');
+    expect(() => parseImporterFile(importer([leaf({ match: [{ regex: '(' }] })]))).toThrow('not a valid regular expression');
+    expect(() => parseImporterFile(importer([leaf({ match: [] })]))).toThrow('at least one match');
+    expect(() => parseImporterFile(importer([leaf({ match: ['[*]', 'b'] })]))).toThrow('matches of their own');
+    expect(() => parseImporterFile(importer([leaf(), leaf()]))).toThrow('used twice');
+    expect(() => parseImporterFile(importer([leaf({ nameId: 'nope' })]))).toThrow('unknown name');
+    expect(() => parseImporterFile(importer([], { match: ['x'] }))).toThrow('has no match');
+    expect(() => parseImporterFile({ ...importer([]), names: [{ id: 'n', text: ' ' }] })).toThrow('text');
   });
 
   it('accepts formats made of tokens only, so no values can travel in them', () => {
@@ -71,65 +73,41 @@ describe('project files', () => {
   });
 
   it('keeps conversions, roles and row filters, and checks them', () => {
-    const entry = {
-      path: ['a', '[*]', 'time'],
-      kind: 'value',
-      transform: ['trim', { replace: { pattern: '^At ', with: '' } }],
-      as: 'datetime',
-      format: 'YYYY-MM-DD HH:mm:ss',
-      role: 'date',
-    };
-    const rows = { path: ['a', '[*]'], kind: 'map', filter: [{ column: 'ad', test: { empty: true } }] };
-    expect(parseImporterFile(importer(entry, rows)).entries).toHaveLength(2);
-    expect(() => parseImporterFile(importer({ ...entry, as: 'money' }))).toThrow('unknown type');
-    expect(() => parseImporterFile(importer({ ...entry, role: 'author' }))).toThrow('unknown role');
-    expect(() => parseImporterFile(importer({ ...entry, format: 'Marcel' }))).toThrow('format');
-    expect(() => parseImporterFile(importer({ ...entry, transform: ['shout'] }))).toThrow('unknown transform');
-    expect(() => parseImporterFile(importer({ ...rows, filter: [{ column: 'ad', test: { like: 1 } }] }))).toThrow(
-      'unknown filter test',
-    );
-    expect(() => parseImporterFile(importer({ ...rows, filter: [{ column: 'ad', test: { matches: '(' } }] }))).toThrow(
-      'invalid regular expression',
-    );
+    const time = leaf({ transform: ['trim', { replace: { pattern: '^At ', with: '' } }], as: 'datetime', format: 'YYYY-MM-DD HH:mm:ss', role: 'date' });
+    const rows = (extra: object = {}) => ({ id: 'rows', kind: 'map', match: ['[*]'], filter: [{ column: 'ad', test: { empty: true } }], ...extra });
+    const list = (child: object) => ({ id: 'l', kind: 'list', match: ['l'], children: [child] });
+    expect(parseImporterFile(importer([time, list(rows())])).root.children).toHaveLength(2);
+    expect(() => parseImporterFile(importer([{ ...time, as: 'money' }]))).toThrow('unknown type');
+    expect(() => parseImporterFile(importer([{ ...time, role: 'author' }]))).toThrow('unknown role');
+    expect(() => parseImporterFile(importer([{ ...time, format: 'Marcel' }]))).toThrow('format');
+    expect(() => parseImporterFile(importer([{ ...time, transform: ['shout'] }]))).toThrow('unknown transform');
+    expect(() => parseImporterFile(importer([list(rows({ filter: [{ column: 'ad', test: { like: 1 } }] }))]))).toThrow('unknown filter test');
+    expect(() => parseImporterFile(importer([list(rows({ filter: [{ column: 'ad', test: { matches: '(' } }] }))]))).toThrow('invalid regular expression');
+    expect(() => parseImporterFile(importer([rows()]))).toThrow('[*] is only below a list');
   });
 
   it('keeps how uploads are matched: find patterns on the root, required parts, new children', () => {
     const tree = decided();
     tree.find = ['watch-history*.json'];
     tree.newChildren = 'skip';
-    getNode(tree, ['[*]', 'time'])!.required = true;
-    const { structure, importer: settings } = splitProjectTree(tree);
-    expect(settings.entries[0]).toEqual({ path: [], kind: 'list', find: ['watch-history*.json'], newChildren: 'skip' });
-    const parsed = parseImporterFile(JSON.parse(JSON.stringify(settings)));
-    expect(joinProjectTree(structure, parsed).tree).toEqual(tree);
+    nodeAt(tree, '[*]', 'time').required = true;
+    const parsed = parseImporterFile(JSON.parse(JSON.stringify(importerFile(tree, names))));
+    expect(parsed.root).toMatchObject({ find: ['watch-history*.json'], newChildren: 'skip' });
+    expect(nodeAt(buildTree(configOf(parsed), shape).tree, '[*]', 'time').required).toBe(true);
 
-    const root = { path: [], kind: 'list' };
-    expect(() => parseImporterFile(importer({ ...root, find: ['*.json'] }))).toThrow('three letters');
-    expect(() => parseImporterFile(importer({ ...root, find: [] }))).toThrow('find');
-    expect(() => parseImporterFile(importer({ path: ['a'], kind: 'map', find: ['Takeout'] }))).toThrow('only the root');
-    expect(() => parseImporterFile(importer({ ...root, newChildren: 'never' }))).toThrow('ask or skip');
-    expect(() => parseImporterFile(importer({ ...root, required: false }))).toThrow('required');
+    expect(() => parseImporterFile(importer([], { find: ['*.json'] }))).toThrow('three letters');
+    expect(() => parseImporterFile(importer([], { find: [] }))).toThrow('find');
+    expect(() => parseImporterFile(importer([leaf({ find: ['Takeout'] })]))).toThrow('only the root');
+    expect(() => parseImporterFile(importer([], { newChildren: 'never' }))).toThrow('ask or skip');
+    expect(() => parseImporterFile(importer([leaf({ required: false })]))).toThrow('required');
   });
 
-  it('keeps a header row on the rows of a table only', () => {
-    const tree = decided();
-    getNode(tree, ['[*]'])!.headerRow = true;
-    const { structure, importer: settings } = splitProjectTree(tree);
-    const parsed = parseImporterFile(JSON.parse(JSON.stringify(settings)));
-    expect(getNode(joinProjectTree(structure, parsed).tree, ['[*]'])!.headerRow).toBe(true);
-    expect(() => parseImporterFile(importer({ path: [], kind: 'list', headerRow: true }))).toThrow('only the rows');
-    expect(() => parseImporterFile(importer({ path: ['[*]'], kind: 'map', headerRow: 'yes' }))).toThrow('headerRow must be true');
-  });
-
-  it('keeps whether participants see undecided parts, on the root only', () => {
-    const tree = decided();
-    tree.undecided = 'show';
-    const { structure, importer: settings } = splitProjectTree(tree);
-    expect(settings.entries[0]).toMatchObject({ path: [], undecided: 'show' });
-    const parsed = parseImporterFile(JSON.parse(JSON.stringify(settings)));
-    expect(joinProjectTree(structure, parsed).tree.undecided).toBe('show');
-
-    expect(() => parseImporterFile(importer({ path: [], kind: 'list', undecided: 'hide' }))).toThrow('undecided must be show');
-    expect(() => parseImporterFile(importer({ path: ['a'], kind: 'map', undecided: 'show' }))).toThrow('only the root');
+  it('keeps a header row on the rows of a table only, and undecided parts shown on the root only', () => {
+    const rows: ConfigNode = { id: 'rows', kind: 'map', match: ['[*]'], headerRow: true };
+    expect(() => parseImporterFile(importer([{ id: 'l', kind: 'list', match: ['l'], children: [rows] }]))).not.toThrow();
+    expect(() => parseImporterFile(importer([leaf({ headerRow: true })]))).toThrow('only the rows');
+    expect(() => parseImporterFile(importer([], { undecided: 'show' }))).not.toThrow();
+    expect(() => parseImporterFile(importer([], { undecided: 'hide' }))).toThrow('undecided must be show');
+    expect(() => parseImporterFile(importer([leaf({ undecided: 'show' })]))).toThrow('only the root');
   });
 });

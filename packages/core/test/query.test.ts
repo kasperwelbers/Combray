@@ -8,12 +8,12 @@ import {
   deriveTables,
   extractShape,
   jsonToTree,
-  projectTreeFromShape,
   queryColumns,
   QueryError,
   runQuery,
   type Query,
 } from '../src';
+import { keyedTree } from './trees';
 
 const tree = jsonToTree('tweets.json', {
   tweets: [
@@ -31,7 +31,7 @@ const tree = jsonToTree('tweets.json', {
     { at: '2024-04-10T21:30:00Z', text: 'Tea', tags: ['tea'], stats: { likes: 5 }, comments: [{ by: 'Marcel', text: 'Yes' }] },
   ],
 });
-const project = projectTreeFromShape(extractShape(tree));
+const project = keyedTree(extractShape(tree));
 const tables = deriveTables(project);
 const rows = deriveRows(tree, project, tables);
 const run = (query: Query) => runQuery(tables, rows, query);

@@ -1,19 +1,19 @@
 /**
- * Merge suggestions: when a new export has a node where the project tree has a different one
- * at the same place, they may be the same thing renamed or translated (`date` and
- * `timestamp`, `Mijn activiteit` and `My Activity`). See docs/tree-decisions.md#aliases-and-merging.
+ * Suggestions to combine: when a new export has a position where the configuration has a
+ * different node at the same place, they may be the same thing renamed or translated (`date` and
+ * `timestamp`, `Mijn activiteit` and `My Activity`). See docs/decisions/0012-names-and-matches.md.
  *
- * Suggestions are pairs of siblings: one the shape has and the tree does not know, and one
- * the tree has and the shape lacks, of the same kind. They are ranked by how alike their
+ * Suggestions are pairs of siblings: one the shape has and no config node matches, and one the
+ * configuration has and the shape lacks, of the same kind. They are ranked by how alike their
  * structure and names are, and each node is suggested at most once. The researcher decides.
  */
-import { getNode, matchChild, type NodePath, type ProjectNode } from './decisions';
+import { buildTree, toConfig, type NodePath, type ProjectNode } from './decisions';
 import { COLLAPSED_NAME, ITEM_NAME, type Shape } from './shape';
 
-export interface MergeSuggestion {
-  /** The node the shape added (after `mergeShape`, this path exists in the tree). */
+export interface CombineSuggestion {
+  /** The unmatched (virtual) node of the new export. */
   from: NodePath;
-  /** The known node it may be the same as. */
+  /** The config node it may be the same as. */
   into: NodePath;
   /** 0 to 1: how alike they are. */
   score: number;
@@ -80,40 +80,27 @@ function similarity(a: Node, b: Node): number {
 const positional = (name: string) => name === ITEM_NAME || name === COLLAPSED_NAME;
 
 /**
- * After merging `from` into `into`, the children of both sit side by side under `into`. Suggest
- * merges between them, with full paths. Call it before `mergeNodes`.
+ * Suggest combining for a shape (a newly loaded export): pairs of siblings where the shape has a
+ * position no config node matches (`from`, a virtual node) and the configuration has a node this
+ * shape lacks (`into`), of the same kind. `tree` is the project tree the researcher sees (the
+ * configuration over all seen structures); paths are in it.
  */
-export function suggestAfterMerge(root: ProjectNode, from: NodePath, into: NodePath): MergeSuggestion[] {
-  const source = getNode(root, from);
-  const target = getNode(root, into);
-  if (!source || !target) return [];
-  return suggestMerges(target, source).map((s) => ({ ...s, from: [...into, ...s.from], into: [...into, ...s.into] }));
-}
-
-/**
- * Suggest merges for a shape about to be added to a project tree. Call it before
- * `mergeShape`: it needs to know which known nodes the shape lacks.
- */
-export function suggestMerges(root: ProjectNode, shape: Shape): MergeSuggestion[] {
-  const out: MergeSuggestion[] = [];
-  const visit = (node: ProjectNode, s: Shape, path: NodePath) => {
-    if (node.collapsed) return;
-    const seen = new Set<ProjectNode>();
-    const unknown: Shape[] = [];
-    for (const child of s.children ?? []) {
-      const match = matchChild(node, child.kind, child.name);
-      if (match) {
-        seen.add(match);
-        visit(match, child, [...path, match.name]);
-      } else if (!positional(child.name)) unknown.push(child);
-    }
-    const missing = (node.children ?? []).filter((c) => !seen.has(c) && !positional(c.name));
-    const pairs: MergeSuggestion[] = [];
+export function suggestCombines(tree: ProjectNode, shape: Shape): CombineSuggestion[] {
+  const built = buildTree({ root: toConfig(tree), names: [] }, shape);
+  const out: CombineSuggestion[] = [];
+  const visit = (node: ProjectNode, own: ProjectNode | undefined, path: NodePath) => {
+    if (!own || node.collapsed) return;
+    const children = node.children ?? [];
+    const unknown = children.filter((c) => c.virtual && !positional(c.name));
+    const missing = children.filter((c) => !c.virtual && !positional(c.name) && (built.sources.get(c)?.length ?? 0) === 0);
+    const pairs: CombineSuggestion[] = [];
     for (const u of unknown) {
+      const shapeOfU = built.sources.get(u)?.[0];
       for (const m of missing) {
-        if (u.kind !== m.kind) continue;
-        const score = similarity(u, m);
-        if (score >= MIN_SCORE) pairs.push({ from: [...path, u.name], into: [...path, m.name], score });
+        const known = own.children?.find((c) => c.id === m.id);
+        if (u.kind !== m.kind || !shapeOfU || !known) continue;
+        const score = similarity(shapeOfU, asShape(known));
+        if (score >= MIN_SCORE) pairs.push({ from: [...path, u.id], into: [...path, m.id], score });
       }
     }
     // Best pairs first, each node in at most one.
@@ -126,7 +113,19 @@ export function suggestMerges(root: ProjectNode, shape: Shape): MergeSuggestion[
       used.add(into);
       out.push({ ...pair, score: Math.round(pair.score * 100) / 100 });
     }
+    for (const child of children) if (!child.virtual) visit(child, own.children?.find((c) => c.id === child.id), [...path, child.id]);
   };
-  visit(root, shape, []);
+  visit(built.tree, tree, []);
   return out;
+}
+
+/** A project node as the shape the researcher saw: its key, structure and children. */
+function asShape(node: ProjectNode): Node {
+  return {
+    kind: node.kind,
+    name: node.keys?.[0] ?? node.name,
+    ...(node.types ? { types: node.types } : {}),
+    ...(node.formats ? { formats: node.formats } : {}),
+    ...(node.children ? { children: node.children.map(asShape) as Shape[] } : {}),
+  };
 }

@@ -39,54 +39,46 @@ const WATCH = JSON.stringify([
 ]);
 const NOTES = JSON.stringify({ notes: ['buy milk'] });
 
-const value = (name: string, extra: Partial<ProjectNode> = {}): ProjectNode => ({ kind: 'value', name, ...extra });
+/** A config node, as a project tree has it: its first match is its name and its id. */
+const node = (kind: ProjectNode['kind'], match: string[], extra: Partial<ProjectNode> = {}): ProjectNode => ({
+  id: match[0]!,
+  kind,
+  name: match[0]!,
+  match,
+  ...extra,
+});
+const value = (name: string, extra: Partial<ProjectNode> = {}) => node('value', [name], extra);
 
 /** A small Takeout-like tree: the study shows the watch history and ignores mail. */
 function takeoutTree(extra: Partial<ProjectNode> = {}): ProjectNode {
   return {
-    kind: 'dir',
+    ...node('dir', [], { find: ['Takeout', 'takeout-*.zip'], newChildren: 'skip', ...extra }),
+    id: 'root',
     name: '',
-    find: ['Takeout', 'takeout-*.zip'],
-    newChildren: 'skip',
     children: [
-      {
-        kind: 'dir',
-        name: 'YouTube',
-        aliases: ['YouTube en YouTube Music'],
+      node('dir', ['YouTube', 'YouTube en YouTube Music'], {
         children: [
-          {
-            kind: 'dir',
-            name: 'history',
+          node('dir', ['history'], {
             children: [
-              {
-                kind: 'list',
-                name: 'watch-history.json',
-                aliases: ['kijkgeschiedenis.json'],
-                children: [
-                  {
-                    kind: 'map',
-                    name: '[*]',
-                    children: [value('title', { decision: 'show' }), value('time', { decision: 'show' })],
-                  },
-                ],
-              },
+              node('list', ['watch-history.json', 'kijkgeschiedenis.json'], {
+                children: [node('map', ['[*]'], { children: [value('title', { decision: 'show' }), value('time', { decision: 'show' })] })],
+              }),
             ],
-          },
+          }),
         ],
-      },
-      { kind: 'dir', name: 'Mail', decision: 'ignore', children: [{ kind: 'blob', name: 'All mail.mbox' }] },
+      }),
+      node('dir', ['Mail'], { decision: 'ignore', children: [node('blob', ['All mail.mbox'])] }),
     ],
-    ...extra,
   };
 }
 
 /** A tree whose root is one JSON file: the list of watched videos. */
 function fileTree(): ProjectNode {
   return {
-    kind: 'list',
+    ...node('list', [], { find: ['watch-history*.json'] }),
+    id: 'root',
     name: '',
-    find: ['watch-history*.json'],
-    children: [{ kind: 'map', name: '[*]', children: [value('title', { decision: 'show' }), value('time')] }],
+    children: [node('map', ['[*]'], { children: [value('title', { decision: 'show' }), value('time')] })],
   };
 }
 
@@ -328,7 +320,7 @@ describe('required parts', () => {
 
   it('are checked on names before anything is opened', async () => {
     const tree = takeoutTree();
-    tree.children!.push({ kind: 'blob', name: 'archive_browser.html', required: true });
+    tree.children!.push(node('blob', ['archive_browser.html'], { required: true }));
     const { result, reads } = await locate({ 'Takeout/YouTube/history/watch-history.json': WATCH }, tree);
     expect(result.status).toBe('no-fit');
     expect(reads).toEqual([]);

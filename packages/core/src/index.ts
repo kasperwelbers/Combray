@@ -11,21 +11,44 @@ export { flatten, unflatten, locationOf } from './flat';
 export type { FlatNode } from './flat';
 export * from './importer';
 export {
-  projectTreeFromShape,
-  mergeShape,
+  newId,
+  matchesKey,
+  matchOne,
+  matchText,
+  sameMatch,
+  regexProblem,
+  isRegex,
+  isItemNode,
+  isKeysNode,
+  nameLabel,
+  SETTINGS,
+  MAX_REGEX,
+} from './config';
+export type { ConfigNode, Match, Name, NodeSettings, ProjectConfig } from './config';
+export {
+  buildTree,
+  configTree,
+  emptyConfig,
+  toConfig,
+  materialise,
+  remapPath,
+  unionShape,
+  unifyElementTwins,
+  newPositions,
+  virtualId,
   effectiveStates,
   setDecision,
   setKeysAreData,
   isDecidable,
   ignoreOverrides,
-  mergeNodes,
   compareShape,
   matchShape,
+  matchesPosition,
   requiredPaths,
   closedNodes,
   getNode,
-  matchChild,
-  nameMatches,
+  nodesAlong,
+  pathOf,
   isLeaf,
   knownKeys,
   DecisionError,
@@ -35,28 +58,41 @@ export {
 export type {
   ProjectNode,
   NodePath,
-  Alias,
+  Built,
+  BuildOptions,
+  StructureInfo,
   LeafDecision,
   EffectiveState,
-  MergeConflict,
   ShapeComparison,
-  MergeShapeOptions,
   NewChildren,
   Role,
   RowFilter,
 } from './decisions';
-export { deriveTables, deriveRows, headerNames, outline, valuesAt, KEY_COLUMN, VALUE_COLUMN } from './derive';
+export {
+  combineNodes,
+  combineProblem,
+  combineConflicts,
+  setName,
+  addMatch,
+  removeMatch,
+  splitByKey,
+  createName,
+  nodesNamed,
+} from './joins';
+export type { JoinConflict } from './joins';
+export { deriveTables, deriveRows, groupTables, headerNames, outline, valuesAt, convertValue, KEY_COLUMN, VALUE_COLUMN } from './derive';
 export type { TableDef, ColumnDef, DerivedRow, DeriveOptions, OutlineGroup } from './derive';
 export {
-  splitProjectTree,
-  joinProjectTree,
+  structureFile,
+  importerFile,
+  configOf,
   parseStructureFile,
   parseImporterFile,
   ProjectFileError,
   STRUCTURE_FORMAT,
   IMPORTER_FORMAT,
 } from './projectFiles';
-export type { StructureFile, ImporterFile, ImporterEntry } from './projectFiles';
+export type { StructureFile, ImporterFile } from './projectFiles';
 export { normalizeTree, MIN_REPEATS } from './normalize';
 export type { NormalizeOptions } from './normalize';
 export { runQuery, queryColumns, unnestPath, rootTable, datePart, QueryError } from './query';
@@ -75,7 +111,7 @@ export type {
 } from './query';
 export { chartQuery, chartData } from './chart';
 export type { ChartSpec, ChartData, ChartPoint } from './chart';
-export { suggestMerges, suggestAfterMerge } from './suggest';
+export { suggestCombines } from './suggest';
 export {
   UploadListing,
   locateRoot,
@@ -96,5 +132,4 @@ export type {
   Located,
   LocateResult,
 } from './locate';
-export type { MergeSuggestion } from './suggest';
-export { occursIn, seenTogether } from './together';
+export type { CombineSuggestion } from './suggest';

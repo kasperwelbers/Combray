@@ -1,121 +1,79 @@
 /**
- * Project trees: the union of the shapes a project has seen, with the researcher's decisions.
+ * Project trees: the researcher's configuration laid over the structures we have seen.
  *
- * See docs/tree-decisions.md. A project tree holds structure only, like a shape. Show and
- * donate are set on leaves, and on `{*}` nodes for their keys; other inner nodes can only be
- * ignored (which covers everything below them). An inner node's effective state is derived
+ * See docs/tree-decisions.md and docs/decisions/0012-names-and-matches.md. The configuration
+ * (config.ts) holds only nodes someone touched. `buildTree` lays it over a shape: every real
+ * position is matched by the config nodes whose matches fit it, and positions no config node
+ * matches become *virtual* nodes, undecided. The result, a project tree, is what the studio shows
+ * and edits and what tables are derived from; `toConfig` takes the configuration back out of it.
+ *
+ * Show and donate are set on leaves, and on `{*}` nodes for their keys; other inner nodes can only
+ * be ignored (which covers everything below them). An inner node's effective state is derived
  * from its leaves. Tables are not marked: they are inferred from the structure (derive.ts).
  */
-import type { FieldType, Localized, Transform } from './importer/spec';
-import { globMatch } from './path';
-import type { FilterTest } from './query';
+import {
+  isItemNode,
+  isKeysNode,
+  matchesKey,
+  nameDescription,
+  nameLabel,
+  newId,
+  SETTINGS,
+  type ConfigNode,
+  type LeafDecision,
+  type Match,
+  type Name,
+  type NodeSettings,
+  type ProjectConfig,
+} from './config';
+import type { Localized } from './importer/spec';
 import { COLLAPSED_NAME, ITEM_NAME, mergeAll, repeatOf, type Repeat, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
-export type LeafDecision = 'undecided' | 'ignore' | 'show' | 'donate';
+export type { LeafDecision, NewChildren, Role, RowFilter } from './config';
+export { ROLES } from './config';
 
-/** What a leaf is for in participant views: the date of a row, its title, its link, or a group. */
-export type Role = 'date' | 'title' | 'url' | 'group';
-export const ROLES: readonly Role[] = ['date', 'title', 'url', 'group'];
-
-/** A condition rows of a table must meet to be imported: a test on one of its columns. */
-export interface RowFilter {
-  /** The column's id: its path from the row, joined with `/`. */
-  column: string;
-  test: FilterTest;
-  /** Keep the rows that do not pass the test instead. */
-  not?: true;
-}
 export type EffectiveState = 'ignore' | 'show' | 'donate';
 
-/** Whether a node reads, shows and asks about parts it has never seen below it. */
-export type NewChildren = 'ask' | 'skip';
-
-/** Another name for a node: a glob (`*` wildcard, `\*` literal star) or a regular expression. */
-export type Alias = string | { regex: string; flags?: string };
-
-export interface ProjectNode {
-  kind: NodeKind;
-  /** Canonical name, as in shapes: keys, `[*]` for list items, `{*}` for collapsed keys. */
-  name: string;
-  aliases?: Alias[];
-  /**
-   * `show` and `donate` on leaves, and on `{*}` nodes for their keys; `ignore` on any node.
-   * Absent means undecided.
-   */
-  decision?: Exclude<LeafDecision, 'undecided'>;
-  /**
-   * Inner nodes only: a sandboxed function from this node's subtree to a map. The node then
-   * counts as a leaf: its children are hidden from decisions and its one decision covers
-   * every key the lifter outputs.
-   */
-  lifter?: string;
-  /** Donated leaves only: donate the value as in the file instead of transformed. */
-  raw?: true;
-  /** Leaves: built-in transforms, applied in order before `as`. */
-  transform?: Transform[];
-  /** Leaves: the type to read the value as (a date, a number, a link's domain). */
-  as?: FieldType;
-  /** Leaves read `as: datetime`: how the date is written (`YYYY-MM-DD HH:mm:ss`, `epoch-ms`). */
-  format?: string;
-  /** Leaves: what the value is for in participant views. */
-  role?: Role;
-  /** Repeated nodes (`[*]`, `{*}`): conditions a row must meet, all of them, to be imported. */
-  filter?: RowFilter[];
-  /**
-   * The rows of a table (`[*]`) only: its first row holds the column names, as in an HTML table
-   * whose header is written as an ordinary row. Only how the table is shown changes: the first
-   * row names the columns that have no label and is not shown as a row. The data itself, and
-   * so a donation, keep the row.
-   */
-  headerRow?: true;
-  /**
-   * An upload only fits the tree when this node is there, by its name or any alias
-   * (docs/tree-decisions.md#finding-the-export-in-an-upload).
-   */
-  required?: true;
-  /**
-   * Inner nodes: whether parts this node has never seen below it are read, shown and offered
-   * for structure sharing (`ask`, the default) or skipped (`skip`). Passed down: a node without
-   * a setting follows its parent.
-   */
-  newChildren?: NewChildren;
-  /**
-   * The root only: name patterns (globs) for finding the export inside a bigger upload, when
-   * the upload itself does not fit. See `findPatternProblem` for what a pattern must be.
-   */
-  find?: string[];
-  /**
-   * The root only: whether participants see the parts the researcher has not decided on
-   * (`show`). Absent: they are hidden from the processed view; participants can still see
-   * everything in their raw data.
-   */
-  undecided?: 'show';
-  label?: Localized;
-  /** One participant-facing sentence, for donated leaves. */
-  description?: Localized;
-  /** Structure seen so far, as in shapes. */
+/** What the seen structures say about a position: as in shapes, without names or children. */
+export interface StructureInfo {
   types?: ValueType[];
   formats?: string[];
   keyTypes?: ValueType[];
   keyFormats?: string[];
   repeat?: Repeat;
   mime?: string;
-  collapsed?: true;
+}
+
+/** The structure fields of a node, as in shapes. */
+export const STRUCTURE_FIELDS = ['types', 'formats', 'keyTypes', 'keyFormats', 'repeat', 'mime'] as const satisfies readonly (keyof StructureInfo)[];
+
+/**
+ * A node of a project tree: a config node, or a virtual one for a real position nothing matches,
+ * with what the seen structures say about it.
+ */
+export interface ProjectNode extends NodeSettings, StructureInfo {
+  /** The config node's id; for a virtual node `~kind:key`, unique among its siblings. */
+  id: string;
+  kind: NodeKind;
+  /**
+   * What the node is called in the tree: its first exact match, else the first key it matched,
+   * `[*]` or `{*}`, the real key of a virtual node, or `''` for the root.
+   */
+  name: string;
+  match: Match[];
+  /** A real position no config node matches: not part of the configuration until edited. */
+  virtual?: true;
+  nameId?: string;
+  /** From the node's name: the label and description participants see. */
+  label?: Localized;
+  description?: Localized;
+  /** The real keys the node matched in the structures it was laid over. */
+  keys?: string[];
   children?: ProjectNode[];
 }
 
-/** The structure fields of a node, as in shapes: copied to and from structure files. */
-export const STRUCTURE_FIELDS = ['types', 'formats', 'keyTypes', 'keyFormats', 'repeat', 'mime', 'collapsed'] as const;
-
-function copyStructure(from: Shape | ProjectNode, to: Shape | ProjectNode): void {
-  for (const key of STRUCTURE_FIELDS) {
-    const value = from[key];
-    if (value !== undefined) (to as unknown as Record<string, unknown>)[key] = Array.isArray(value) ? [...value] : value;
-  }
-}
-
-/** A position in a project tree: the canonical names from the root's children down. */
+/** A position in a project tree: the ids of the nodes from the root's children down. */
 export type NodePath = string[];
 
 export class DecisionError extends Error {
@@ -140,79 +98,93 @@ export function isDecidable(node: { kind: NodeKind; name: string; lifter?: strin
   return isLeaf(node) || node.name === COLLAPSED_NAME;
 }
 
-/** True if `name` is the node's canonical name or matches one of its aliases. */
-export function nameMatches(node: ProjectNode, name: string): boolean {
-  if (node.name === name) return true;
-  return (node.aliases ?? []).some((alias) =>
-    typeof alias === 'string'
-      ? globMatch(alias, name)
-      : new RegExp(alias.regex, alias.flags).test(name),
-  );
-}
-
-/**
- * Whether a text is a name the project tree knows: a canonical name or an alias, anywhere. For
- * `NormalizeOptions.keys`: header text in a participant's HTML only becomes a key when the
- * researcher's tree has it, so text from the file never becomes a new name in a shape.
- */
-export function knownKeys(root: ProjectNode): (text: string) => boolean {
-  const names = new Set<string>();
-  const aliased: ProjectNode[] = [];
-  const visit = (node: ProjectNode) => {
-    names.add(node.name);
-    if (node.aliases?.length) aliased.push(node);
-    for (const child of node.children ?? []) visit(child);
-  };
-  visit(root);
-  return (text) => names.has(text) || aliased.some((node) => nameMatches(node, text));
-}
-
-/** The child of `parent` that a shape or tree node with this kind and name maps to. */
-export function matchChild(
-  parent: ProjectNode,
-  kind: NodeKind,
-  name: string,
-): ProjectNode | undefined {
-  // Below a map whose keys are data, every key is the one `{*}` position.
-  if (parent.collapsed) name = COLLAPSED_NAME;
-  const children = parent.children ?? [];
-  // A canonical name wins over an alias of a sibling.
-  return (
-    children.find((c) => c.kind === kind && c.name === name) ??
-    children.find((c) => c.kind === kind && nameMatches(c, name))
-  );
-}
-
-/** Find a node by its canonical path. */
+/** Find a node by its path of ids. */
 export function getNode(root: ProjectNode, path: NodePath): ProjectNode | undefined {
   let node: ProjectNode | undefined = root;
-  for (const name of path) {
-    node = node.children?.find((c) => c.name === name);
+  for (const id of path) {
+    node = node.children?.find((c) => c.id === id);
     if (!node) return undefined;
   }
   return node;
 }
 
+/** The nodes along a path, root first. */
+export function nodesAlong(root: ProjectNode, path: NodePath): ProjectNode[] | undefined {
+  const out = [root];
+  for (const id of path) {
+    const next = out.at(-1)!.children?.find((c) => c.id === id);
+    if (!next) return undefined;
+    out.push(next);
+  }
+  return out;
+}
+
+/** The path of a node in a tree, or undefined if it is not in it. */
+export function pathOf(root: ProjectNode, target: ProjectNode): NodePath | undefined {
+  const visit = (node: ProjectNode, path: NodePath): NodePath | undefined => {
+    if (node === target) return path;
+    for (const child of node.children ?? []) {
+      const found = visit(child, [...path, child.id]);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return visit(root, []);
+}
+
+// --- Matching ---------------------------------------------------------------------------------
+
+/**
+ * Whether a config node (`child`) matches a real position with this kind and name, below a
+ * parent. Below a map whose keys are data, only the `{*}` node matches, and it matches every key.
+ */
+export function matchesPosition(
+  parent: { collapsed?: true },
+  child: { kind: NodeKind; match: readonly Match[] },
+  kind: NodeKind,
+  name: string,
+): boolean {
+  if (child.kind !== kind) return false;
+  if (isKeysNode(child)) return name === COLLAPSED_NAME || parent.collapsed === true;
+  if (parent.collapsed) return false;
+  if (isItemNode(child)) return name === ITEM_NAME;
+  return name !== ITEM_NAME && name !== COLLAPSED_NAME && matchesKey(child.match, name);
+}
+
+/**
+ * Whether a text is a key the project knows: one a config node matches, or one in the seen
+ * structures. For `NormalizeOptions.keys`: header text in a participant's HTML only becomes a key
+ * when the project knows it, so text from the file never becomes a new name.
+ */
+export function knownKeys(root: ProjectNode): (text: string) => boolean {
+  const names = new Set<string>();
+  const matches: Match[] = [];
+  const visit = (node: ProjectNode) => {
+    names.add(node.name);
+    for (const key of node.keys ?? []) names.add(key);
+    for (const m of node.match) if (typeof m === 'string') names.add(m);
+    else matches.push(m);
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(root);
+  return (text) => names.has(text) || matchesKey(matches, text);
+}
+
+// --- Shapes -----------------------------------------------------------------------------------
+
 /** A value that was only ever null: in JSON, usually an empty map or list. */
 const isNullOnly = (n: { kind: NodeKind; types?: ValueType[] }) =>
   n.kind === 'value' && n.types?.length === 1 && n.types[0] === 'null';
 
-/**
- * Drop null-only values next to a node with the same name and another kind, so
- * `"subtitles": null` in one record and a list in another stay one node.
- */
-function withoutNullTwins<T extends { kind: NodeKind; name: string; types?: ValueType[] }>(children: T[]): T[] {
-  return children.filter(
-    (c) => !isNullOnly(c) || !children.some((o) => o !== c && o.name === c.name && !isNullOnly(o)),
-  );
-}
+const hasElementItems = (list: { children?: { kind: NodeKind; name: string }[] }) =>
+  (list.children ?? []).some((i) => i.kind === 'element' && i.name === ITEM_NAME);
 
 /**
  * An element that is repeated in some places and single in others (one link in a row, or
- * several) is one node: the single element counts as the list's only item. Normalised HTML
+ * several) is one position: the single element counts as the list's only item. Normalised HTML
  * names a list like its elements, so the two have the same name.
  */
-function unifyElementTwins(shape: Shape): Shape {
+export function unifyElementTwins(shape: Shape): Shape {
   if (!shape.children) return shape;
   let children = shape.children.map(unifyElementTwins);
   for (const list of children.filter((c) => c.kind === 'list' && hasElementItems(c))) {
@@ -224,56 +196,262 @@ function unifyElementTwins(shape: Shape): Shape {
   return { ...shape, children };
 }
 
-const hasElementItems = (list: { children?: { kind: NodeKind; name: string }[] }) =>
-  (list.children ?? []).some((i) => i.kind === 'element' && i.name === ITEM_NAME);
-
-/** The list a single element belongs to as its only item, if the parent has one. */
-function listTwin(parent: ProjectNode, kind: NodeKind, name: string): ProjectNode | undefined {
-  if (kind !== 'element') return undefined;
-  const list = parent.children?.find((c) => c.kind === 'list' && nameMatches(c, name));
-  return list && matchChild(list, 'element', ITEM_NAME);
+function structureOf(shapes: Shape[]): StructureInfo {
+  if (shapes.length === 0) return {};
+  const merged = mergeAll(shapes.map((s) => ({ ...s, name: '', children: undefined })))[0]!;
+  const out: StructureInfo = {};
+  for (const key of STRUCTURE_FIELDS) {
+    if (merged[key] !== undefined) (out as Record<string, unknown>)[key] = merged[key];
+  }
+  return out;
 }
 
-/** The single element a repeated element in a shape belongs to, if the parent has one. */
-function elementTwin(parent: ProjectNode, shape: Shape): ProjectNode | undefined {
-  if (shape.kind !== 'list' || !hasElementItems(shape)) return undefined;
-  return parent.children?.find((c) => c.kind === 'element' && nameMatches(c, shape.name));
+/** The union of shapes: one structure with every position any of them has. */
+export function unionShape(shapes: readonly Shape[]): Shape | undefined {
+  const [first, ...rest] = shapes;
+  if (!first) return undefined;
+  const merged = mergeAll([first, ...rest].map((s) => ({ ...s, name: '' })));
+  // Shapes of different kinds (a file and a folder) cannot be one root: the first one wins.
+  return unifyElementTwins(merged.find((s) => s.kind === first.kind)!);
 }
 
-function fromShape(shape: Shape): ProjectNode {
-  const node: ProjectNode = { kind: shape.kind, name: shape.name };
-  copyStructure(shape, node);
-  if (shape.children) node.children = withoutNullTwins(shape.children).map(fromShape);
+// --- Laying the configuration over a shape ----------------------------------------------------
+
+/** Whether a node skips new children: its own `newChildren`, or else its parent's. */
+const closedHere = (node: { newChildren?: string }, parentClosed: boolean) =>
+  node.newChildren === undefined ? parentClosed : node.newChildren === 'skip';
+
+export interface BuildOptions {
+  /**
+   * Leave out real positions no config node matches below nodes that skip new children
+   * (`newChildren: 'skip'`), as a participant's client does. The studio keeps everything.
+   */
+  skipClosed?: boolean;
+}
+
+/** A shape position a node matched, with the shape position it sits in. */
+interface Source {
+  shape: Shape;
+  parent?: Shape;
+}
+
+export interface Built {
+  tree: ProjectNode;
+  /** The shape positions each node matched. */
+  sources: Map<ProjectNode, Shape[]>;
+  /**
+   * Nodes that match two different keys side by side in one shape position: which value would
+   * go in the column? (ADR 0012, rule 5.)
+   */
+  conflicts: Set<ProjectNode>;
+  /** Nodes that match a real position another sibling matches too: the data is in both. */
+  shared: Map<ProjectNode, ProjectNode[]>;
+  /** Paths of the virtual nodes, top-most only: real positions no config node matches. */
+  unmatched: NodePath[];
+}
+
+/** The working node of a config node, without children. */
+function fromConfig(config: ConfigNode, names: Map<string, Name>): ProjectNode {
+  const node: ProjectNode = { id: config.id, kind: config.kind, name: '', match: [...config.match] };
+  for (const key of SETTINGS) {
+    const value = config[key];
+    if (value !== undefined) (node as unknown as Record<string, unknown>)[key] = structuredClone(value);
+  }
+  if (config.nameId !== undefined) {
+    node.nameId = config.nameId;
+    const name = names.get(config.nameId);
+    if (name) {
+      node.label = nameLabel(name);
+      const description = nameDescription(name);
+      if (description !== undefined) node.description = description;
+    }
+  }
   return node;
 }
 
-/** A new project tree from a shape, with every node undecided. The root has no name. */
-export function projectTreeFromShape(shape: Shape): ProjectNode {
-  return { ...fromShape(unifyElementTwins(shape)), name: '' };
-}
-
-function toShape(node: ProjectNode): Shape {
-  const shape: Shape = { kind: node.kind, name: node.name };
-  copyStructure(node, shape);
-  if (node.children) shape.children = node.children.map(toShape);
-  return shape;
-}
-
-/** Fold what a shape says about structure (types, counts) into an existing node. */
-function absorb(node: ProjectNode, shape: Shape): void {
-  const own = toShape({ ...node, children: undefined });
-  const merged = mergeAll([own, { ...shape, name: node.name, children: undefined }])[0]!;
-  copyStructure(merged, node);
-}
-
-/** Whether a node skips new children: its own `newChildren`, or else its parent's. */
-const closedHere = (node: ProjectNode, parentClosed: boolean) =>
-  node.newChildren === undefined ? parentClosed : node.newChildren === 'skip';
+/** The id of a virtual node: its kind and key, unique among its siblings. */
+export const virtualId = (kind: NodeKind, name: string) => `~${kind}:${name}`;
 
 /**
- * Nodes whose new children are skipped: `newChildren: 'skip'` on them, or on their nearest
- * ancestor that has a setting.
+ * Lay a configuration over a shape. Every config node is kept, also the ones the shape does not
+ * have; real positions no config node matches are added as virtual nodes. Every config node that
+ * matches a position gets it, so overlapping matches see the same data (ADR 0012).
  */
+export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOptions = {}): Built {
+  const names = new Map(config.names.map((n) => [n.id, n]));
+  const sources = new Map<ProjectNode, Shape[]>();
+  const conflicts = new Set<ProjectNode>();
+  const shared = new Map<ProjectNode, ProjectNode[]>();
+  const unmatched: NodePath[] = [];
+
+  const visit = (
+    node: ProjectNode,
+    configChildren: ConfigNode[],
+    from: Source[],
+    path: NodePath,
+    parentClosed: boolean,
+    insideVirtual: boolean,
+  ) => {
+    const shapes = from.map((s) => s.shape);
+    sources.set(node, shapes);
+    Object.assign(node, structureOf(shapes));
+    // A map the structures show as one whose keys are data is one, configured or not.
+    if (shapes.some((s) => s.collapsed)) node.collapsed = true;
+    const keys = [...new Set(shapes.map((s) => s.name))];
+    if (path.length > 0 && keys.length > 0) node.keys = keys;
+    const closed = closedHere(node, parentClosed);
+
+    const real = from.flatMap((s) => (s.shape.children ?? []).map((child): Source => ({ shape: child, parent: s.shape })));
+    const used = new Map<Shape, ProjectNode[]>();
+    const children: ProjectNode[] = [];
+    for (const config of configChildren) {
+      const child = fromConfig(config, names);
+      const matched: Source[] = [];
+      for (const r of real) {
+        if (matchesPosition(node, child, r.shape.kind, r.shape.name)) matched.push(r);
+        // A single element where the config has a list of them: the list's only item.
+        else if (child.kind === 'list' && r.shape.kind === 'element' && matchesKey(child.match, r.shape.name) && hasConfigElementItems(config)) {
+          matched.push({ ...r, shape: { kind: 'list', name: r.shape.name, children: [{ ...r.shape, name: ITEM_NAME }] } });
+        }
+        // A repeated element where the config has a single one: each item is that element.
+        else if (child.kind === 'element' && r.shape.kind === 'list' && hasElementItems(r.shape) && matchesKey(child.match, r.shape.name)) {
+          for (const item of r.shape.children ?? []) {
+            if (item.kind === 'element') matched.push({ shape: { ...item, name: r.shape.name }, parent: r.parent });
+          }
+        } else continue;
+        used.set(r.shape, [...(used.get(r.shape) ?? []), child]);
+      }
+      // Two different keys side by side in one position, both matched by this node.
+      const byParent = new Map<Shape | undefined, Set<string>>();
+      for (const m of matched) byParent.set(m.parent, (byParent.get(m.parent) ?? new Set()).add(m.shape.name));
+      if ([...byParent.values()].some((names) => names.size > 1)) conflicts.add(child);
+      child.name = displayName(child, matched);
+      children.push(child);
+      visit(child, config.children ?? [], matched, [...path, child.id], closed, false);
+    }
+    for (const [, nodes] of used) {
+      if (nodes.length < 2) continue;
+      for (const n of nodes) shared.set(n, [...new Set([...(shared.get(n) ?? []), ...nodes.filter((o) => o !== n)])]);
+    }
+
+    // Real positions nothing matches: virtual nodes, one per kind and key.
+    if (!(closed && options.skipClosed)) {
+      const rest = real.filter((r) => !used.has(r.shape));
+      const groups = new Map<string, Source[]>();
+      for (const r of rest) {
+        const name = node.collapsed ? COLLAPSED_NAME : r.shape.name;
+        // `"subtitles": null` next to a list of subtitles is the same position, empty.
+        if (isNullOnly(r.shape) && (real.some((o) => o.shape.name === r.shape.name && !isNullOnly(o.shape)) || children.some((c) => matchesKey(c.match, r.shape.name)))) {
+          continue;
+        }
+        const key = `${r.shape.kind}\u0000${name}`;
+        groups.set(key, [...(groups.get(key) ?? []), { ...r, shape: { ...r.shape, name } }]);
+      }
+      for (const group of groups.values()) {
+        const { kind, name } = group[0]!.shape;
+        let id = virtualId(kind, name);
+        while (children.some((c) => c.id === id)) id += "'";
+        const child: ProjectNode = { id, kind, name, match: [name], virtual: true };
+        children.push(child);
+        if (!insideVirtual) unmatched.push([...path, id]);
+        visit(child, [], group, [...path, id], closed, true);
+      }
+    }
+    if (children.length > 0) node.children = children;
+    else delete node.children;
+  };
+
+  const root = fromConfig(config.root, names);
+  const start = shape ? [{ shape: unifyElementTwins(shape) }] : [];
+  visit(root, config.root.children ?? [], start, [], false, false);
+  root.name = '';
+  return { tree: root, sources, conflicts, shared, unmatched };
+}
+
+const hasConfigElementItems = (config: ConfigNode) =>
+  (config.children ?? []).some((c) => c.kind === 'element' && isItemNode(c));
+
+/** What a node is called: its first exact key, else the first key it matched, else its first match. */
+function displayName(node: ProjectNode, matched: Source[]): string {
+  const exact = node.match.find((m): m is string => typeof m === 'string');
+  if (exact !== undefined) return exact;
+  const seen = matched.find((m) => m.shape.name !== ITEM_NAME && m.shape.name !== COLLAPSED_NAME);
+  if (seen) return seen.shape.name;
+  const first = node.match[0];
+  return first === undefined ? '' : typeof first === 'string' ? first : `/${first.regex}/`;
+}
+
+/** The project tree of a configuration alone: its nodes, without any structure. */
+export function configTree(config: ProjectConfig): ProjectNode {
+  return buildTree(config).tree;
+}
+
+/** A configuration with only a root, for a structure nobody has configured yet. */
+export function emptyConfig(kind: NodeKind): ProjectConfig {
+  return { root: { id: 'root', kind, match: [] }, names: [] };
+}
+
+/** The configuration in a project tree: its config nodes, without virtual ones or structure. */
+export function toConfig(tree: ProjectNode): ConfigNode {
+  const visit = (node: ProjectNode): ConfigNode => {
+    const out: ConfigNode = { id: node.id, kind: node.kind, match: [...node.match] };
+    if (node.nameId !== undefined) out.nameId = node.nameId;
+    for (const key of SETTINGS) {
+      const value = node[key];
+      if (value !== undefined) (out as unknown as Record<string, unknown>)[key] = structuredClone(value);
+    }
+    const children = (node.children ?? []).filter((c) => !c.virtual).map(visit);
+    if (children.length > 0) out.children = children;
+    return out;
+  };
+  return visit(tree);
+}
+
+// --- Editing ----------------------------------------------------------------------------------
+
+/**
+ * Make the virtual nodes along a path real: each becomes a config node with a new id and one
+ * exact match, its key. Returns the new tree and the node's new path. Doing anything with a
+ * virtual node (deciding, naming, a conversion) starts here.
+ */
+export function materialise(tree: ProjectNode, path: NodePath): { tree: ProjectNode; path: NodePath } {
+  const copy = structuredClone(tree);
+  const along = nodesAlong(copy, path);
+  if (!along) throw new DecisionError(`no node at ${path.join('/')}`);
+  const out: NodePath = [];
+  for (const node of along.slice(1)) {
+    if (node.virtual) {
+      delete node.virtual;
+      node.id = newId();
+    }
+    out.push(node.id);
+  }
+  return { tree: copy, path: out };
+}
+
+/**
+ * Where a path went after an edit: the same ids, or, for a node that was virtual, the config
+ * node that now matches its key. For keeping a selection or open rows across edits.
+ */
+export function remapPath(before: ProjectNode, after: ProjectNode, path: NodePath): NodePath | undefined {
+  let old: ProjectNode = before;
+  let now: ProjectNode = after;
+  const out: NodePath = [];
+  for (const id of path) {
+    const prev = old.children?.find((c) => c.id === id);
+    if (!prev) return undefined;
+    const next =
+      now.children?.find((c) => c.id === id) ??
+      now.children?.find((c) => c.kind === prev.kind && !c.virtual && c.match.some((m) => m === prev.name));
+    if (!next) return undefined;
+    out.push(next.id);
+    old = prev;
+    now = next;
+  }
+  return out;
+}
+
+/** Whether a node skips new children; see `closedHere`. Nodes with `newChildren: 'skip'` above them too. */
 export function closedNodes(root: ProjectNode): Set<ProjectNode> {
   const out = new Set<ProjectNode>();
   const visit = (node: ProjectNode, parentClosed: boolean) => {
@@ -283,69 +461,6 @@ export function closedNodes(root: ProjectNode): Set<ProjectNode> {
   };
   visit(root, false);
   return out;
-}
-
-export interface MergeShapeOptions {
-  /**
-   * Leave out positions below nodes that skip new children (`newChildren: 'skip'`), as a
-   * participant's client does. The researcher workspace keeps everything.
-   */
-  skipClosed?: boolean;
-}
-
-/**
- * Add a shape to a project tree. Positions are matched by kind and by canonical name or
- * alias; new positions are added undecided. Returns the new tree and the paths of the added
- * subtrees (top-most only). The input tree is not changed.
- */
-export function mergeShape(
-  root: ProjectNode,
-  shape: Shape,
-  options: MergeShapeOptions = {},
-): { tree: ProjectNode; added: NodePath[] } {
-  const tree = structuredClone(root);
-  const added: NodePath[] = [];
-  const visit = (node: ProjectNode, s: Shape, path: NodePath, parentClosed: boolean) => {
-    absorb(node, s);
-    const closed = closedHere(node, parentClosed);
-    for (const child of s.children ?? []) {
-      const match = matchChild(node, child.kind, child.name);
-      if (match) {
-        visit(match, child, [...path, match.name], closed);
-        continue;
-      }
-      const item = listTwin(node, child.kind, child.name);
-      if (item) {
-        const list = node.children!.find((c) => c.children?.includes(item))!;
-        visit(item, { ...child, name: ITEM_NAME }, [...path, list.name, ITEM_NAME], closed);
-        continue;
-      }
-      const single = elementTwin(node, child);
-      if (single) {
-        // Seen once before, repeated now: the element becomes the list's item, with its decisions.
-        const { aliases, ...rest } = single;
-        const list: ProjectNode = {
-          kind: 'list',
-          name: single.name,
-          ...(aliases ? { aliases } : {}),
-          children: [{ ...rest, name: ITEM_NAME }],
-        };
-        node.children = node.children!.map((c) => (c === single ? list : c));
-        visit(list, child, [...path, list.name], closed);
-        continue;
-      }
-      if (closed && options.skipClosed) continue;
-      const twins = (node.children ?? []).filter((c) => nameMatches(c, child.name));
-      if (isNullOnly(child) && twins.length > 0) continue;
-      const nullTwin = twins.find(isNullOnly);
-      const others = (node.children ?? []).filter((c) => c !== nullTwin);
-      const named = node.collapsed ? { ...child, name: COLLAPSED_NAME } : child;
-      node.children = [...others, fromShape(named)];
-      added.push([...path, named.name]);
-    }
-  };
-  visit(tree, unifyElementTwins(shape), [], false);
-  return { tree, added };
 }
 
 /**
@@ -384,7 +499,7 @@ export function effectiveStates(root: ProjectNode): Map<ProjectNode, EffectiveSt
 function decidedLeaves(node: ProjectNode, path: NodePath, out: NodePath[] = []): NodePath[] {
   if (isDecidable(node) && (node.decision === 'show' || node.decision === 'donate')) out.push(path);
   if (node.lifter !== undefined) return out;
-  for (const child of node.children ?? []) decidedLeaves(child, [...path, child.name], out);
+  for (const child of node.children ?? []) decidedLeaves(child, [...path, child.id], out);
   return out;
 }
 
@@ -399,125 +514,47 @@ export function ignoreOverrides(root: ProjectNode, path: NodePath): NodePath[] {
 }
 
 /**
- * Set a decision. `show` and `donate` are only allowed on leaves and `{*}` nodes. Decisions below an ignored
- * node are kept, so un-ignoring restores them; they have no effect while it is ignored.
+ * Set a decision. `show` and `donate` are only allowed on leaves and `{*}` nodes. Decisions below
+ * an ignored node are kept, so un-ignoring restores them. A virtual node is made real first.
  */
-export function setDecision(root: ProjectNode, path: NodePath, decision: LeafDecision): ProjectNode {
-  const tree = structuredClone(root);
-  const node = getNode(tree, path);
-  if (!node) throw new DecisionError(`no node at ${path.join('/')}`);
-  if ((decision === 'show' || decision === 'donate') && !isDecidable(node)) {
-    throw new DecisionError(`${decision} is only possible on leaves, not on ${node.kind} nodes`);
+export function setDecision(
+  root: ProjectNode,
+  path: NodePath,
+  decision: LeafDecision,
+): ProjectNode {
+  const found = getNode(root, path);
+  if (!found) throw new DecisionError(`no node at ${path.join('/')}`);
+  if ((decision === 'show' || decision === 'donate') && !isDecidable(found)) {
+    throw new DecisionError(`${decision} is only possible on leaves, not on ${found.kind} nodes`);
   }
+  if (decision === 'undecided' && found.decision === undefined) return root;
+  const real = materialise(root, path);
+  const node = getNode(real.tree, real.path)!;
   if (decision === 'undecided') delete node.decision;
   else node.decision = decision;
-  return tree;
+  return real.tree;
 }
 
-export interface MergeConflict {
-  /** Path of the merged node, under the target. */
-  path: NodePath;
-  field: 'decision' | 'label' | 'description' | 'newChildren';
-}
-
-/**
- * Merge the node at `from` into the node at `into` (same kind, same parent not required):
- * `from`'s name and aliases become aliases of `into`, children merge recursively, and
- * `from` is removed. Where both sides set a property differently, `into` wins and the
- * conflict is listed for the researcher.
- */
-export function mergeNodes(
-  root: ProjectNode,
-  from: NodePath,
-  into: NodePath,
-): { tree: ProjectNode; conflicts: MergeConflict[] } {
-  if (from.length === 0 || into.length === 0) throw new DecisionError('cannot merge the root');
-  if (into.length > from.length && from.every((name, i) => into[i] === name)) {
-    throw new DecisionError('cannot merge a node into its own descendant');
-  }
-  const tree = structuredClone(root);
-  const parent = getNode(tree, from.slice(0, -1));
-  const source = getNode(tree, from);
-  const target = getNode(tree, into);
-  if (!parent || !source || !target) throw new DecisionError('no node at one of the paths');
-  if (source === target) throw new DecisionError('cannot merge a node into itself');
-  if (source.kind !== target.kind) {
-    throw new DecisionError(`cannot merge a ${source.kind} node into a ${target.kind} node`);
-  }
-  const conflicts: MergeConflict[] = [];
-  const combine = (src: ProjectNode, dst: ProjectNode, path: NodePath) => {
-    if (src.name !== dst.name && !nameMatches(dst, src.name)) {
-      dst.aliases = [...(dst.aliases ?? []), src.name];
-    }
-    for (const alias of src.aliases ?? []) {
-      if (!(dst.aliases ?? []).some((a) => JSON.stringify(a) === JSON.stringify(alias))) {
-        dst.aliases = [...(dst.aliases ?? []), alias];
-      }
-    }
-    absorb(dst, toShape({ ...src, children: undefined }));
-    // Required means present by any name, so the merged node is required if either was.
-    if (src.required) dst.required = true;
-    for (const field of ['decision', 'label', 'description', 'newChildren'] as const) {
-      if (src[field] === undefined) continue;
-      if (dst[field] === undefined) (dst as unknown as Record<string, unknown>)[field] = src[field];
-      else if (JSON.stringify(dst[field]) !== JSON.stringify(src[field])) {
-        conflicts.push({ path, field });
-      }
-    }
-    for (const child of src.children ?? []) {
-      const match = matchChild(dst, child.kind, child.name);
-      if (match) combine(child, match, [...path, match.name]);
-      else dst.children = [...(dst.children ?? []), child];
-    }
-  };
-  combine(source, target, into);
-  parent.children = parent.children!.filter((c) => c !== source);
-  return { tree, conflicts };
-}
+// --- Comparing a participant's shape --------------------------------------------------------
 
 export interface ShapeComparison {
-  /** Top-most positions in the shape that the project tree does not know, with their shape. */
-  unknown: { path: string[]; shape: Shape }[];
   /** Donated leaves in the project tree that this shape does not have. */
   missing: NodePath[];
-  /** Required nodes (`required`) that this shape does not have, by any of their names. */
+  /** Required nodes (`required`) that this shape does not have, by any of their matches. */
   missingRequired: NodePath[];
 }
 
-/**
- * Walk a shape along a project tree. Returns the project nodes the shape has; positions the
- * tree does not know go to `onUnknown`, with whether they sit below an ignored node or below a
- * node that skips new children.
- */
-function walkShape(
-  root: ProjectNode,
-  shape: Shape,
-  onUnknown: (path: string[], shape: Shape, where: { ignored: boolean; closed: boolean }) => void = () => {},
-): Set<ProjectNode> {
-  const seen = new Set<ProjectNode>();
-  const visit = (node: ProjectNode, s: Shape, path: string[], parentIgnored: boolean, parentClosed: boolean) => {
-    seen.add(node);
-    const ignored = parentIgnored || node.decision === 'ignore';
-    const closed = closedHere(node, parentClosed);
-    for (const child of s.children ?? []) {
-      const match = matchChild(node, child.kind, child.name);
-      const item = match ? undefined : listTwin(node, child.kind, child.name);
-      const single = match || item ? undefined : elementTwin(node, child);
-      if (match) visit(match, child, [...path, child.name], ignored, closed);
-      else if (item) visit(item, { ...child, name: ITEM_NAME }, [...path, child.name, ITEM_NAME], ignored, closed);
-      else if (single) for (const i of child.children ?? []) visit(single, i, [...path, child.name], ignored, closed);
-      else if (node.collapsed) {
-        onUnknown([...path, COLLAPSED_NAME], { ...child, name: COLLAPSED_NAME }, { ignored, closed });
-      } else onUnknown([...path, child.name], child, { ignored, closed });
-    }
-  };
-  visit(root, unifyElementTwins(shape), [], false, false);
-  return seen;
-}
-
-/** The project nodes a participant's shape has, matched by kind and by name or alias. */
+/** The nodes of a tree that a shape has, by any of their matches. */
 export function matchShape(root: ProjectNode, shape: Shape): Set<ProjectNode> {
-  return walkShape(root, shape);
+  const built = buildTree({ root: toConfig(root), names: [] }, shape);
+  const seen = new Set<ProjectNode>();
+  const visit = (node: ProjectNode, own: ProjectNode | undefined) => {
+    if (!own) return;
+    if ((built.sources.get(node)?.length ?? 0) > 0) seen.add(own);
+    for (const child of node.children ?? []) visit(child, own.children?.find((c) => c.id === child.id && !c.virtual));
+  };
+  visit(built.tree, root);
+  return seen;
 }
 
 /** Paths of the required nodes (`required`) in a project tree, top first. */
@@ -525,71 +562,80 @@ export function requiredPaths(root: ProjectNode): NodePath[] {
   const out: NodePath[] = [];
   const visit = (node: ProjectNode, path: NodePath) => {
     if (node.required) out.push(path);
-    for (const child of node.children ?? []) visit(child, [...path, child.name]);
+    for (const child of node.children ?? []) visit(child, [...path, child.id]);
   };
   visit(root, []);
   return out;
 }
 
-/**
- * Compare a participant's shape with the project tree, locally. Unknown positions are the
- * candidates for the structure-metadata consent request; they are never donated. Ignored
- * subtrees are skipped: what is below an ignored node is never imported, so it is not asked
- * for either. Nor are new positions below a node that skips new children.
- */
+/** Compare a participant's shape with the project tree, locally: what it lacks. */
 export function compareShape(root: ProjectNode, shape: Shape): ShapeComparison {
-  const unknown: ShapeComparison['unknown'] = [];
-  const seen = walkShape(root, shape, (path, s, { ignored, closed }) => {
-    if (!ignored && !closed) unknown.push({ path, shape: s });
-  });
+  const seen = matchShape(root, shape);
   const states = effectiveStates(root);
   const missing: NodePath[] = [];
   const missingRequired: NodePath[] = [];
-  const findMissing = (node: ProjectNode, path: NodePath) => {
+  const visit = (node: ProjectNode, path: NodePath) => {
+    if (node.virtual) return;
     const donated = isLeaf(node)
       ? states.get(node) === 'donate'
       : node.name === COLLAPSED_NAME && node.decision === 'donate' && states.get(node) !== 'ignore';
     if (donated && !seen.has(node)) missing.push(path);
     if (node.required && !seen.has(node)) missingRequired.push(path);
-    for (const child of node.children ?? []) findMissing(child, [...path, child.name]);
+    for (const child of node.children ?? []) visit(child, [...path, child.id]);
   };
-  findMissing(root, []);
-  return { unknown, missing, missingRequired };
+  visit(root, []);
+  return { missing, missingRequired };
 }
 
 /**
- * Treat the keys of a map or directory as data: its children become one `{*}` position, as
- * the shape extractor does for maps it recognises as dictionaries (usernames, dates). Children
- * merge per kind; their names are dropped, not kept as aliases, because they are data.
+ * The top-most positions of a shape that the seen structure does not have: parts of a
+ * participant's export nobody has seen before. Matched by kind and key, as shapes merge.
  */
-export function setKeysAreData(
-  root: ProjectNode,
-  path: NodePath,
-): { tree: ProjectNode; conflicts: MergeConflict[] } {
+export function newPositions(seen: Shape | undefined, shape: Shape): Set<Shape> {
+  const out = new Set<Shape>();
+  const visit = (known: Shape | undefined, s: Shape) => {
+    for (const child of s.children ?? []) {
+      const match = known?.children?.find((k) => k.kind === child.kind && k.name === child.name);
+      if (match) visit(match, child);
+      else out.add(child);
+    }
+  };
+  visit(seen && unifyElementTwins(seen), unifyElementTwins(shape));
+  return out;
+}
+
+// --- Keys that are data ----------------------------------------------------------------------
+
+/**
+ * Treat the keys of a map or folder as data: its children become one `{*}` node per kind, as the
+ * shape extractor does for maps it recognises as dictionaries (usernames, dates). The settings of
+ * the first child of each kind are kept; the keys are not kept as matches, because they are data.
+ */
+export function setKeysAreData(root: ProjectNode, path: NodePath): ProjectNode {
   const node = getNode(root, path);
   if (!node) throw new DecisionError(`no node at ${path.join('/')}`);
   if (node.kind !== 'map' && node.kind !== 'dir') throw new DecisionError('only maps and folders have keys');
-  if (node.collapsed) return { tree: root, conflicts: [] };
-  const tree = structuredClone(root);
-  const target = getNode(tree, path)!;
-  const conflicts: MergeConflict[] = [];
+  if (node.collapsed) return root;
+  const real = materialise(root, path);
+  const target = getNode(real.tree, real.path)!;
   const children = target.children ?? [];
   const kinds = [...new Set(children.map((c) => c.kind))];
-  const merged: ProjectNode[] = [];
-  for (const kind of kinds) {
-    const [first, ...rest] = children.filter((c) => c.kind === kind);
-    // Merge into a temporary parent so names that repeat across kinds do not clash.
-    const scratch: ProjectNode = { kind: 'map', name: '', children: [{ ...first!, name: COLLAPSED_NAME }, ...rest] };
-    let scratchTree = scratch;
-    for (const other of rest) {
-      const result = mergeNodes(scratchTree, [other.name], [COLLAPSED_NAME]);
-      scratchTree = result.tree;
-      conflicts.push(...result.conflicts.map((c) => ({ ...c, path: [...path, ...c.path] })));
-    }
-    const entry = scratchTree.children![0]!;
-    delete entry.aliases;
-    merged.push(entry);
-  }
-  Object.assign(target, { collapsed: true, repeat: repeatOf(children.length), children: merged });
-  return { tree, conflicts };
+  target.children = kinds.map((kind) => {
+    const of = children.filter((c) => c.kind === kind);
+    const first = of.find((c) => !c.virtual) ?? of[0]!;
+    // Their children all sit below the one `{*}` node now; settings of the first one win.
+    const merged = of.flatMap((c) => c.children ?? []);
+    const seen = new Set<string>();
+    const unique = merged.filter((c) => {
+      const key = `${c.kind}\u0000${c.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const { virtual: _virtual, keys: _keys, ...rest } = first;
+    return { ...rest, id: newId(), name: COLLAPSED_NAME, match: [COLLAPSED_NAME], ...(unique.length > 0 ? { children: unique } : {}) };
+  });
+  target.collapsed = true;
+  target.repeat = repeatOf(children.length);
+  return real.tree;
 }

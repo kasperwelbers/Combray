@@ -3,18 +3,8 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  extractShape,
-  getNode,
-  jsonToTree,
-  mergeNodes,
-  mergeShape,
-  normalizeTree,
-  parseEntries,
-  projectTreeFromShape,
-  suggestAfterMerge,
-  suggestMerges,
-} from '../src';
+import { combineNodes, extractShape, jsonToTree, normalizeTree, parseEntries, suggestCombines } from '../src';
+import { keyedTree, rebuild } from './trees';
 
 const fixtures = new URL('../../../importers/fixtures/', import.meta.url).pathname;
 
@@ -30,43 +20,38 @@ function fixtureShape(name: string) {
   return extractShape(normalizeTree({ ...tree, name: '' }));
 }
 
-describe('suggestMerges', () => {
-  it('pairs a renamed key with the known key it replaces', () => {
-    const tree = projectTreeFromShape(extractShape(jsonToTree('a.json', [{ title: 'x', timestamp: '2024-01-01T10:00:00Z' }])));
+const pairs = (s: { from: string[]; into: string[] }[]) => s.map((x) => [x.from.join('/'), x.into.join('/')]);
+
+describe('suggestCombines', () => {
+  it('pairs a renamed key with the configured key it replaces', () => {
+    const tree = keyedTree(extractShape(jsonToTree('a.json', [{ title: 'x', timestamp: '2024-01-01T10:00:00Z' }])));
     const shape = extractShape(jsonToTree('b.json', [{ title: 'y', date: '2024-02-01T11:00:00Z' }]));
-    expect(suggestMerges(tree, shape)).toEqual([
-      expect.objectContaining({ from: ['[*]', 'date'], into: ['[*]', 'timestamp'] }),
-    ]);
+    expect(pairs(suggestCombines(tree, shape))).toEqual([['[*]/~value:date', '[*]/timestamp']]);
   });
 
-  it('does not pair values of different types, or nodes that are both present', () => {
-    const tree = projectTreeFromShape(extractShape(jsonToTree('a.json', [{ title: 'x', likes: 3 }])));
-    expect(suggestMerges(tree, extractShape(jsonToTree('b.json', [{ title: 'y', when: '2024-02-01' }])))).toEqual([]);
-    expect(suggestMerges(tree, extractShape(jsonToTree('b.json', [{ title: 'y', likes: 3, extra: 4 }])))).toEqual([]);
+  it('does not pair values of different types, nodes that are both present, or unconfigured nodes', () => {
+    const tree = keyedTree(extractShape(jsonToTree('a.json', [{ title: 'x', likes: 3 }])));
+    expect(suggestCombines(tree, extractShape(jsonToTree('b.json', [{ title: 'y', when: '2024-02-01' }])))).toEqual([]);
+    expect(suggestCombines(tree, extractShape(jsonToTree('b.json', [{ title: 'y', likes: 3, extra: 4 }])))).toEqual([]);
   });
 
   it('pairs translated folders by what is inside them', () => {
-    const tree = projectTreeFromShape(fixtureShape('tiktok-2023'));
-    const suggestions = suggestMerges(tree, fixtureShape('tiktok-2025'));
-    expect(suggestions.map((s) => [s.from.join('/'), s.into.join('/')])).toEqual([
-      ['user_data_tiktok.json', 'user_data.json'],
-    ]);
+    const tree = keyedTree(fixtureShape('tiktok-2023'));
+    expect(pairs(suggestCombines(tree, fixtureShape('tiktok-2025')))).toEqual([['~map:user_data_tiktok.json', 'user_data.json']]);
   });
 
-  it('gives paths that exist once the shape is merged, so the merge can be applied', () => {
-    const tree = projectTreeFromShape(extractShape(jsonToTree('a.json', { 'Watch History': [{ Date: '2024-01-01 10:00:00', Link: 'https://t.example/v/1' }] })));
-    const shape = extractShape(jsonToTree('b.json', { 'Watch history': [{ date: '2024-01-01 10:00:00', link: 'https://t.example/v/1' }] }));
-    const [suggestion] = suggestMerges(tree, shape);
-    expect(suggestion).toMatchObject({ from: ['Watch history'], into: ['Watch History'] });
-    const added = mergeShape(tree, shape).tree;
-    // Merging them puts their keys side by side; those are suggested next.
-    const next = suggestAfterMerge(added, suggestion!.from, suggestion!.into);
-    const merged = mergeNodes(added, suggestion!.from, suggestion!.into).tree;
-    expect(getNode(merged, ['Watch History'])!.aliases).toEqual(['Watch history']);
-    expect(next.map((s) => [s.from.join('/'), s.into.join('/')]).sort()).toEqual([
-      ['Watch History/[*]/date', 'Watch History/[*]/Date'],
-      ['Watch History/[*]/link', 'Watch History/[*]/Link'],
+  it('gives paths in the tree laid over both, so combining can be applied, and suggests their keys next', () => {
+    const first = extractShape(jsonToTree('a.json', { 'Watch History': [{ Date: '2024-01-01 10:00:00', Link: 'https://t.example/v/1' }] }));
+    const second = extractShape(jsonToTree('b.json', { 'Watch history': [{ date: '2024-01-01 10:00:00', link: 'https://t.example/v/1' }] }));
+    const tree = rebuild(keyedTree(first), second);
+    const [suggestion] = suggestCombines(tree, second);
+    expect(suggestion).toMatchObject({ from: ['~list:Watch history'], into: ['Watch History'] });
+    const combined = rebuild(combineNodes(tree, [suggestion!.into, suggestion!.from]).tree, second);
+    expect(combined.children!.map((c) => [c.name, c.match])).toEqual([['Watch History', ['Watch History', 'Watch history']]]);
+    // Their keys now sit side by side below the one node.
+    expect(pairs(suggestCombines(combined, second)).sort()).toEqual([
+      ['Watch History/[*]/~value:date', 'Watch History/[*]/Date'],
+      ['Watch History/[*]/~value:link', 'Watch History/[*]/Link'],
     ]);
-    for (const s of next) expect(getNode(merged, s.from)).toBeDefined();
   });
 });

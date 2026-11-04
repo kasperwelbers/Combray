@@ -11,11 +11,12 @@
 import { applyTransform, convert, type FieldValue } from './importer/convert';
 import type { FieldType, Localized, Transform } from './importer/spec';
 import { test, type Cell } from './query';
+import { isItemNode, isKeysNode } from './config';
 import {
   effectiveStates,
   getNode,
   isLeaf,
-  matchChild,
+  matchesPosition,
   type EffectiveState,
   type ProjectNode,
   type NodePath,
@@ -26,7 +27,11 @@ import { COLLAPSED_NAME, elementName, ITEM_NAME, screenName } from './shape';
 import { childrenOf, type TreeNode, type ValueType } from './tree';
 
 export interface ColumnDef {
-  /** Stable id within the table: the leaf's path from the row, joined with `/`. */
+  /**
+   * Stable id within the table: the id of the leaf's name, so nodes with the same name are one
+   * column (ADR 0012); else the ids of the leaf's path from the row, joined with `/`. Nested
+   * tables likewise: their name's id, or the path to their rows.
+   */
   id: string;
   /**
    * The leaf's label, or the shortest unique suffix of its path from the row. Empty for the
@@ -35,6 +40,8 @@ export interface ColumnDef {
   name: Localized;
   /** Path from the row to the leaf, or to the nested table's rows for `table` columns. */
   path: NodePath;
+  /** The leaf's path from the root (for `table` columns, the nested table's rows). */
+  at: NodePath;
   /**
    * `value`: one value per row; `list`: a list of plain values; `table`: the number of nested
    * rows; `key`: the key of a `{*}` row.
@@ -61,7 +68,15 @@ export interface ColumnDef {
 }
 
 export interface TableDef {
+  /**
+   * Stable id: the id of the name of the node the table is named after, so tables with the same
+   * name are one (ADR 0012, `groupTables`); else the ids of its rows' path joined with `/`; `''`
+   * for the record of loose fields.
+   */
+  id: string;
   name: Localized;
+  /** Where the table's rows are, as keys from the root: for people. */
+  where: string[];
   /** The repeated node (`[*]` or `{*}`) whose entries are rows; the root for the record. */
   node: NodePath;
   /** Same as `node` for tables; `undefined` for the single record of loose fields. */
@@ -193,9 +208,9 @@ function conversion(node: ProjectNode): Pick<ColumnDef, 'transform' | 'as' | 'fo
  */
 function structuralPath(root: ProjectNode, base: NodePath, leaf: NodePath): boolean {
   for (let i = base.length; i < leaf.length; i++) {
-    const name = leaf[i]!;
-    if (name === ITEM_NAME || name === COLLAPSED_NAME || /^[#@]/.test(name)) continue;
     const node = getNode(root, leaf.slice(0, i + 1));
+    const name = node?.name ?? '';
+    if (name === ITEM_NAME || name === COLLAPSED_NAME || /^[#@]/.test(name)) continue;
     const parent = getNode(root, leaf.slice(0, i));
     if (node?.kind === 'element' || (node?.kind === 'list' && parent?.kind === 'element')) continue;
     return false;
@@ -207,14 +222,62 @@ function labelOr(node: ProjectNode, fallback: string): Localized {
   return node.label ?? fallback;
 }
 
+/** The names (keys) along a path of ids. */
+function namesOf(root: ProjectNode, path: NodePath): string[] {
+  const out: string[] = [];
+  let node: ProjectNode | undefined = root;
+  for (const id of path) {
+    node = node?.children?.find((c) => c.id === id);
+    out.push(node?.name ?? id);
+  }
+  return out;
+}
+
+/** The id of a table: its name's, or the path of its rows (`[]` for the record of loose fields). */
+function tableId(named: ProjectNode | undefined, rows: NodePath | undefined): string {
+  if (named?.nameId !== undefined) return named.nameId;
+  return rows === undefined ? '' : rows.join('/');
+}
+
+/** All leaves below a table's rows (ignored ones too), not those of the tables nested in them. */
+function leavesOfRows(rows: ProjectNode, path: NodePath): NodePath[] {
+  const out: NodePath[] = [];
+  const visit = (node: ProjectNode, p: NodePath) => {
+    if (node !== rows && (isRepeated(node.name) && !isLeaf(node))) return;
+    if (isLeaf(node)) {
+      out.push(p);
+      return;
+    }
+    for (const child of node.children ?? []) visit(child, [...p, child.id]);
+  };
+  visit(rows, path);
+  return out;
+}
+
+/** The repeated nodes directly below a table's rows (ignored ones too): its nested tables. */
+function nestedRowsOf(rows: ProjectNode, path: NodePath): NodePath[] {
+  const out: NodePath[] = [];
+  const visit = (node: ProjectNode, p: NodePath) => {
+    if (node !== rows && isRepeated(node.name) && !isLeaf(node)) {
+      out.push(p);
+      return;
+    }
+    if (isLeaf(node)) return;
+    for (const child of node.children ?? []) visit(child, [...p, child.id]);
+  };
+  visit(rows, path);
+  return out;
+}
+
 /**
  * Derive the tables of a project tree. Ignored leaves are left out. Tables come in tree order,
- * parents before their nested tables.
+ * parents before their nested tables. Tables and columns of nodes that share a name are not
+ * joined here: see `groupTables`.
  */
 export function deriveTables(root: ProjectNode): TableDef[] {
   const states = effectiveStates(root);
   // Table 0 is the record of leaves outside any table; it is dropped below if it stays empty.
-  const tables: TableDef[] = [{ name: labelOr(root, ''), node: [], state: 'show', columns: [] }];
+  const tables: TableDef[] = [{ id: '', name: labelOr(root, ''), where: [], node: [], state: 'show', columns: [] }];
   const leafPaths = new Map<number, NodePath[]>();
   const visit = (node: ProjectNode, path: NodePath, ancestors: ProjectNode[], current: number) => {
     const state = states.get(node)!;
@@ -224,7 +287,9 @@ export function deriveTables(root: ProjectNode): TableDef[] {
     if (keyed || (node.name === ITEM_NAME && !isLeaf(node))) {
       const named = nameSource([...ancestors, node]);
       tables.push({
+        id: tableId(named, path),
         name: labelOr(named ?? node, named?.name ?? ''),
+        where: namesOf(root, path),
         node: path,
         rows: path,
         ...(keyed ? { keyed: true as const } : {}),
@@ -241,7 +306,7 @@ export function deriveTables(root: ProjectNode): TableDef[] {
       return;
     }
     for (const child of node.children ?? []) {
-      visit(child, [...path, child.name], [...ancestors, node], table);
+      visit(child, [...path, child.id], [...ancestors, node], table);
     }
   };
   visit(root, [], [], 0);
@@ -257,64 +322,129 @@ export function deriveTables(root: ProjectNode): TableDef[] {
       : 'show';
   }
 
+  const columnOf = (table: TableDef, leaf: NodePath, name: Localized, state: ColumnDef['state']): ColumnDef => {
+    const base = rowsOf(table);
+    const node = getNode(root, leaf)!;
+    const rel = leaf.slice(base.length);
+    const info = { ...valueInfo(node.types, node.formats), ...conversion(node) };
+    // The value of a `{*}` row whose entries are plain values.
+    if (rel.length === 0) return { id: VALUE_COLUMN, name: node.label ?? '', path: rel, at: leaf, type: 'value', state, ...info };
+    return {
+      id: node.nameId ?? rel.join('/'),
+      name,
+      path: rel,
+      at: leaf,
+      // A list of plain values below the row (`tags/[*]`) is a list cell.
+      type: namesOf(root, leaf).slice(base.length).includes(ITEM_NAME) ? 'list' : 'value',
+      state,
+      ...info,
+      ...(node.label === undefined && structuralPath(root, base, leaf) ? { unnamed: true as const } : {}),
+    };
+  };
+
   tables.forEach((table, index) => {
     const base = rowsOf(table);
     const nodeAt = (path: NodePath) => getNode(root, path)!;
     const leaves = leafPaths.get(index) ?? [];
-    const relative = leaves.map((p) => p.slice(base.length));
+    const relative = leaves.map((p) => namesOf(root, p).slice(base.length));
     const names = suffixNames(relative.filter((r) => r.length > 0));
     let named = 0;
     table.columns = leaves.map((leaf, i) => {
-      const rel = relative[i]!;
       const node = nodeAt(leaf);
-      const state = states.get(node) as ColumnDef['state'];
-      const info = { ...valueInfo(node.types, node.formats), ...conversion(node) };
-      // The value of a `{*}` row whose entries are plain values.
-      if (rel.length === 0) {
-        return { id: VALUE_COLUMN, name: node.label ?? '', path: rel, type: 'value', state, ...info };
-      }
-      return {
-        id: rel.join('/'),
-        name: labelOr(node, names[named++]!),
-        path: rel,
-        // A list of plain values below the row (`tags/[*]`) is a list cell.
-        type: rel.includes(ITEM_NAME) ? 'list' : 'value',
-        state,
-        ...info,
-        ...(node.label === undefined && structuralPath(root, base, leaf) ? { unnamed: true as const } : {}),
-      };
+      const name = relative[i]!.length === 0 ? '' : labelOr(node, names[named++]!);
+      return columnOf(table, leaf, name, states.get(node) as ColumnDef['state']);
     });
     if (table.keyed) {
       const entry = nodeAt(base);
       const state: ColumnDef['state'] = entry.decision === 'donate' ? 'donate' : 'show';
-      const keys = { ...valueInfo(nodeAt(base.slice(0, -1)).keyTypes, nodeAt(base.slice(0, -1)).keyFormats), ...conversion(entry) };
-      table.columns.unshift({ id: KEY_COLUMN, name: '', path: [], type: 'key', state, ...keys });
+      const map = nodeAt(base.slice(0, -1));
+      const keys = { ...valueInfo(map.keyTypes, map.keyFormats), ...conversion(entry) };
+      table.columns.unshift({ id: KEY_COLUMN, name: '', path: [], at: base, type: 'key', state, ...keys });
     }
     if (table.parent !== undefined) {
       const parent = tables[table.parent]!;
       const rel = rowsOf(table).slice(rowsOf(parent).length);
       parent.columns.push({
-        id: rel.join('/'),
+        // The nested table's name, or its path from the parent's rows.
+        id: table.id === rowsOf(table).join('/') ? rel.join('/') : table.id,
         name: table.name,
         path: rel,
+        at: rowsOf(table),
         type: 'table',
         state: table.state,
         table: index,
       });
     }
   });
+  // Columns that filters need but the table does not show (an ignored "from ads" field).
   for (const table of tables) {
-    const hidden = (table.filter ?? []).flatMap((f): ColumnDef[] => {
-      if (table.columns.some((c) => c.id === f.column)) return [];
-      const path = f.column.split('/');
-      const node = getNode(root, [...rowsOf(table), ...path]);
-      if (!node) return [];
-      const type = isLeaf(node) ? (path.includes(ITEM_NAME) ? 'list' : 'value') : node.name === ITEM_NAME ? 'table' : undefined;
-      return type ? [{ id: f.column, name: '', path, type, state: 'show', ...conversion(node) }] : [];
-    });
+    if (!table.filter?.length || table.rows === undefined) continue;
+    const rows = getNode(root, table.rows)!;
+    const hidden: ColumnDef[] = [];
+    for (const f of table.filter) {
+      if (table.columns.some((c) => c.id === f.column)) continue;
+      const leaf = leavesOfRows(rows, table.rows).find((p) => {
+        const node = getNode(root, p)!;
+        return (node.nameId ?? p.slice(table.rows!.length).join('/')) === f.column;
+      });
+      if (leaf) {
+        hidden.push({ ...columnOf(table, leaf, '', 'show'), name: '' });
+        continue;
+      }
+      // An ignored nested table: the filter tests how many rows it has (none: "not from ads").
+      const nested = nestedRowsOf(rows, table.rows).find((p) => p.slice(table.rows!.length).join('/') === f.column);
+      if (nested) hidden.push({ id: f.column, name: '', path: nested.slice(table.rows.length), at: nested, type: 'table', state: 'show' });
+    }
     if (hidden.length > 0) table.hidden = hidden;
   }
   return tables;
+}
+
+/**
+ * Join the tables of nodes that share a name into one (ADR 0012), with their rows one after the
+ * other. Columns join by id: leaves with the same name are one column. Nested tables join when
+ * their parents did. A column is requested when it is requested in any of the joined tables.
+ */
+export function groupTables(
+  tables: TableDef[],
+  rows: DerivedRow[][] = tables.map(() => []),
+): { tables: TableDef[]; rows: DerivedRow[][] } {
+  const out: TableDef[] = [];
+  const outRows: DerivedRow[][] = [];
+  const target: number[] = [];
+  const offset: number[] = [];
+  tables.forEach((table, i) => {
+    const parent = table.parent === undefined ? undefined : target[table.parent];
+    const g = table.id === '' ? -1 : out.findIndex((o) => o.id === table.id && o.parent === parent && o.keyed === table.keyed);
+    if (g < 0) {
+      out.push({ ...table, ...(parent !== undefined ? { parent } : {}), columns: table.columns.map((c) => ({ ...c })) });
+      outRows.push([]);
+      target[i] = out.length - 1;
+    } else {
+      const group = out[g]!;
+      for (const column of table.columns) {
+        const existing = group.columns.find((c) => c.id === column.id);
+        if (!existing) group.columns.push({ ...column });
+        else if (column.state === 'donate') existing.state = 'donate';
+      }
+      if (table.state === 'donate') group.state = 'donate';
+      target[i] = g;
+    }
+    const into = target[i]!;
+    offset[i] = outRows[into]!.length;
+    for (const row of rows[i] ?? []) {
+      outRows[into]!.push(
+        row.parent === undefined ? { values: row.values } : { values: row.values, parent: offset[table.parent!]! + row.parent },
+      );
+    }
+  });
+  for (const table of out) {
+    for (const column of table.columns) if (column.table !== undefined) column.table = target[column.table]!;
+    // Two joined tables nested in the same parent are one column.
+    const seen = new Set<number>();
+    table.columns = table.columns.filter((c) => c.table === undefined || (!seen.has(c.table) && Boolean(seen.add(c.table))));
+  }
+  return { tables: out, rows: outRows };
 }
 
 /** A row: values by column id. `parent` is the index of the parent row, for nested tables. */
@@ -323,26 +453,27 @@ export interface DerivedRow {
   parent?: number;
 }
 
-/** The project node a tree child maps to, or undefined if the project tree does not know it. */
-function projectChild(parent: ProjectNode, treeParent: TreeNode, child: TreeNode): ProjectNode | undefined {
-  if (treeParent.kind === 'list') return matchChild(parent, child.kind, ITEM_NAME);
-  if (parent.collapsed) return matchChild(parent, child.kind, COLLAPSED_NAME);
+/** Whether a tree child is the real position the project node `target` (below `parent`) matches. */
+function matchesChild(parent: ProjectNode, treeParent: TreeNode, child: TreeNode, target: ProjectNode): boolean {
+  if (child.kind !== target.kind) return false;
+  if (treeParent.kind === 'list') return isItemNode(target);
+  if (parent.collapsed) return isKeysNode(target);
   const name = child.kind === 'element' ? elementName(child.name, child.attrs) : screenName(child.name);
-  return matchChild(parent, child.kind, name) ?? matchChild(parent, child.kind, child.name);
+  return matchesPosition(parent, target, child.kind, name) || (name !== child.name && matchesPosition(parent, target, child.kind, child.name));
 }
 
 /** All tree nodes under `node` that map to the project path `path`, relative to `projectNode`. */
 function resolve(node: TreeNode, projectNode: ProjectNode, path: NodePath): TreeNode[] {
   if (path.length === 0) return [node];
   const [head, ...rest] = path;
-  const target = projectNode.children?.find((c) => c.name === head);
+  const target = projectNode.children?.find((c) => c.id === head);
   if (!target) return [];
   return childrenOf(node).flatMap((child) => {
-    if (projectChild(projectNode, node, child) === target) return resolve(child, target, rest);
+    if (matchesChild(projectNode, node, child, target)) return resolve(child, target, rest);
     // A single element where other files have a list of them: the list's only item.
-    if (target.kind === 'list' && child.kind === 'element' && rest[0] === ITEM_NAME) {
-      const item = target.children?.find((c) => c.name === ITEM_NAME && c.kind === 'element');
-      if (item && elementName(child.name, child.attrs) === target.name) return resolve(child, item, rest.slice(1));
+    if (target.kind === 'list' && child.kind === 'element') {
+      const item = target.children?.find((c) => c.id === rest[0] && c.kind === 'element' && isItemNode(c));
+      if (item && matchesPosition(projectNode, target, 'list', elementName(child.name, child.attrs))) return resolve(child, item, rest.slice(1));
     }
     return [];
   });
@@ -398,7 +529,7 @@ export interface DeriveOptions {
 
 /**
  * The rows of every derived table for one participant's tree, matched through the project
- * tree (canonical names, aliases, `[*]` and `{*}`). The tree's root name is ignored. Values
+ * tree (matches, `[*]` and `{*}`). The tree's root name is ignored. Values
  * are converted as their columns say, and rows that do not meet their table's filters are
  * left out, with the rows nested in them.
  */
@@ -461,6 +592,8 @@ export function deriveRows(
 
 /** A table in the researcher's outline: its fields, and the tables nested in its rows. */
 export interface OutlineGroup {
+  /** The table's id (`TableDef.id`): groups with the same id are one table for participants. */
+  id: string;
   /** The repeated node whose entries are rows; `[]` for the fields outside any table. */
   path: NodePath;
   name: Localized;
@@ -475,13 +608,14 @@ export interface OutlineGroup {
  * columns would be (labels, or the shortest unique suffix of their path).
  */
 export function outline(root: ProjectNode): OutlineGroup {
-  const top: OutlineGroup = { path: [], name: labelOr(root, ''), fields: [], groups: [] };
+  const top: OutlineGroup = { id: '', path: [], name: labelOr(root, ''), fields: [], groups: [] };
   const leaves = new Map<OutlineGroup, NodePath[]>();
   const visit = (node: ProjectNode, path: NodePath, ancestors: ProjectNode[], group: OutlineGroup) => {
     let current = group;
     if (node.name === COLLAPSED_NAME || (node.name === ITEM_NAME && !isLeaf(node))) {
       const named = nameSource([...ancestors, node]);
       current = {
+        id: tableId(named, path),
         path,
         name: labelOr(named ?? node, named?.name ?? ''),
         ...(node.name === COLLAPSED_NAME ? { keyed: true as const } : {}),
@@ -494,12 +628,12 @@ export function outline(root: ProjectNode): OutlineGroup {
       leaves.set(current, [...(leaves.get(current) ?? []), path]);
       return;
     }
-    for (const child of node.children ?? []) visit(child, [...path, child.name], [...ancestors, node], current);
+    for (const child of node.children ?? []) visit(child, [...path, child.id], [...ancestors, node], current);
   };
   visit(root, [], [], top);
   const name = (group: OutlineGroup) => {
     const paths = leaves.get(group) ?? [];
-    const relative = paths.map((p) => p.slice(group.path.length));
+    const relative = paths.map((p) => namesOf(root, p).slice(group.path.length));
     const names = suffixNames(relative.filter((r) => r.length > 0));
     let named = 0;
     group.fields = paths.map((path, i) => {
@@ -523,9 +657,8 @@ const MAX_HEADER_NAME = 80;
  */
 export function headerNames(root: ProjectNode, table: TableDef, first: Record<string, unknown>): Map<string, string> {
   const names = new Map<string, string>();
-  const rows = table.rows ?? [];
   for (const column of table.columns) {
-    if (column.type !== 'value' || getNode(root, [...rows, ...column.path])?.label !== undefined) continue;
+    if (column.type !== 'value' || getNode(root, column.at)?.label !== undefined) continue;
     const value = first[column.id];
     if (typeof value !== 'string' && typeof value !== 'number') continue;
     const text = String(value).replace(/\s+/g, ' ').trim().slice(0, MAX_HEADER_NAME);

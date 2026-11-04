@@ -1,238 +1,263 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildTree,
   closedNodes,
   compareShape,
   DecisionError,
   effectiveStates,
+  emptyConfig,
   extractShape,
   getNode,
   ignoreOverrides,
   jsonToTree,
-  mergeNodes,
-  mergeShape,
-  projectTreeFromShape,
+  knownKeys,
+  materialise,
+  newPositions,
+  normalizeTree,
+  remapPath,
   requiredPaths,
   setDecision,
   setKeysAreData,
-  normalizeTree,
+  toConfig,
+  unionShape,
+  type ConfigNode,
   type ProjectNode,
 } from '../src';
 import { parseMarkup } from '../src/parse/html';
 import { watchHistory } from './fixtures';
+import { at, nodeAt, rebuild, treeOf } from './trees';
 
-const base = () => projectTreeFromShape(extractShape(watchHistory));
+const shape = extractShape(watchHistory);
+const base = () => treeOf(shape);
 
-function state(tree: ProjectNode, path: string[]) {
-  return effectiveStates(tree).get(getNode(tree, path)!);
+function state(tree: ProjectNode, ...names: string[]) {
+  return effectiveStates(tree).get(nodeAt(tree, ...names));
 }
 
-describe('projectTreeFromShape', () => {
-  it('copies structure and leaves every node undecided', () => {
+const decide = (tree: ProjectNode, names: string[], decision: Parameters<typeof setDecision>[2]) =>
+  setDecision(tree, at(tree, ...names), decision);
+
+/** A configuration with one root and these children. */
+const config = (kind: ConfigNode['kind'], children: ConfigNode[]) => ({ root: { id: 'root', kind, match: [], children }, names: [] });
+
+describe('buildTree', () => {
+  it('lays an empty configuration over a shape: every position virtual, with its structure', () => {
     const tree = base();
-    expect(getNode(tree, ['[*]', 'time'])).toEqual({
+    expect(nodeAt(tree, '[*]', 'time')).toEqual({
+      id: '~value:time',
       kind: 'value',
       name: 'time',
+      match: ['time'],
+      virtual: true,
+      keys: ['time'],
       types: ['date-like'],
       formats: ['YYYY-MM-DDTHH:mm:ss.SSSZ'],
     });
     expect(JSON.stringify(tree)).not.toContain('decision');
+    expect(buildTree(emptyConfig('list'), shape).unmatched).toEqual([['~map:[*]']]);
+  });
+
+  it('matches config nodes by exact key or regular expression, and keeps unmatched siblings virtual', () => {
+    const built = buildTree(
+      config('map', [
+        { id: 'a', kind: 'value', match: ['time', 'tijd'] },
+        { id: 'b', kind: 'value', match: [{ regex: '^(link|Link)$' }] },
+      ]),
+      extractShape(jsonToTree('a.json', { tijd: '2024-01-01', Link: 'https://example.com', other: 'x' })),
+    );
+    const [time, link, other] = built.tree.children!;
+    expect(time).toMatchObject({ id: 'a', name: 'time', keys: ['tijd'] });
+    expect(link).toMatchObject({ id: 'b', name: 'Link', keys: ['Link'] });
+    expect(other).toMatchObject({ id: '~value:other', virtual: true });
+    expect(built.unmatched).toEqual([['~value:other']]);
+  });
+
+  it('keeps config nodes the shape does not have, without structure', () => {
+    const tree = buildTree(config('map', [{ id: 'a', kind: 'value', match: ['gone'], decision: 'show' }]), extractShape(jsonToTree('a.json', {}))).tree;
+    expect(tree.children).toEqual([{ id: 'a', kind: 'value', name: 'gone', match: ['gone'], decision: 'show' }]);
+  });
+
+  it('gives a real position to every config node that matches it (duplication)', () => {
+    const built = buildTree(
+      config('map', [
+        { id: 'a', kind: 'value', match: ['time'], as: 'datetime' },
+        { id: 'b', kind: 'value', match: ['time'], transform: ['trim'] },
+      ]),
+      extractShape(jsonToTree('a.json', { time: '2024-01-01' })),
+    );
+    const [a, b] = built.tree.children!;
+    expect(built.tree.children).toHaveLength(2);
+    expect(built.shared.get(a!)).toEqual([b]);
+    expect(built.shared.get(b!)).toEqual([a]);
+  });
+
+  it('flags a node that matches two keys side by side in one position, not in different ones', () => {
+    const regex = config('map', [{ id: 'r', kind: 'value', match: [{ regex: '^ti' }] }]);
+    const both = buildTree(regex, extractShape(jsonToTree('a.json', { time: 'x', title: 'y' })));
+    expect(both.conflicts.has(both.tree.children![0]!)).toBe(true);
+    const one = buildTree(regex, extractShape(jsonToTree('a.json', { time: 'x' })));
+    expect(one.conflicts.size).toBe(0);
+    // A combined folder: its two files each have `url`, in different positions.
+    const files = buildTree(
+      config('dir', [{ id: 'f', kind: 'list', match: ['watch-history.json', 'kijkgeschiedenis.json'], children: [{ id: 'i', kind: 'map', match: ['[*]'], children: [{ id: 'u', kind: 'value', match: ['url'] }] }] }]),
+      unionShape([
+        extractShape({ kind: 'dir', name: '', children: [jsonToTree('watch-history.json', [{ url: 'a' }])] }),
+        extractShape({ kind: 'dir', name: '', children: [jsonToTree('kijkgeschiedenis.json', [{ url: 'b' }])] }),
+      ]),
+    );
+    expect(files.conflicts.size).toBe(1); // the file node itself: two keys in one folder of the union
+    expect([...files.conflicts][0]!.id).toBe('f');
+  });
+
+  it('names labels and descriptions after the node\'s name', () => {
+    const tree = buildTree(
+      {
+        root: { id: 'root', kind: 'map', match: [], children: [{ id: 'a', kind: 'value', match: ['time'], nameId: 'n' }] },
+        names: [{ id: 'n', text: 'Time', label: { nl: 'Tijd' }, description: { en: 'When.' } }],
+      },
+      extractShape(jsonToTree('a.json', { time: 'x' })),
+    ).tree;
+    expect(tree.children![0]).toMatchObject({ nameId: 'n', label: { en: 'Time', nl: 'Tijd' }, description: { en: 'When.' } });
+  });
+
+  it('leaves out unmatched positions below nodes that skip new children, on request', () => {
+    const shapeWithExtra = extractShape(jsonToTree('h.json', [{ title: 'x', extra: 1 }]));
+    const closed = { root: { id: 'root', kind: 'list' as const, match: [], newChildren: 'skip' as const }, names: [] };
+    expect(buildTree(closed, shapeWithExtra, { skipClosed: true }).tree.children).toBeUndefined();
+    expect(buildTree(closed, shapeWithExtra).unmatched).toEqual([['~map:[*]']]);
+  });
+});
+
+describe('toConfig and materialise', () => {
+  it('keep only config nodes, and make the virtual nodes along a path real', () => {
+    const tree = base();
+    expect(toConfig(tree)).toEqual({ id: 'root', kind: 'list', match: [] });
+    const { tree: real, path } = materialise(tree, at(tree, '[*]', 'time'));
+    const config = toConfig(real);
+    expect(config.children![0]).toMatchObject({ kind: 'map', match: ['[*]'], children: [{ kind: 'value', match: ['time'] }] });
+    expect(getNode(real, path)!.virtual).toBeUndefined();
+    expect(path[0]).not.toBe('~map:[*]');
+    // The selection follows the node.
+    expect(remapPath(tree, rebuild(real, shape), at(tree, '[*]', 'time'))).toEqual(path);
   });
 });
 
 describe('effectiveStates', () => {
   it('shows undecided leaves and derives inner states from leaves', () => {
     let tree = base();
-    expect(state(tree, ['[*]'])).toBe('show');
-    tree = setDecision(tree, ['[*]', 'time'], 'donate');
-    expect(state(tree, ['[*]', 'time'])).toBe('donate');
-    expect(state(tree, ['[*]'])).toBe('donate');
-    expect(state(tree, [])).toBe('donate');
-    expect(state(tree, ['[*]', 'subtitles'])).toBe('show');
+    expect(state(tree, '[*]')).toBe('show');
+    tree = decide(tree, ['[*]', 'time'], 'donate');
+    expect(state(tree, '[*]', 'time')).toBe('donate');
+    expect(state(tree, '[*]')).toBe('donate');
+    expect(effectiveStates(tree).get(tree)).toBe('donate');
+    expect(state(tree, '[*]', 'subtitles')).toBe('show');
   });
 
   it('ignores everything below an ignored node, and ignores parents with only ignored leaves', () => {
-    let tree = setDecision(base(), ['[*]', 'subtitles', '[*]', 'name'], 'donate');
-    tree = setDecision(tree, ['[*]', 'subtitles'], 'ignore');
-    expect(state(tree, ['[*]', 'subtitles', '[*]', 'name'])).toBe('ignore');
-    expect(state(tree, ['[*]'])).toBe('show');
-    for (const leaf of ['title', 'titleUrl', 'time']) tree = setDecision(tree, ['[*]', leaf], 'ignore');
-    expect(state(tree, ['[*]'])).toBe('ignore');
+    let tree = decide(base(), ['[*]', 'subtitles', '[*]', 'name'], 'donate');
+    tree = decide(tree, ['[*]', 'subtitles'], 'ignore');
+    expect(state(tree, '[*]', 'subtitles', '[*]', 'name')).toBe('ignore');
+    expect(state(tree, '[*]')).toBe('show');
+    for (const leaf of ['title', 'titleUrl', 'time']) tree = decide(tree, ['[*]', leaf], 'ignore');
+    expect(state(tree, '[*]')).toBe('ignore');
   });
 });
 
 describe('setDecision', () => {
   it('allows show and donate on leaves only', () => {
-    expect(() => setDecision(base(), ['[*]'], 'show')).toThrow(DecisionError);
-    expect(() => setDecision(base(), ['[*]', 'subtitles'], 'donate')).toThrow(DecisionError);
+    expect(() => decide(base(), ['[*]'], 'show')).toThrow(DecisionError);
+    expect(() => decide(base(), ['[*]', 'subtitles'], 'donate')).toThrow(DecisionError);
   });
 
-  it('does not change the input tree', () => {
+  it('does not change the input tree, and makes the node real', () => {
     const tree = base();
-    setDecision(tree, ['[*]', 'time'], 'donate');
+    const decided = decide(tree, ['[*]', 'time'], 'donate');
     expect(JSON.stringify(tree)).not.toMatch(/decision/);
+    expect(nodeAt(decided, '[*]', 'time')).toMatchObject({ decision: 'donate', match: ['time'] });
+    expect(nodeAt(decided, '[*]', 'time').virtual).toBeUndefined();
   });
 
   it('lists the decisions an ignore would override', () => {
-    let tree = setDecision(base(), ['[*]', 'subtitles', '[*]', 'name'], 'show');
-    tree = setDecision(tree, ['[*]', 'time'], 'donate');
-    expect(ignoreOverrides(tree, ['[*]', 'subtitles'])).toEqual([['[*]', 'subtitles', '[*]', 'name']]);
+    let tree = decide(base(), ['[*]', 'subtitles', '[*]', 'name'], 'show');
+    tree = decide(tree, ['[*]', 'time'], 'donate');
+    expect(ignoreOverrides(tree, at(tree, '[*]', 'subtitles'))).toEqual([at(tree, '[*]', 'subtitles', '[*]', 'name')]);
     expect(ignoreOverrides(tree, [])).toHaveLength(2);
   });
 });
 
-describe('mergeShape', () => {
-  it('adds new positions undecided and keeps decisions', () => {
-    const tree = setDecision(base(), ['[*]', 'time'], 'donate');
-    const other = extractShape(
-      jsonToTree('other.json', [{ title: 'x', time: '2024-01-01', details: [{ name: 'Ad' }] }]),
-    );
-    const { tree: merged, added } = mergeShape(tree, other);
-    expect(added).toEqual([['[*]', 'details']]);
-    expect(getNode(merged, ['[*]', 'time'])!.decision).toBe('donate');
-    expect(getNode(merged, ['[*]', 'details', '[*]', 'name'])).toBeDefined();
-    expect(getNode(tree, ['[*]', 'details'])).toBeUndefined();
-  });
-
-  it('matches aliases instead of adding a new node', () => {
-    const { tree } = mergeNodes(
-      mergeShape(base(), extractShape(jsonToTree('x.json', [{ date: '2024-01-01' }]))).tree,
-      ['[*]', 'date'],
-      ['[*]', 'time'],
-    );
-    const again = mergeShape(tree, extractShape(jsonToTree('y.json', [{ date: '2024-02-01' }])));
-    expect(again.added).toEqual([]);
-  });
-
-  it('matches glob and regular expression aliases', () => {
-    const tree: ProjectNode = {
-      kind: 'map',
-      name: '',
-      children: [
-        { kind: 'value', name: 'time', aliases: ['tijd*'] },
-        { kind: 'value', name: 'url', aliases: [{ regex: '^(link|Link)$' }] },
-      ],
-    };
-    const shape = extractShape(jsonToTree('a.json', { tijdstip: '2024-01-01', Link: 'https://example.com' }));
-    expect(mergeShape(tree, shape).added).toEqual([]);
-  });
-});
-
-describe('mergeNodes', () => {
-  it('adds the name as an alias, merges children and reports conflicts', () => {
-    let tree = mergeShape(
-      base(),
-      extractShape(jsonToTree('x.json', [{ channels: [{ name: 'a', id: 'b' }] }])),
-    ).tree;
-    tree = setDecision(tree, ['[*]', 'subtitles', '[*]', 'name'], 'donate');
-    tree = setDecision(tree, ['[*]', 'channels', '[*]', 'name'], 'show');
-    const { tree: merged, conflicts } = mergeNodes(tree, ['[*]', 'channels'], ['[*]', 'subtitles']);
-    const subtitles = getNode(merged, ['[*]', 'subtitles'])!;
-    expect(subtitles.aliases).toEqual(['channels']);
-    expect(getNode(merged, ['[*]', 'channels'])).toBeUndefined();
-    expect(getNode(merged, ['[*]', 'subtitles', '[*]', 'id'])).toBeDefined();
-    expect(getNode(merged, ['[*]', 'subtitles', '[*]', 'name'])!.decision).toBe('donate');
-    expect(conflicts).toEqual([{ path: ['[*]', 'subtitles', '[*]', 'name'], field: 'decision' }]);
-  });
-
-  it('keeps a node required if either was, so any of its names satisfies it', () => {
-    let tree = mergeShape(base(), extractShape(jsonToTree('x.json', [{ channels: [] }]))).tree;
-    getNode(tree, ['[*]', 'channels'])!.required = true;
-    tree = mergeNodes(tree, ['[*]', 'channels'], ['[*]', 'subtitles']).tree;
-    expect(getNode(tree, ['[*]', 'subtitles'])).toMatchObject({ required: true, aliases: ['channels'] });
-  });
-
-  it('refuses different kinds and merging into a descendant', () => {
-    expect(() => mergeNodes(base(), ['[*]', 'time'], ['[*]', 'subtitles'])).toThrow(DecisionError);
-    expect(() => mergeNodes(base(), ['[*]'], ['[*]', 'subtitles'])).toThrow(DecisionError);
-  });
-});
-
 describe('compareShape', () => {
-  const tree = setDecision(setDecision(base(), ['[*]', 'time'], 'donate'), ['[*]', 'subtitles'], 'ignore');
+  let tree = decide(base(), ['[*]', 'time'], 'donate');
+  tree = decide(tree, ['[*]', 'subtitles'], 'ignore');
 
-  it('finds unknown positions and missing donated leaves, ignoring the root name', () => {
-    const shape = extractShape(
-      jsonToTree('kaspers_history.json', [{ title: 'x', watched_at: '2024-01-01', subtitles: [{ extra: 1 }] }]),
-    );
-    expect(compareShape(tree, shape)).toEqual({
-      unknown: [{ path: ['[*]', 'watched_at'], shape: { kind: 'value', name: 'watched_at', types: ['date-like'], formats: ['YYYY-MM-DD'] } }],
-      missing: [['[*]', 'time']],
-      missingRequired: [],
-    });
+  it('finds missing donated leaves, ignoring the root name', () => {
+    const other = extractShape(jsonToTree('kaspers_history.json', [{ title: 'x', watched_at: '2024-01-01' }]));
+    expect(compareShape(tree, other)).toEqual({ missing: [at(tree, '[*]', 'time')], missingRequired: [] });
+    expect(compareShape(tree, shape)).toEqual({ missing: [], missingRequired: [] });
   });
 
-  it('finds nothing for a shape the tree already covers', () => {
-    expect(compareShape(tree, extractShape(watchHistory))).toEqual({ unknown: [], missing: [], missingRequired: [] });
-  });
-
-  it('does not offer new positions below a node that skips new children, unless a node below asks again', () => {
-    const shape = extractShape(jsonToTree('h.json', [{ title: 'x', time: 't', watched_at: 'y', subtitles: [] }]));
-    const closed = { ...tree, newChildren: 'skip' as const };
-    expect(compareShape(closed, shape).unknown).toEqual([]);
-    const reopened = structuredClone(closed);
-    getNode(reopened, ['[*]'])!.newChildren = 'ask';
-    expect(compareShape(reopened, shape).unknown.map((u) => u.path)).toEqual([['[*]', 'watched_at']]);
-  });
-
-  it('lists required nodes that are missing, present by any of their names', () => {
+  it('lists required nodes that are missing, present by any of their matches', () => {
     const required = structuredClone(tree);
-    Object.assign(getNode(required, ['[*]', 'time'])!, { required: true, aliases: ['watched_at'] });
+    Object.assign(nodeAt(required, '[*]', 'time'), { required: true, match: ['time', 'watched_at'] });
     const renamed = extractShape(jsonToTree('h.json', [{ title: 'x', watched_at: '2024-01-01' }]));
     expect(compareShape(required, renamed).missingRequired).toEqual([]);
     const without = extractShape(jsonToTree('h.json', [{ title: 'x' }]));
-    expect(compareShape(required, without).missingRequired).toEqual([['[*]', 'time']]);
-    expect(requiredPaths(required)).toEqual([['[*]', 'time']]);
+    expect(compareShape(required, without).missingRequired).toEqual([at(tree, '[*]', 'time')]);
+    expect(requiredPaths(required)).toEqual([at(tree, '[*]', 'time')]);
+  });
+});
+
+describe('newPositions', () => {
+  it('are the top-most positions of a shape the seen structure does not have', () => {
+    const other = extractShape(jsonToTree('h.json', [{ title: 'x', time: 't', details: [{ name: 'Ad' }] }]));
+    const found = [...newPositions(shape, other)];
+    expect(found.map((s) => s.name)).toEqual(['details']);
+    expect(newPositions(shape, shape).size).toBe(0);
+    expect(newPositions(undefined, other).size).toBe(1);
+  });
+});
+
+describe('knownKeys', () => {
+  it('are the keys config nodes match and the keys of the seen structure', () => {
+    const tree = buildTree(config('map', [{ id: 'a', kind: 'value', match: ['Titel', { regex: '^Datum' }] }]), extractShape(jsonToTree('a.json', { Kanaal: 'x' }))).tree;
+    const known = knownKeys(tree);
+    expect(['Titel', 'Datum en tijd', 'Kanaal'].every(known)).toBe(true);
+    expect(known('Anna')).toBe(false);
   });
 });
 
 describe('new children', () => {
   it('are passed down until a node sets its own', () => {
-    const tree: ProjectNode = {
-      kind: 'map',
-      name: '',
-      newChildren: 'skip',
-      children: [
-        { kind: 'map', name: 'a', children: [{ kind: 'map', name: 'b', newChildren: 'ask', children: [] }] },
-      ],
-    };
+    const tree = buildTree(
+      { root: { id: 'root', kind: 'map', match: [], newChildren: 'skip', children: [{ id: 'a', kind: 'map', match: ['a'], children: [{ id: 'b', kind: 'map', match: ['b'], newChildren: 'ask' }] }] }, names: [] },
+    ).tree;
     const closed = closedNodes(tree);
     expect([tree, getNode(tree, ['a'])!].every((n) => closed.has(n))).toBe(true);
     expect(closed.has(getNode(tree, ['a', 'b'])!)).toBe(false);
-  });
-
-  it('are left out of a merged shape on request, as on a participant\'s device', () => {
-    const tree = { ...base(), newChildren: 'skip' as const };
-    const shape = extractShape(jsonToTree('h.json', [{ title: 'x', extra: 1 }]));
-    expect(mergeShape(tree, shape, { skipClosed: true }).added).toEqual([]);
-    expect(mergeShape(tree, shape).added).toEqual([['[*]', 'extra']]);
   });
 });
 
 describe('lifters', () => {
   it('make an inner node a leaf whose one decision covers its output', () => {
     let tree = base();
-    tree.children![0]!.children!.find((c) => c.name === 'subtitles')!.lifter = '(node) => ({})';
-    tree = setDecision(tree, ['[*]', 'subtitles'], 'donate');
+    nodeAt(tree, '[*]', 'subtitles').lifter = '(node) => ({})';
+    tree = decide(tree, ['[*]', 'subtitles'], 'donate');
     const states = effectiveStates(tree);
-    expect(states.get(getNode(tree, ['[*]', 'subtitles'])!)).toBe('donate');
-    expect(states.get(getNode(tree, ['[*]', 'subtitles', '[*]', 'name'])!)).toBe('ignore');
-    expect(state(tree, ['[*]'])).toBe('donate');
+    expect(states.get(nodeAt(tree, '[*]', 'subtitles'))).toBe('donate');
+    expect(states.get(nodeAt(tree, '[*]', 'subtitles', '[*]', 'name'))).toBe('ignore');
+    expect(state(tree, '[*]')).toBe('donate');
   });
 });
 
 describe('null values', () => {
   it('keep one node when a key is null in one record and a list in another', () => {
-    const shape = extractShape(jsonToTree('a.json', [{ tags: null }, { tags: ['x'] }]));
-    const tree = projectTreeFromShape(shape);
-    expect(getNode(tree, ['[*]'])!.children!.map((c) => c.kind)).toEqual(['list']);
-    const later = mergeShape(
-      projectTreeFromShape(extractShape(jsonToTree('b.json', [{ tags: null }]))),
-      extractShape(jsonToTree('c.json', [{ tags: ['y'] }])),
-    );
-    expect(getNode(later.tree, ['[*]'])!.children!.map((c) => c.kind)).toEqual(['list']);
-    expect(later.added).toEqual([['[*]', 'tags']]);
-    expect(mergeShape(tree, extractShape(jsonToTree('d.json', [{ tags: null }]))).added).toEqual([]);
+    const tree = treeOf(extractShape(jsonToTree('a.json', [{ tags: null }, { tags: ['x'] }])));
+    expect(nodeAt(tree, '[*]').children!.map((c) => c.kind)).toEqual(['list']);
+    const union = unionShape([extractShape(jsonToTree('b.json', [{ tags: null }])), extractShape(jsonToTree('c.json', [{ tags: ['y'] }]))])!;
+    expect(nodeAt(treeOf(union), '[*]').children!.map((c) => c.kind)).toEqual(['list']);
+    // A configured list is not joined by a null-only twin.
+    const configured = decide(treeOf(union), ['[*]', 'tags', '[*]'], 'show');
+    expect(nodeAt(rebuild(configured, extractShape(jsonToTree('d.json', [{ tags: null }]))), '[*]').children).toHaveLength(1);
   });
 });
 
@@ -241,27 +266,25 @@ describe('single and repeated elements', () => {
     `<div class="row">${Array.from({ length: n }, (_, i) => `<a href="https://example.com/${i}">x</a>`).join('')}</div>`;
   const shapeOf = (html: string) => extractShape(normalizeTree(parseMarkup('a.html', html)));
 
-  it('are one node, whichever was seen first', () => {
-    const one = shapeOf(list(1));
-    const many = shapeOf(list(3));
-    for (const [first, second] of [
-      [one, many],
-      [many, one],
-    ] as const) {
-      const { tree, added } = mergeShape(projectTreeFromShape(first!), second!);
-      expect(added).toEqual([]);
-      const row = getNode(tree, ['div.row'])!;
-      expect(row.children!.map((c) => [c.kind, c.name])).toEqual([['list', 'a']]);
-      expect(compareShape(tree, one).unknown).toEqual([]);
-      expect(compareShape(tree, many).unknown).toEqual([]);
+  it('are one node in the union, whichever was seen first', () => {
+    for (const shapes of [
+      [shapeOf(list(1)), shapeOf(list(3))],
+      [shapeOf(list(3)), shapeOf(list(1))],
+    ]) {
+      const tree = treeOf(unionShape(shapes)!);
+      expect(nodeAt(tree, 'div.row').children!.map((c) => [c.kind, c.name])).toEqual([['list', 'a']]);
     }
   });
 
-  it('keep decisions when a single element turns out to repeat', () => {
-    let tree = projectTreeFromShape(shapeOf(list(1)));
-    tree = setDecision(tree, ['div.row', 'a', '@href'], 'donate');
-    const merged = mergeShape(tree, shapeOf(list(3))).tree;
-    expect(getNode(merged, ['div.row', 'a', '[*]', '@href'])!.decision).toBe('donate');
+  it('match a configured list when a participant has a single element, and the other way round', () => {
+    const repeated = decide(treeOf(shapeOf(list(3))), ['div.row', 'a', '[*]', '@href'], 'donate');
+    const single = buildTree({ root: toConfig(repeated), names: [] }, shapeOf(list(1)));
+    expect(nodeAt(single.tree, 'div.row').children!.map((c) => [c.kind, c.virtual])).toEqual([['list', undefined]]);
+    expect(nodeAt(single.tree, 'div.row', 'a', '[*]', '@href').keys).toEqual(['@href']);
+    const one = decide(treeOf(shapeOf(list(1))), ['div.row', 'a', '@href'], 'donate');
+    const many = buildTree({ root: toConfig(one), names: [] }, shapeOf(list(3)));
+    expect(nodeAt(many.tree, 'div.row').children!.map((c) => [c.kind, c.virtual])).toEqual([['element', undefined]]);
+    expect(nodeAt(many.tree, 'div.row', 'a', '@href').keys).toEqual(['@href']);
   });
 });
 
@@ -273,31 +296,29 @@ describe('keys that are data', () => {
     );
 
   it('are collapsed automatically when keys differ across rows', () => {
-    const tree = projectTreeFromShape(extractShape(tweets(4)));
-    const comments = getNode(tree, ['[*]', 'comments'])!;
+    const tree = treeOf(extractShape(tweets(4)));
+    const comments = nodeAt(tree, '[*]', 'comments');
     expect(comments.collapsed).toBe(true);
     expect(comments.children!.map((c) => c.name)).toEqual(['{*}']);
     expect(JSON.stringify(tree)).not.toContain('user');
   });
 
-  it('can be set by hand, without keeping the keys as aliases', () => {
-    const shape = extractShape(jsonToTree('a.json', [{ comments: { anna: 'hi', bob: 'hey' } }]));
-    const tree = projectTreeFromShape(shape);
-    expect(getNode(tree, ['[*]', 'comments', 'anna'])).toBeDefined();
-    const { tree: keyed } = setKeysAreData(tree, ['[*]', 'comments']);
-    expect(getNode(keyed, ['[*]', 'comments'])!.children!.map((c) => c.name)).toEqual(['{*}']);
-    expect(JSON.stringify(keyed)).not.toMatch(/anna|bob/);
+  it('can be set by hand, without keeping the keys as matches', () => {
+    const s = extractShape(jsonToTree('a.json', [{ comments: { anna: 'hi', bob: 'hey' } }]));
+    const tree = treeOf(s);
+    expect(nodeAt(tree, '[*]', 'comments', 'anna')).toBeDefined();
+    const keyed = setKeysAreData(tree, at(tree, '[*]', 'comments'));
+    expect(nodeAt(keyed, '[*]', 'comments').children!.map((c) => c.name)).toEqual(['{*}']);
+    expect(JSON.stringify(toConfig(keyed))).not.toMatch(/anna|bob/);
     // New keys in later shapes map to the same position, and are never added by name.
-    const later = mergeShape(keyed, extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }])));
-    expect(later.added).toEqual([]);
-    expect(JSON.stringify(later.tree)).not.toContain('carl');
-    const compared = compareShape(keyed, extractShape(jsonToTree('c.json', [{ comments: { dora: { x: 1 } } }])));
-    expect(JSON.stringify(compared)).not.toContain('dora');
+    const later = buildTree({ root: toConfig(keyed), names: [] }, extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }])));
+    expect(later.unmatched).toEqual([]);
+    expect(JSON.stringify(toConfig(later.tree))).not.toContain('carl');
   });
 
   it('take a decision of their own for the keys', () => {
-    const tree = projectTreeFromShape(extractShape(tweets(4)));
-    const decided = setDecision(tree, ['[*]', 'comments', '{*}'], 'donate');
-    expect(effectiveStates(decided).get(getNode(decided, ['[*]'])!)).toBe('donate');
+    const tree = treeOf(extractShape(tweets(4)));
+    const decided = decide(tree, ['[*]', 'comments', '{*}'], 'donate');
+    expect(effectiveStates(decided).get(nodeAt(decided, '[*]'))).toBe('donate');
   });
 });
