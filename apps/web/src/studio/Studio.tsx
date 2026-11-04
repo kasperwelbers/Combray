@@ -462,8 +462,8 @@ export function Studio({
     });
   }
 
-  async function openFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  async function openFiles(files: File[]) {
+    if (files.length === 0) return;
     setMessage(undefined);
     try {
       let structure: StructureFile | undefined;
@@ -998,7 +998,8 @@ export function Studio({
         multiple
         hidden
         onChange={(e) => {
-          void openFiles(e.target.files);
+          // Copied first: clearing the input below empties its file list.
+          void openFiles([...(e.target.files ?? [])]);
           e.target.value = '';
         }}
       />

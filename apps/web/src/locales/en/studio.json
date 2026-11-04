@@ -45,6 +45,7 @@
   "previewIntro": "Exactly what one participant would see with your current decisions. A participant uploads one package, so this shows one at a time: by default the structure, with a placeholder for each value.",
   "previewEmpty": "Add a test package to see the preview.",
   "noTables": "With these decisions, participants would see nothing yet. Set fields to Show or Donate under Decisions, or let participants see undecided parts in Platform settings.",
+  "noTablesInPackage": "This package has nothing for the tables participants would see, so a participant with it would see no tables.",
   "tables": "Tables",
   "unnamedTable": "Your data",
   "requested": "requested",

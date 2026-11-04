@@ -33,9 +33,12 @@ export function Preview({ tables, hasExports }: Props) {
   const childrenOf = (parent: number | undefined) =>
     tables
       .map((table, index) => ({ table, index }))
-      .filter(({ table }) => table.parent === parent)
+      // With a package, tables it has no rows for are left out, as in the participant client.
+      .filter(({ table }) => table.parent === parent && !(hasExports && parent === undefined && table.rowCount === 0))
       .sort((a, b) => rank(a.table) - rank(b.table) || a.index - b.index);
-  const first = childrenOf(undefined)[0]?.index ?? 0;
+  const top = childrenOf(undefined);
+  if (top.length === 0) return <p className="meta">{t('studio.noTablesInPackage')}</p>;
+  const first = top[0]!.index;
   const current = stack.at(-1) ?? { table: first };
   const table = tables[current.table] ?? tables[0]!;
   const rows =
