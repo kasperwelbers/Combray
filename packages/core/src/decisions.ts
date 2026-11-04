@@ -223,16 +223,20 @@ const closedHere = (node: { newChildren?: string }, parentClosed: boolean) =>
 
 export interface BuildOptions {
   /**
-   * Leave out real positions no config node matches below nodes that skip new children
-   * (`newChildren: 'skip'`), as a participant's client does. The studio keeps everything.
+   * The structures seen so far (their union), when laying a configuration over one
+   * participant's shape. Positions the seen structures do not have are new: they are listed in
+   * `fresh`, and left out below nodes that skip new children (`newChildren: 'skip'`) unless a
+   * config node matches them. The studio passes no seen structure: everything it has is seen.
    */
-  skipClosed?: boolean;
+  seen?: Shape;
 }
 
 /** A shape position a node matched, with the shape position it sits in. */
 interface Source {
   shape: Shape;
   parent?: Shape;
+  /** The same position in the seen structures, if they have it (only with `seen`). */
+  seen?: Shape;
 }
 
 export interface Built {
@@ -248,6 +252,8 @@ export interface Built {
   shared: Map<ProjectNode, ProjectNode[]>;
   /** Paths of the virtual nodes, top-most only: real positions no config node matches. */
   unmatched: NodePath[];
+  /** With `seen`: nodes all of whose positions are new, never seen before. */
+  fresh: Set<ProjectNode>;
 }
 
 /** The working node of a config node, without children. */
@@ -283,6 +289,8 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
   const conflicts = new Set<ProjectNode>();
   const shared = new Map<ProjectNode, ProjectNode[]>();
   const unmatched: NodePath[] = [];
+  const fresh = new Set<ProjectNode>();
+  const tracking = options.seen !== undefined;
 
   const visit = (
     node: ProjectNode,
@@ -299,9 +307,15 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
     if (shapes.some((s) => s.collapsed)) node.collapsed = true;
     const keys = [...new Set(shapes.map((s) => s.name))];
     if (path.length > 0 && keys.length > 0) node.keys = keys;
+    if (tracking && path.length > 0 && from.length > 0 && from.every((s) => !s.seen)) fresh.add(node);
     const closed = closedHere(node, parentClosed);
 
-    const real = from.flatMap((s) => (s.shape.children ?? []).map((child): Source => ({ shape: child, parent: s.shape })));
+    const real = from.flatMap((s) =>
+      (s.shape.children ?? []).map((child): Source => {
+        const seen = s.seen?.children?.find((k) => k.kind === child.kind && k.name === child.name);
+        return { shape: child, parent: s.shape, ...(seen ? { seen } : {}) };
+      }),
+    );
     const used = new Map<Shape, ProjectNode[]>();
     const children: ProjectNode[] = [];
     for (const config of configChildren) {
@@ -334,9 +348,10 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
       for (const n of nodes) shared.set(n, [...new Set([...(shared.get(n) ?? []), ...nodes.filter((o) => o !== n)])]);
     }
 
-    // Real positions nothing matches: virtual nodes, one per kind and key.
-    if (!(closed && options.skipClosed)) {
-      const rest = real.filter((r) => !used.has(r.shape));
+    // Real positions nothing matches: virtual nodes, one per kind and key. New ones are left
+    // out below nodes that skip new children.
+    {
+      const rest = real.filter((r) => !used.has(r.shape) && !(closed && tracking && !r.seen));
       const groups = new Map<string, Source[]>();
       for (const r of rest) {
         const name = node.collapsed ? COLLAPSED_NAME : r.shape.name;
@@ -362,10 +377,11 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
   };
 
   const root = fromConfig(config.root, names);
-  const start = shape ? [{ shape: unifyElementTwins(shape) }] : [];
+  const seen = options.seen && unifyElementTwins(options.seen);
+  const start: Source[] = shape ? [{ shape: unifyElementTwins(shape), ...(seen ? { seen } : {}) }] : [];
   visit(root, config.root.children ?? [], start, [], false, false);
   root.name = '';
-  return { tree: root, sources, conflicts, shared, unmatched };
+  return { tree: root, sources, conflicts, shared, unmatched, fresh };
 }
 
 const hasConfigElementItems = (config: ConfigNode) =>

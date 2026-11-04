@@ -41,7 +41,7 @@ import type {
   TableSummary,
   UploadPoint,
 } from './api';
-import { deriveImport, pointTree } from './derived';
+import { deriveImport, pointProject } from './derived';
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
@@ -234,7 +234,7 @@ async function finish(
   pending = undefined;
   if (located.status !== 'found') return { status: located.status };
   const { root } = located;
-  const derived = deriveImport(root, pointTree(point)!, point);
+  const derived = deriveImport(root, pointProject(point)!, point);
   return storeSource(listing, root, onProgress, (s, id, importedAt) => storeDerived(s, id, importedAt, derived));
 }
 
@@ -333,7 +333,7 @@ const api: DataApi = {
     onProgress({ step: 'looking' });
     try {
       const listing = await listUpload(uploads);
-      const projectTree = point && pointTree(point);
+      const projectTree = point && pointProject(point)?.tree;
       if (point && projectTree) return await finish(listing, point, await locateRoot(listing, projectTree), onProgress);
       // Without a project tree: everything, named as before, for the YAML importers.
       const read = await readSpot(listing, await defaultRoot(listing), { name: listing.name });

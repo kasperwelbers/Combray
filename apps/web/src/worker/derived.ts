@@ -1,24 +1,26 @@
 /**
  * Importing through a project tree (docs/tree-decisions.md): the root found in an upload
- * (`locateRoot`) is matched against the tree of its upload point, and the tables inferred from
- * it are what the participant sees. Nested tables stay nested: their rows are kept inside the
- * parent row.
+ * (`locateRoot`) is matched against the configuration of its upload point, and the tables
+ * inferred from it are what the participant sees. Nested tables stay nested: their rows are
+ * kept inside the parent row. Tables of nodes that share a name are one table (ADR 0012).
  *
  * Everything here runs in the data worker, on the participant's own data. Nothing is sent.
  */
 import {
+  buildTree,
+  configOf,
   deriveRows,
   deriveTables,
   getNode,
+  groupTables,
   headerNames,
-  joinProjectTree,
-  mergeShape,
   parseImporterFile,
   parseStructureFile,
   type ColumnDef,
   type DerivedRow,
   type FieldValue,
   type NodePath,
+  type ProjectConfig,
   type ProjectNode,
   type Row,
   type Shape,
@@ -37,29 +39,45 @@ export interface DerivedImport {
 
 const pathKey = (path: NodePath) => path.join('\u0000');
 
-const trees = new Map<string, ProjectNode>();
+/**
+ * What an upload point imports through: the researcher's configuration, and the structures
+ * the project has seen, which tell new parts (never seen) from parts nobody configured.
+ */
+export interface PointProject {
+  config: ProjectConfig;
+  seen: Shape;
+  /** The configuration laid over the seen structures: for finding the root of an upload. */
+  tree: ProjectNode;
+}
+
+const projects = new Map<string, PointProject>();
+
+function project(config: ProjectConfig, seen: Shape): PointProject {
+  return { config, seen, tree: buildTree(config, seen).tree };
+}
 
 /**
- * The tree of an upload point: the project's own, as published from the studio, or else the
- * bundled pack it names. Kept once joined; matching an upload works on a copy (`mergeShape`).
+ * The project of an upload point: the project's own, as published from the studio, or else the
+ * bundled pack it names. Kept once built.
  */
-export function pointTree(point: UploadPoint): ProjectNode | undefined {
+export function pointProject(point: UploadPoint): PointProject | undefined {
   if (point.structure !== undefined && point.importer !== undefined) {
     const key = `project:${point.id}`;
-    if (!trees.has(key)) {
+    if (!projects.has(key)) {
       try {
-        trees.set(key, joinProjectTree(parseStructureFile(point.structure), parseImporterFile(point.importer)).tree);
+        const importer = parseImporterFile(point.importer);
+        projects.set(key, project(configOf(importer), parseStructureFile(point.structure).root));
       } catch {
-        // A tree the client cannot read: fall back to the pack, if there is one.
+        // A configuration the client cannot read: fall back to the pack, if there is one.
       }
     }
-    const own = trees.get(key);
+    const own = projects.get(key);
     if (own) return own;
   }
   const pack = packs.find((p) => p.id === point.pack);
   if (!pack) return undefined;
-  if (!trees.has(pack.id)) trees.set(pack.id, packTree(pack));
-  return trees.get(pack.id);
+  if (!projects.has(pack.id)) projects.set(pack.id, { config: configOf(pack.importer), seen: pack.structure.root, tree: packTree(pack) });
+  return projects.get(pack.id);
 }
 
 /** Whether a node has, or something below it has, a researcher's show or donate decision. */
@@ -83,14 +101,8 @@ function nest(tables: TableDef[], rows: DerivedRow[][]): Row[][] {
   return out;
 }
 
-function columnInfo(
-  column: ColumnDef,
-  tables: TableDef[],
-  rowsPath: NodePath,
-  tree: ProjectNode,
-  added: Set<string>,
-): ColumnInfo {
-  const full = [...rowsPath, ...column.path];
+function columnInfo(column: ColumnDef, tables: TableDef[], tree: ProjectNode, added: Set<string>): ColumnInfo {
+  const full = column.at;
   const isNew = full.some((_, i) => added.has(pathKey(full.slice(0, i + 1))));
   const info: ColumnInfo = { id: column.id, name: column.name, type: column.type, state: column.state };
   if (isNew) info.new = true;
@@ -99,7 +111,7 @@ function columnInfo(
   if (column.as === 'datetime' || column.as === 'url') info.as = column.as;
   if (column.type === 'table') {
     const nested = tables[column.table!]!;
-    info.columns = nested.columns.map((c) => columnInfo(c, tables, nested.rows!, tree, added));
+    info.columns = nested.columns.map((c) => columnInfo(c, tables, tree, added));
   } else if (!decided(getNode(tree, full))) {
     info.undecided = true;
   }
@@ -156,24 +168,23 @@ function anyColumn(columns: ColumnInfo[], test: (c: ColumnInfo) => boolean): boo
  * returns it. Parts the researcher has not decided on are left out, columns and values, unless
  * the tree's root says participants see them (`undecided: 'show'`); the raw data still has them.
  */
-export function deriveImport(
-  root: { prepared: TreeNode; shape: Shape },
-  projectTree: ProjectNode,
-  point: UploadPoint,
-): DerivedImport {
-  // Parts the project does not know yet are added undecided, so participants still see them,
-  // except below nodes that skip new children.
-  const merged = mergeShape(projectTree, root.shape, { skipClosed: true });
-  const added = new Set(merged.added.map(pathKey));
-  const defs = deriveTables(merged.tree);
+export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project: PointProject, point: UploadPoint): DerivedImport {
+  // The configuration over this participant's own structure. Parts nobody has configured are
+  // there undecided, so participants can still see them; new parts too, except below nodes
+  // that skip new children.
+  const built = buildTree(project.config, root.shape, { seen: project.seen });
+  const tree = built.tree;
+  const added = new Set(freshPaths(tree, built.fresh).map(pathKey));
+  // Tables of nodes that share a name are one table, with the rows of each.
+  const ungrouped = deriveTables(tree);
+  const { tables: defs, rows } = groupTables(ungrouped, deriveRows(root.prepared, tree, ungrouped));
   // Undecided parts are hidden unless the researcher lets participants see them.
-  const hideUndecided = merged.tree.undecided !== 'show';
-  const nested = nest(defs, deriveRows(root.prepared, merged.tree, defs));
+  const hideUndecided = tree.undecided !== 'show';
+  const nested = nest(defs, rows);
   const tables: DerivedImport['tables'] = [];
   defs.forEach((def, i) => {
     if (def.parent !== undefined || nested[i]!.length === 0) return;
-    const rowsPath = def.rows ?? [];
-    let columns = def.columns.map((c) => columnInfo(c, defs, rowsPath, merged.tree, added));
+    let columns = def.columns.map((c) => columnInfo(c, defs, tree, added));
     if (hideUndecided) {
       columns = withoutUndecided(columns, nested[i]!);
       if (columns.length === 0) return;
@@ -182,7 +193,7 @@ export function deriveImport(
     let headerRow: Row | undefined;
     if (def.headerRow && nested[i]!.length > 0) {
       headerRow = nested[i]!.shift()!;
-      const names = headerNames(merged.tree, def, headerRow);
+      const names = headerNames(tree, def, headerRow);
       columns = columns.map((c) => {
         const name = names.get(c.id);
         if (name === undefined) return c;
@@ -193,7 +204,7 @@ export function deriveImport(
     const collection = anyColumn(columns, (c) => c.type !== 'table' && !c.undecided);
     const table: DerivedTable = {
       name: def.name,
-      path: rowsPath,
+      path: def.where,
       record: def.rows === undefined,
       collection,
       requested: def.state === 'donate',
@@ -205,4 +216,15 @@ export function deriveImport(
     tables.push({ table, rows: nested[i]! });
   });
   return { point, tables };
+}
+
+/** The paths of the fresh nodes in a tree. */
+function freshPaths(tree: ProjectNode, fresh: Set<ProjectNode>): NodePath[] {
+  const out: NodePath[] = [];
+  const visit = (node: ProjectNode, path: NodePath) => {
+    if (fresh.has(node)) out.push(path);
+    for (const child of node.children ?? []) visit(child, [...path, child.id]);
+  };
+  visit(tree, []);
+  return out;
 }

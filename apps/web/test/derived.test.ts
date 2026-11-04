@@ -1,14 +1,16 @@
 import {
+  buildTree,
   deriveTables,
+  emptyConfig,
   extractShape,
   getNode,
   locateRoot,
   normalizeTree,
   parseFile,
-  projectTreeFromShape,
   setDecision,
+  toConfig,
   UploadListing,
-  type ProjectNode,
+  type ConfigNode,
   type UploadProblem,
 } from '@combray/core';
 import { packs } from '@combray/importers';
@@ -18,7 +20,7 @@ import { fixtureFiles, fixtureListing, fixtureZip, uploadFiles } from '../../../
 import { foldedPath } from '../src/format';
 import { uploadPoints } from '../src/projectConfig';
 import type { ColumnInfo, UploadPoint } from '../src/worker/api';
-import { deriveImport, pointTree, type DerivedImport } from '../src/worker/derived';
+import { deriveImport, pointProject, type DerivedImport, type PointProject } from '../src/worker/derived';
 import { valueAt } from '../src/worker/tables';
 
 const TAKEOUT: UploadPoint = { id: 'takeout', pack: 'google-takeout' };
@@ -27,28 +29,33 @@ const TIKTOK: UploadPoint = { id: 'tiktok', pack: 'tiktok' };
 const names = (columns: ColumnInfo[]) => columns.map((c) => (typeof c.name === 'string' ? c.name : c.name.en));
 const english = (t: DerivedImport['tables'][number]) => (t.table.name as Record<string, string>).en;
 
-/** An upload point's tree, letting participants see undecided parts. */
-function showingUndecided(point: UploadPoint): ProjectNode {
-  return { ...structuredClone(pointTree(point)!), undecided: 'show' };
+/** An upload point's project with another configuration. */
+function withConfig(point: UploadPoint, change: (root: ConfigNode) => void): PointProject {
+  const project = structuredClone(pointProject(point)!);
+  change(project.config.root);
+  return { ...project, tree: buildTree(project.config, project.seen).tree };
 }
+
+/** An upload point's project, letting participants see undecided parts. */
+const showingUndecided = (point: UploadPoint) => withConfig(point, (root) => (root.undecided = 'show'));
 
 /** An upload through one upload point, as the data worker does it. */
 async function through(
   point: UploadPoint,
   listing: UploadListing | Promise<UploadListing>,
-  tree: ProjectNode = pointTree(point)!,
+  project: PointProject = pointProject(point)!,
 ): Promise<DerivedImport | UploadProblem | 'choose'> {
-  const located = await locateRoot(await listing, tree);
-  if (located.status === 'found') return deriveImport(located.root, tree, point);
+  const located = await locateRoot(await listing, project.tree);
+  if (located.status === 'found') return deriveImport(located.root, project, point);
   return located.status;
 }
 
 async function derived(
   point: UploadPoint,
   listing: UploadListing | Promise<UploadListing>,
-  tree?: ProjectNode,
+  project?: PointProject,
 ): Promise<DerivedImport> {
-  const result = await through(point, listing, tree);
+  const result = await through(point, listing, project);
   if (typeof result === 'string') throw new Error(result);
   return result;
 }
@@ -60,21 +67,22 @@ describe('importing through an upload point', () => {
     expect(collections.map(english).sort()).toEqual(['TikTok likes', 'TikTok searches', 'TikTok watch history']);
     const watch = collections.find((t) => english(t) === 'TikTok watch history')!;
     expect(names(watch.table.columns)).toEqual(['Time', 'Video']);
-    expect(watch.table.display).toEqual({ date: 'Date', url: 'Link' });
+    // Columns are known by their names' ids.
+    expect(watch.table.display).toEqual({ date: 'time', url: 'video' });
     // Converted as the pack says: dates as ISO text.
-    expect(String(watch.rows[0]!.Date)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(String(watch.rows[0]!.time)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('keeps nested tables inside their rows, and lets views count through them', async () => {
     const result = await derived(TAKEOUT, fixtureListing('google-takeout-en'));
     const watch = result.tables.find((t) => english(t) === 'YouTube watch history')!;
     const channel = watch.table.columns.find((c) => c.type === 'table')!;
-    expect(channel.id).toBe('subtitles/[*]');
+    expect(channel.id).toBe('channels');
     expect(names(channel.columns!)).toEqual(['Channel', 'Channel link']);
-    expect(watch.table.display.group_by).toEqual(['subtitles/[*]/name']);
+    expect(watch.table.display.group_by).toEqual(['channels/channel']);
     const nested = watch.rows[0]![channel.id] as Record<string, unknown>[];
-    expect(nested[0]).toHaveProperty('name');
-    expect(valueAt(watch.rows[0]!, 'subtitles/[*]/name')).toEqual([nested[0]!.name]);
+    expect(nested[0]).toHaveProperty('channel');
+    expect(valueAt(watch.rows[0]!, 'channels/channel')).toEqual([nested[0]!.channel]);
   });
 
   it('shows new parts where the pack asks about them, marked new, and skips them elsewhere', async () => {
@@ -92,7 +100,8 @@ describe('importing through an upload point', () => {
     expect(added).toHaveLength(1);
     expect(added[0]!.table.path).toEqual(['YouTube and YouTube Music', 'history', 'notes.json', '[*]']);
     expect(added[0]!.table.collection).toBe(false);
-    expect(added[0]!.table.columns[0]).toMatchObject({ id: 'note', new: true, undecided: true });
+    // Parts nobody configured are known by their kind and key.
+    expect(added[0]!.table.columns[0]).toMatchObject({ id: '~value:note', new: true, undecided: true });
     // Known but undecided parts are other data, not new.
     const tiktok = await derived(TIKTOK, fixtureListing('tiktok-2023'), showingUndecided(TIKTOK));
     const profile = tiktok.tables.find((t) => !t.table.collection)!;
@@ -120,12 +129,14 @@ describe('importing through an upload point', () => {
       for (const row of rows) for (const key of Object.keys(row)) expect(ids).toContain(key);
     }
     // A column left undecided in a table with decided ones: gone from that table and its rows.
-    const tree = structuredClone(pointTree(TIKTOK)!);
-    const firstShown = (node: ProjectNode): ProjectNode | undefined =>
+    const firstShown = (node: ConfigNode): ConfigNode | undefined =>
       node.decision === 'show' ? node : (node.children ?? []).map(firstShown).find(Boolean);
-    delete firstShown(tree)!.decision;
-    const kept = await derived(TIKTOK, fixtureListing('tiktok-2025'), tree);
-    const all = await derived(TIKTOK, fixtureListing('tiktok-2025'), { ...structuredClone(tree), undecided: 'show' });
+    const project = withConfig(TIKTOK, (root) => delete firstShown(root)!.decision);
+    const kept = await derived(TIKTOK, fixtureListing('tiktok-2025'), project);
+    const all = await derived(TIKTOK, fixtureListing('tiktok-2025'), {
+      ...project,
+      config: { ...project.config, root: { ...project.config.root, undecided: 'show' } },
+    });
     const lost = all.tables.find((t) => t.table.collection && undecidedIn(t.table.columns))!;
     const same = kept.tables.find((t) => english(t) === english(lost))!;
     expect(same.table.columns.length).toBeLessThan(lost.table.columns.length);
@@ -137,16 +148,43 @@ describe('importing through an upload point', () => {
     expect(hidden.tables.map(english).sort()).toEqual(shown.tables.filter((t) => t.table.collection).map(english).sort());
   });
 
+  it('shows nodes that share a name as one table, with the rows of each', async () => {
+    const plain = await derived(TIKTOK, fixtureListing('tiktok-2025'));
+    const count = (name: string) => plain.tables.find((t) => english(t) === name)!.rows.length;
+    // Likes and watched videos have the same columns (time and video): give their lists one name.
+    const project = withConfig(TIKTOK, (root) => {
+      const visit = (node: ConfigNode) => {
+        if (node.nameId === 'tiktok-likes') node.nameId = 'tiktok-watch-history';
+        node.children?.forEach(visit);
+      };
+      visit(root);
+    });
+    const joined = await derived(TIKTOK, fixtureListing('tiktok-2025'), project);
+    const videos = joined.tables.filter((t) => english(t) === 'TikTok watch history');
+    expect(videos).toHaveLength(1);
+    expect(joined.tables.some((t) => english(t) === 'TikTok likes')).toBe(false);
+    expect(videos[0]!.rows).toHaveLength(count('TikTok likes') + count('TikTok watch history'));
+    expect(names(videos[0]!.table.columns)).toEqual(['Time', 'Video']);
+  });
+
   it('names columns from the first row when the researcher says it holds them, keeping the row', () => {
     const html = '<table><tr><td>Name</td><td>City</td></tr><tr><td>Marcel</td><td>Paris</td></tr><tr><td>Odette</td><td>Cabourg</td></tr></table>';
     const prepared = normalizeTree(parseFile('t.html', new TextEncoder().encode(html)));
     const shape = extractShape(prepared);
-    let project = projectTreeFromShape(shape);
-    const rows = deriveTables(project).find((t) => t.rows !== undefined)!.rows!;
-    expect(getNode(project, rows)).toBeDefined();
-    project = setDecision(setDecision(project, [...rows, '#cell[0]'], 'show'), [...rows, '#cell[1]'], 'show');
-    getNode(project, rows)!.headerRow = true;
-    const [found] = deriveImport({ prepared, shape }, project, { id: 't' }).tables;
+    let tree = buildTree(emptyConfig(shape.kind), shape).tree;
+    const rows = deriveTables(tree).find((t) => t.rows !== undefined)!.rows!;
+    expect(getNode(tree, rows)).toBeDefined();
+    const cell = (n: number) => [...rows, `~value:#cell[${n}]`];
+    tree = setDecision(tree, cell(0), 'show');
+    // The rows became a config node: find the second cell below it again.
+    const real = deriveTables(buildTree({ root: toConfig(tree), names: [] }, shape).tree).find((t) => t.rows !== undefined)!.rows!;
+    tree = buildTree({ root: toConfig(tree), names: [] }, shape).tree;
+    tree = setDecision(tree, [...real, '~value:#cell[1]'], 'show');
+    const config = { root: toConfig(tree), names: [] };
+    const rowsNode = (node: ConfigNode): ConfigNode | undefined =>
+      node.match[0] === '[*]' ? node : (node.children ?? []).map(rowsNode).find(Boolean);
+    rowsNode(config.root)!.headerRow = true;
+    const [found] = deriveImport({ prepared, shape }, { config, seen: shape, tree: buildTree(config, shape).tree }, { id: 't' }).tables;
     expect(names(found!.table.columns)).toEqual(['Name', 'City']);
     expect(found!.table.columns.some((c) => c.unnamed)).toBe(false);
     expect(found!.rows.map((r) => Object.values(r))).toEqual([
@@ -212,11 +250,11 @@ describe('project config', () => {
   it("uses the project's own tree over the pack, and the pack when the tree cannot be read", () => {
     const pack = packs.find((p) => p.id === 'tiktok')!;
     const renamed = { ...pack.importer, name: { en: 'Our TikTok' } };
-    const own = pointTree({ id: 'own-tiktok', pack: 'tiktok', structure: pack.structure, importer: renamed });
+    const own = pointProject({ id: 'own-tiktok', pack: 'tiktok', structure: pack.structure, importer: renamed });
     expect(own).toBeDefined();
-    expect(own).not.toBe(pointTree(TIKTOK));
-    const unreadable = pointTree({ id: 'broken-tiktok', pack: 'tiktok', structure: { format: 'nope' }, importer: {} });
-    expect(unreadable).toBe(pointTree(TIKTOK));
+    expect(own).not.toBe(pointProject(TIKTOK));
+    const unreadable = pointProject({ id: 'broken-tiktok', pack: 'tiktok', structure: { format: 'nope' }, importer: {} });
+    expect(unreadable).toBe(pointProject(TIKTOK));
   });
 });
 

@@ -12,6 +12,7 @@
   "path": "Path",
   "empty": "This is empty.",
   "breadcrumbs": "Where you are",
-  "shapeIntro": "This is the structure of your data without any of its content: the names of files and fields, what kind of value each one holds, and roughly how many there are. Names that look like personal details are replaced, for example by <email> or <date>. Only this kind of information could ever be shared to help researchers, and only if you agree.",
-  "collapsed": "names hidden"
+  "shapeIntro": "This is the structure of your data without any of its content: the names of files and fields, what kind of value each one holds, and whether it repeats. Names that look like personal details are replaced, for example by <email> or <date>. Only this kind of information could ever be shared to help researchers, and only if you agree.",
+  "collapsed": "names hidden",
+  "repeats": "repeats"
 }

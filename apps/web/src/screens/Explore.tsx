@@ -210,7 +210,7 @@ function ShapeNode({ shape }: { shape: Shape }) {
           {type}
         </span>
       ))}
-      {shape.count && <span className="tag">× {shape.count}</span>}
+      {shape.repeat === 'many' && <span className="tag">{t('explore.repeats')}</span>}
       {shape.collapsed && <span className="tag">{t('explore.collapsed')}</span>}
       {shape.mime && <span className="tag">{shape.mime}</span>}
       {shape.children && (

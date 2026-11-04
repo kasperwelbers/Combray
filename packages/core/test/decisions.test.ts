@@ -121,11 +121,19 @@ describe('buildTree', () => {
     expect(tree.children![0]).toMatchObject({ nameId: 'n', label: { en: 'Time', nl: 'Tijd' }, description: { en: 'When.' } });
   });
 
-  it('leaves out unmatched positions below nodes that skip new children, on request', () => {
-    const shapeWithExtra = extractShape(jsonToTree('h.json', [{ title: 'x', extra: 1 }]));
+  it('marks positions the seen structures lack as fresh, and skips them below closed nodes', () => {
+    const seenShape = extractShape(jsonToTree('h.json', [{ title: 'x' }]));
+    const withExtra = extractShape(jsonToTree('h.json', [{ title: 'x', extra: 1 }]));
+    const open = buildTree(emptyConfig('list'), withExtra, { seen: seenShape });
+    expect([...open.fresh].map((n) => n.name)).toEqual(['extra']);
+    expect(at(open.tree, '[*]', 'title')).toBeDefined();
     const closed = { root: { id: 'root', kind: 'list' as const, match: [], newChildren: 'skip' as const }, names: [] };
-    expect(buildTree(closed, shapeWithExtra, { skipClosed: true }).tree.children).toBeUndefined();
-    expect(buildTree(closed, shapeWithExtra).unmatched).toEqual([['~map:[*]']]);
+    const skipped = buildTree(closed, withExtra, { seen: seenShape });
+    // Seen but unmatched positions stay; only the new one is left out.
+    expect(skipped.tree.children!.map((c) => c.name)).toEqual(['[*]']);
+    expect(skipped.tree.children![0]!.children!.map((c) => c.name)).toEqual(['title']);
+    // Without a seen structure (the studio), everything is seen.
+    expect(buildTree(closed, withExtra).unmatched).toEqual([['~map:[*]']]);
   });
 });
 

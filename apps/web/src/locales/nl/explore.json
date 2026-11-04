@@ -12,6 +12,7 @@
   "path": "Pad",
   "empty": "Dit is leeg.",
   "breadcrumbs": "Waar je bent",
-  "shapeIntro": "Dit is de structuur van je gegevens, zonder de inhoud: de namen van bestanden en velden, wat voor soort waarde erin staat en ongeveer hoeveel. Namen die op persoonlijke gegevens lijken worden vervangen, bijvoorbeeld door <email> of <date>. Alleen dit soort informatie zou ooit gedeeld kunnen worden om onderzoekers te helpen, en alleen als je daarmee instemt.",
-  "collapsed": "namen verborgen"
+  "shapeIntro": "Dit is de structuur van je gegevens, zonder de inhoud: de namen van bestanden en velden, wat voor soort waarde erin staat en of het zich herhaalt. Namen die op persoonlijke gegevens lijken worden vervangen, bijvoorbeeld door <email> of <date>. Alleen dit soort informatie zou ooit gedeeld kunnen worden om onderzoekers te helpen, en alleen als je daarmee instemt.",
+  "collapsed": "namen verborgen",
+  "repeats": "herhaalt zich"
 }
