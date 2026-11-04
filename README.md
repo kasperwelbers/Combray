@@ -3,8 +3,6 @@
   <strong>🐚 Combray</strong>
 </p>
 
-<p align="center"><em>Revisiting your digital past, together.</em></p>
-
 ---
 
 > *"And suddenly the memory revealed itself. The taste was that of the little piece of madeleine which on Sunday mornings at Combray (…) my aunt Léonie used to give me, dipping it first in her own cup of tea or tisane."*
