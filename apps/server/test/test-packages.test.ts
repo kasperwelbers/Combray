@@ -47,11 +47,23 @@ describe('test packages', () => {
     expect(second.json.new_structure).toBe(false);
     const third = await s.main.post(BASE, { name: 'Dutch account', shape: OTHER_SHAPE }, ada);
     expect(third.json.new_structure).toBe(true);
+    // The same structure written in another order (keys, children, types) is the same structure.
+    const reordered = {
+      children: [{ types: ['string'], name: 'title', kind: 'value' }],
+      name: '',
+      kind: 'map',
+    };
+    const fourth = await s.main.post(BASE, { name: 'Ada fake account', shape: reordered }, ada);
+    expect(fourth.json).toEqual({ id: first.json.id, new_structure: false, existing: true });
+    const both = { kind: 'map', name: '', children: [...SHAPE.children, ...OTHER_SHAPE.children] };
+    const bothReversed = { kind: 'map', name: '', children: [...OTHER_SHAPE.children, ...SHAPE.children] };
+    expect((await s.main.post(BASE, { name: 'Both', shape: both }, ada)).json.new_structure).toBe(true);
+    expect((await s.main.post(BASE, { name: 'Both again', shape: bothReversed }, ada)).json.new_structure).toBe(false);
 
     const list = await s.main.get(BASE, ada);
     expect(list.status).toBe(200);
     expect(list.headers['cache-control']).toBe('no-store');
-    expect(list.json.packages).toHaveLength(3);
+    expect(list.json.packages).toHaveLength(5);
     expect(list.json.packages[0]).toEqual({
       id: first.json.id,
       name: 'Ada fake account',
@@ -61,8 +73,9 @@ describe('test packages', () => {
       added: expect.any(Number),
       added_by: ADA,
     });
-    expect(list.json.shapes).toHaveLength(2);
-    expect(list.json.shapes.map((x: { shape: unknown }) => x.shape)).toEqual([SHAPE, OTHER_SHAPE]);
+    // Each distinct structure once (stored in its canonical form: the same content, keys sorted).
+    expect(list.json.shapes).toHaveLength(3);
+    expect(list.json.shapes.map((x: { shape: unknown }) => x.shape)).toEqual([SHAPE, OTHER_SHAPE, expect.objectContaining({ kind: 'map' })]);
 
     // Without content, there is nothing to download.
     const none = await s.main.get(`${BASE}/${first.json.id}/data`, ada);

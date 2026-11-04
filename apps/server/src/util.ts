@@ -37,3 +37,19 @@ export function fromB64(value: unknown): Buffer | undefined {
 
 /** Ids made by clients: 16 random bytes in base64url (22 characters). */
 export const validRandomId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{22}$/.test(id);
+
+/**
+ * JSON text of a structure in one canonical form: keys sorted, and arrays sorted, since every
+ * array in a shape is a set (children, types, formats). The same structure then has one hash,
+ * whatever order a browser wrote it in.
+ */
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).sort().join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}

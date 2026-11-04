@@ -44,7 +44,7 @@ import { RateLimit } from './limits.ts';
 import { log } from './log.ts';
 import { Mailer } from './mail.ts';
 import { MAX_TREE_BYTES, ProjectFailure, Projects, validPlatformId, validProjectId } from './projects.ts';
-import { b64, fromB64, randomToken, sha256, validRandomId } from './util.ts';
+import { b64, canonicalJson, fromB64, randomToken, sha256, validRandomId } from './util.ts';
 
 /** How long a passkey ceremony may take between its start and finish. */
 const CEREMONY_TTL_MS = 300_000;
@@ -645,7 +645,8 @@ export class Research {
         if (!name || name.length > MAX_TEST_NAME || /[\u0000-\u001f]/.test(name)) throw fail(400, 'invalid');
         const shape = body.shape;
         if (!shape || typeof shape !== 'object' || Array.isArray(shape)) throw fail(400, 'invalid');
-        const shapeText = JSON.stringify(shape);
+        // One structure, one text: the hash must not depend on the order keys or children came in.
+        const shapeText = canonicalJson(shape);
         if (Buffer.byteLength(shapeText) > MAX_TREE_BYTES) throw fail(413, 'too_big');
         let data: { gzip: Buffer; bytes: number } | undefined;
         if (body.data !== undefined && body.data !== null) {
