@@ -14,6 +14,10 @@ import {
   matchingImporters,
   readSpot,
   runImporter,
+  optionValue,
+  storyQuestions,
+  validAnswer,
+  type Answer,
   UploadProblemError,
   type FlatNode,
   type Located,
@@ -29,6 +33,7 @@ import { LocalStore, WrongKeyError } from '@combray/store';
 import * as Comlink from 'comlink';
 
 import type {
+  AnswersManifest,
   DataApi,
   DatasetManifest,
   DonationManifest,
@@ -40,15 +45,17 @@ import type {
   LocalProject,
   SourceManifest,
   StoreStatus,
+  StoryView,
   TableManifest,
   TableSummary,
   UploadPoint,
 } from './api';
 import { deriveImport, pointProject } from './derived';
-import { fetchSettings, Review, sendDonation, uploadDonation, withdrawDonation } from './donate';
+import { donatedAnswers, fetchSettings, Review, sendDonation, uploadDonation, withdrawDonation } from './donate';
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
+import { storyView } from './story';
 import { listUpload } from './upload';
 import { rows, timeline, topItems } from './tables';
 
@@ -59,10 +66,18 @@ let store: LocalStore<DatasetManifest> | undefined;
 const cache = new Map<string, FlatNode[]>();
 const tableCache = new Map<string, { manifest: TableManifest; rows: Row[] }>();
 // An import waiting for the participant to choose where in the upload their export is.
-let pending: { listing: UploadListing; point: UploadPoint; choose: (ids: number[]) => Promise<Located> } | undefined;
+let pending:
+  | {
+      listing: UploadListing;
+      point: UploadPoint;
+      choose: (ids: number[]) => Promise<Located>;
+    }
+  | undefined;
 // The donation being reviewed, and the rows left out of it (kept encrypted in the store).
 let review: Review | undefined;
 let leftOut: { id?: string; keys: Set<string> } | undefined;
+// The participant's answers to the story's questions (kept encrypted in the store).
+let answers: { id?: string; values: Record<string, Answer> } | undefined;
 
 /** Forget everything kept in memory: on lock, and when switching projects. */
 function forget(): void {
@@ -70,6 +85,7 @@ function forget(): void {
   tableCache.clear();
   review = undefined;
   leftOut = undefined;
+  answers = undefined;
 }
 
 async function getStore(): Promise<LocalStore<DatasetManifest>> {
@@ -133,12 +149,7 @@ function sourceSummary(id: string, m: SourceManifest, tables: TableSummary[]): D
 }
 
 /** Run every bundled importer that matches the tree and store the results as tables. */
-async function runImporters(
-  s: LocalStore<DatasetManifest>,
-  sourceId: string,
-  tree: TreeNode,
-  importedAt: string,
-): Promise<TableSummary[]> {
+async function runImporters(s: LocalStore<DatasetManifest>, sourceId: string, tree: TreeNode, importedAt: string): Promise<TableSummary[]> {
   const matching = matchingImporters(tree, importers);
   if (matching.length === 0) return [];
   const sandbox = await createSandbox();
@@ -199,7 +210,13 @@ async function storeSource(
   // Keep the raw files that were read too, one encrypted blob each, so better importers can
   // read them later. Files outside the root, or skipped in it, are never kept.
   for (const { path, bytes } of read.files) {
-    const fileManifest: FileManifest = { type: 'file', sourceId: id, path, mime: '', size: bytes.byteLength };
+    const fileManifest: FileManifest = {
+      type: 'file',
+      sourceId: id,
+      path,
+      mime: '',
+      size: bytes.byteLength,
+    };
     await s.putFile(fileManifest, new Blob([bytes as Uint8Array<ArrayBuffer>]));
   }
   onProgress({ step: 'importers' });
@@ -221,7 +238,10 @@ async function storeDerived(
     const manifest: TableManifest = {
       type: 'table',
       sourceId,
-      importer: { id: `${derived.point.id}:${derived.point.pack ?? 'project'}`, version: 1 },
+      importer: {
+        id: `${derived.point.id}:${derived.point.pack ?? 'project'}`,
+        version: 1,
+      },
       name,
       importedAt,
       rowCount: rows.length,
@@ -239,15 +259,14 @@ async function storeDerived(
 }
 
 /** What to do with the result of looking for the root: store it, ask, or report a problem. */
-async function finish(
-  listing: UploadListing,
-  point: UploadPoint,
-  located: LocateResult,
-  onProgress: (p: ImportProgress) => void,
-): Promise<ImportResult> {
+async function finish(listing: UploadListing, point: UploadPoint, located: LocateResult, onProgress: (p: ImportProgress) => void): Promise<ImportResult> {
   if (located.status === 'choose') {
     pending = { listing, point, choose: located.choose };
-    return { status: 'choose', choices: located.choices, multiple: located.multiple };
+    return {
+      status: 'choose',
+      choices: located.choices,
+      multiple: located.multiple,
+    };
   }
   pending = undefined;
   if (located.status !== 'found') return { status: located.status };
@@ -291,7 +310,10 @@ async function leftOutKeys(): Promise<Set<string>> {
   if (leftOut) return leftOut.keys;
   const s = await unlockedStore();
   const stored = (await s.listDatasets()).find((d) => d.manifest.type === 'left-out');
-  leftOut = { ...(stored ? { id: stored.id } : {}), keys: new Set(stored ? await s.getItems<string>(stored.id) : []) };
+  leftOut = {
+    ...(stored ? { id: stored.id } : {}),
+    keys: new Set(stored ? await s.getItems<string>(stored.id) : []),
+  };
   return leftOut.keys;
 }
 
@@ -301,6 +323,49 @@ async function saveLeftOut(keys: Set<string>): Promise<void> {
   const id = await s.putDataset({ type: 'left-out' }, [...keys]);
   if (old) await s.deleteDataset(old);
   leftOut = { id, keys };
+}
+
+async function storedAnswers(): Promise<Record<string, Answer>> {
+  if (answers) return answers.values;
+  const s = await unlockedStore();
+  const stored = (await s.listDatasets()).find((d) => d.manifest.type === 'answers');
+  const values = Object.fromEntries(stored ? await s.getItems<[string, Answer]>(stored.id) : []);
+  answers = { ...(stored ? { id: stored.id } : {}), values };
+  return values;
+}
+
+async function saveAnswers(values: Record<string, Answer>): Promise<void> {
+  const s = await unlockedStore();
+  const old = answers?.id;
+  const manifest: AnswersManifest = { type: 'answers' };
+  const id = await s.putDataset(manifest, Object.entries(values));
+  if (old) await s.deleteDataset(old);
+  answers = { id, values };
+}
+
+/**
+ * The rows of each table the story refers to, by platform and table id: from every upload of
+ * the platform, so two uploads of one platform count together.
+ */
+async function storyTables(): Promise<Map<string, { rows: Row[]; date?: string }>> {
+  const datasets = await (await unlockedStore()).listDatasets();
+  const points = new Map<string, string | undefined>();
+  for (const d of datasets) if (d.manifest.type === 'source') points.set(d.id, pointOf(d.id, d.manifest, datasets));
+  const out = new Map<string, { rows: Row[]; date?: string }>();
+  for (const d of datasets) {
+    const key = d.manifest.type === 'table' ? d.manifest.derived?.key : undefined;
+    if (d.manifest.type !== 'table' || key === undefined) continue;
+    const point = points.get(d.manifest.sourceId);
+    if (!point) continue;
+    const id = JSON.stringify([point, key]);
+    const entry = out.get(id) ?? {
+      rows: [],
+      ...(d.manifest.display.date ? { date: d.manifest.display.date } : {}),
+    };
+    entry.rows.push(...(await tableOf(d.id)).rows);
+    out.set(id, entry);
+  }
+  return out;
 }
 
 function receiptOf(id: string, m: DonationManifest): DonationReceipt {
@@ -354,7 +419,10 @@ const api: DataApi = {
     const id = project.participants.mode === 'anonymous' ? undefined : participantId;
     const created = await createServerStore(project.id, id, password);
     if (!created.ok) return created.result;
-    await s.create(created.store, { project: { id: project.id, name: project.name }, participantId: id });
+    await s.create(created.store, {
+      project: { id: project.id, name: project.name },
+      participantId: id,
+    });
     return { status: 'ok' };
   },
 
@@ -410,7 +478,9 @@ const api: DataApi = {
       const projectTree = point && pointProject(point)?.tree;
       if (point && projectTree) return await finish(listing, point, await locateRoot(listing, projectTree), onProgress);
       // Without a project tree: everything, named as before, for the YAML importers.
-      const read = await readSpot(listing, await defaultRoot(listing), { name: listing.name });
+      const read = await readSpot(listing, await defaultRoot(listing), {
+        name: listing.name,
+      });
       return await storeSource(listing, read, onProgress, (s, id, importedAt) => runImporters(s, id, read.tree, importedAt));
     } catch (error) {
       if (error instanceof UploadProblemError) return { status: error.problem };
@@ -495,6 +565,45 @@ const api: DataApi = {
     return topItems(all, field, manifest.display.date, filter, limit, words ? STOPWORDS : undefined);
   },
 
+  async story() {
+    const study = await fetchSettings(projectId!);
+    if (!study) return 'unreachable';
+    if (!study.story) return 'none';
+    const tables = await storyTables();
+    const views: Record<string, StoryView> = {};
+    for (const slide of study.story.slides) {
+      for (const block of slide.blocks) {
+        if (block.type !== 'data') continue;
+        const table = tables.get(JSON.stringify([block.platform, block.table]));
+        if (!table) continue;
+        // Word lists leave out the most common words.
+        const words = block.column !== undefined && table.rows.some((r) => Array.isArray(r[block.column!]));
+        const view = storyView(block, table.rows, block.date ?? table.date, words ? STOPWORDS : undefined);
+        if (view) views[block.id] = view;
+      }
+    }
+    return { story: study.story, views, answers: await storedAnswers() };
+  },
+
+  async answer(questionId, answer) {
+    const next = { ...(await storedAnswers()) };
+    if (answer === null) delete next[questionId];
+    else next[questionId] = answer;
+    await saveAnswers(next);
+  },
+
+  async donationAnswers() {
+    const study = await fetchSettings(projectId!);
+    if (!study) return 'unreachable';
+    const stored = await storedAnswers();
+    return storyQuestions(study.story).flatMap((q) => {
+      const answer = stored[q.id];
+      if (answer === undefined || !validAnswer(q, answer)) return [];
+      const option = q.options?.find((o) => optionValue(o) === answer);
+      return [{ id: q.id, prompt: q.prompt, answer, ...(option ? { option } : {}) }];
+    });
+  },
+
   async donationOverview() {
     const r = await buildReview();
     if (r === 'unreachable') return r;
@@ -539,8 +648,9 @@ const api: DataApi = {
     }
     const keys = await leftOutKeys();
     const content = review.donated(keys);
-    if (content.values.length === 0) return { status: 'nothing' };
-    const sent = await sendDonation(projectId!, study, content, pin, consent);
+    const asked = donatedAnswers(study.story, await storedAnswers(), consent.language);
+    if (content.values.length === 0 && asked.questions.length === 0) return { status: 'nothing' };
+    const sent = await sendDonation(projectId!, study, content, pin, consent, asked);
     if (sent.status !== 'sent') return sent;
     const manifest: DonationManifest = {
       type: 'donation',
@@ -548,7 +658,10 @@ const api: DataApi = {
       token: sent.token,
       sent: new Date().toISOString(),
       rows: content.rows.length,
-      tables: review.overview(keys).tables.filter((t) => t.rowCount > t.leftOut).map((t) => t.name),
+      tables: review
+        .overview(keys)
+        .tables.filter((t) => t.rowCount > t.leftOut)
+        .map((t) => t.name),
     };
     const id = await (await unlockedStore()).putDataset(manifest, []);
     return { status: 'done', receipt: receiptOf(id, manifest) };
@@ -556,9 +669,7 @@ const api: DataApi = {
 
   async donations() {
     const datasets = await (await unlockedStore()).listDatasets();
-    return datasets
-      .flatMap((d) => (d.manifest.type === 'donation' ? [receiptOf(d.id, d.manifest)] : []))
-      .sort((a, b) => b.sent.localeCompare(a.sent));
+    return datasets.flatMap((d) => (d.manifest.type === 'donation' ? [receiptOf(d.id, d.manifest)] : [])).sort((a, b) => b.sent.localeCompare(a.sent));
   },
 
   async withdraw(id) {

@@ -152,6 +152,15 @@ export function answersCsv(opened: Opened[]): string | undefined {
   return [['donation', 'day', ...questions].map(csvCell).join(','), ...lines].join('\r\n') + '\r\n';
 }
 
+/** The questions as each participant read them: one row per question, in their language. */
+export function questionsCsv(opened: Opened[]): string | undefined {
+  const rows = opened.flatMap((d) =>
+    (d.payload.questions ?? []).map((q) => [d.id, d.day, d.payload.consent?.language ?? null, q.id, q.prompt, q.options ? q.options.join(' | ') : null]),
+  );
+  if (rows.length === 0) return undefined;
+  return [['donation', 'day', 'language', 'question', 'prompt', 'options'], ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
 /** What each participant agreed to: one row per statement, in the language they read it in. */
 export function consentCsv(opened: Opened[]): string | undefined {
   const rows = opened.flatMap((d) => (d.payload.consent?.statements ?? []).map((s) => [d.id, d.day, d.payload.consent!.language, s]));

@@ -1,4 +1,4 @@
-import { localize } from '@combray/core';
+import { localize, parseStory } from '@combray/core';
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -10,11 +10,12 @@ import { uploadPoints } from './projectConfig';
 import { projectPath, readRoute, STUDIES_PATH } from './route';
 import { Donate } from './screens/Donate';
 import { Faq } from './screens/Faq';
-import { Home } from './screens/Home';
+import { asksForData, Home } from './screens/Home';
 import { Landing } from './screens/Landing';
 import { Lock } from './screens/Lock';
 import { Notice } from './screens/Notice';
 import { Projects } from './screens/Projects';
+import { Story } from './screens/Story';
 import { Views } from './screens/Views';
 import type { DatasetSummary, ProjectInfo, StoreStatus, TableSummary } from './worker/api';
 import { data } from './worker/client';
@@ -47,7 +48,7 @@ export function App() {
         const response = await fetch(`/api/v1/p/${route.projectId}/config`, { cache: 'no-store' });
         if (response.status === 404) return setProject('not-found');
         if (!response.ok) return setProject('unreachable');
-        const config = (await response.json()) as Partial<Omit<ProjectInfo, 'uploads'>> & { uploads?: unknown };
+        const config = (await response.json()) as Partial<Omit<ProjectInfo, 'uploads' | 'story'>> & { uploads?: unknown; story?: unknown };
         await data.openProject(route.projectId);
         const uploads = uploadPoints(config.uploads);
         setProject({
@@ -55,6 +56,7 @@ export function App() {
           ...(config.name ? { name: config.name } : {}),
           participants: { mode: config.participants?.mode ?? 'optional' },
           ...(uploads.length > 0 ? { uploads } : {}),
+          ...(parseStory(config.story) ? { story: true as const } : {}),
         });
       } catch {
         setProject('unreachable');
@@ -175,6 +177,7 @@ function ProjectApp({ project, participantId, resetToken, keyPin, page }: Projec
   const [reset, setReset] = useState(resetToken);
   const [faq, setFaq] = useState(page === 'faq');
   const [donating, setDonating] = useState(false);
+  const [story, setStory] = useState(false);
 
   // The questions page is a pushed history entry, so the browser's back button closes it without
   // reloading, which would lock the store.
@@ -211,6 +214,7 @@ function ProjectApp({ project, participantId, resetToken, keyPin, page }: Projec
       await data.lock();
       setTable(undefined);
       setDonating(false);
+      setStory(false);
       setNotice(message);
       await refresh();
     },
@@ -290,6 +294,22 @@ function ProjectApp({ project, participantId, resetToken, keyPin, page }: Projec
             onDeleteAll={deleteAll}
           />
         )
+      ) : story ? (
+        <Story
+          onClose={() => {
+            setStory(false);
+            window.scrollTo(0, 0);
+          }}
+          {...(asksForData(datasets)
+            ? {
+                onDonate: () => {
+                  setStory(false);
+                  setDonating(true);
+                  window.scrollTo(0, 0);
+                },
+              }
+            : {})}
+        />
       ) : donating ? (
         <Donate {...(keyPin ? { keyPin } : {})} onBack={() => setDonating(false)} />
       ) : table ? (
@@ -302,6 +322,14 @@ function ProjectApp({ project, participantId, resetToken, keyPin, page }: Projec
             {...(project.uploads ? { points: project.uploads } : {})}
             onChanged={refresh}
             onOpenTable={setTable}
+            {...(project.story
+              ? {
+                  onStory: () => {
+                    setStory(true);
+                    window.scrollTo(0, 0);
+                  },
+                }
+              : {})}
             onDonate={() => {
               setDonating(true);
               window.scrollTo(0, 0);

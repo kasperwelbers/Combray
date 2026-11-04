@@ -138,6 +138,36 @@ const CONSENT = {
   statements: [{ en: 'I am 16 or older.' }],
 };
 
+/** A short story about the watch history, with a question of each kind. */
+const STORY = {
+  slides: [
+    {
+      id: 'amount',
+      title: { en: 'Your YouTube' },
+      blocks: [
+        { type: 'data', id: 'count', platform: 'takeout', table: 'youtube-watch-history', view: 'amount', text: { en: 'You watched {count} videos.' } },
+        { type: 'question', id: 'expected', kind: 'choice', prompt: { en: 'Is that more or less than you expected?' }, options: [{ en: 'Less' }, { en: 'More' }] },
+      ],
+    },
+    {
+      id: 'top',
+      blocks: [
+        { type: 'data', id: 'channels', platform: 'takeout', table: 'youtube-watch-history', view: 'top', column: 'channels/channel', text: { en: 'Your number one: {top}.' } },
+        { type: 'question', id: 'why', kind: 'open', prompt: { en: 'Why this one?' } },
+      ],
+    },
+    {
+      id: 'hours',
+      blocks: [
+        { type: 'data', id: 'rhythm', platform: 'takeout', table: 'youtube-watch-history', view: 'rhythm', text: { en: 'You watch most around {peak}.' } },
+        { type: 'question', id: 'hours', kind: 'number', prompt: { en: 'How many hours a day?' }, min: 0, max: 24, required: true },
+      ],
+    },
+    // Skipped: nobody has TikTok data here.
+    { id: 'tiktok', blocks: [{ type: 'data', id: 'tiktok', platform: 'tiktok', table: 'tiktok-likes', view: 'amount' }] },
+  ],
+};
+
 /** A Takeout upload point that asks for everything the pack shows. */
 function takeoutAskingAll() {
   const pack = join(repo, 'importers/google-takeout');
@@ -154,7 +184,7 @@ describe.skipIf(!enabled)('key page', () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'combray-e2e-'));
     mkdirSync(join(dir, 'data'), { recursive: true });
-    writeFileSync(join(dir, 'willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' }, consent: CONSENT, uploads: [takeoutAskingAll()] }));
+    writeFileSync(join(dir, 'willow.json'), JSON.stringify({ id: 'willow', name: { en: 'Willow study' }, consent: CONSENT, story: STORY, uploads: [takeoutAskingAll()] }));
     cli('project', 'import', join(dir, 'willow.json'));
     cli('researcher', 'add', 'ada@uni.example');
     cli('project', 'add-researcher', 'willow', 'ada@uni.example');
@@ -245,8 +275,28 @@ describe.skipIf(!enabled)('key page', () => {
     const zip = join(dir, 'takeout.zip');
     writeFileSync(zip, fixtureZip('google-takeout-en'));
     await page.locator('input[type=file]').first().setInputFiles(zip);
+
+    // The story: the participant's own numbers, and questions; answers go with the donation.
+    await page.getByRole('button', { name: 'Start your story' }).click();
+    await page.getByRole('heading', { name: 'Your YouTube' }).waitFor();
+    expect(await page.getByText(/^You watched [\d,]+ videos\.$/).isVisible()).toBe(true);
+    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'Next →' }).click();
+    await page.getByText(/^Your number one: .+\.$/).waitFor();
+    await page.getByRole('button', { name: 'Next →' }).click();
+    await page.getByText(/^You watch most around /).waitFor();
+    // A required question: no going on without an answer that fits.
+    expect(await page.getByRole('button', { name: 'Next →' }).isDisabled()).toBe(true);
+    await page.getByLabel('How many hours a day?').fill('30');
+    expect(await page.getByRole('button', { name: 'Next →' }).isDisabled()).toBe(true);
+    await page.getByLabel('How many hours a day?').fill('2');
+    await page.getByRole('button', { name: 'Next →' }).click();
+    // The TikTok slide is skipped: on to the end.
+    await page.getByRole('heading', { name: 'That was your story' }).waitFor();
     await page.getByRole('button', { name: 'See what you would share' }).click();
     await page.getByText(/rows will be shared/).waitFor();
+    await page.getByRole('heading', { name: 'Your answers' }).waitFor();
+    expect(await page.getByText('How many hours a day?').isVisible()).toBe(true);
 
     await page.getByLabel('Leave out everything that contains a word, a name or a site').fill('madeleines');
     await page.getByRole('button', { name: 'Leave out', exact: true }).click();
@@ -273,7 +323,10 @@ describe.skipIf(!enabled)('key page', () => {
     await expect.poll(() => Object.keys(downloads)).toContain('willow-YouTube-watch-history.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-values.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-consent.csv');
+    await expect.poll(() => Object.keys(downloads)).toContain('willow-questions.csv');
     expect(downloads['willow-consent.csv']).toContain('en,I am 16 or older.');
+    expect(downloads['willow-answers.csv']).toMatch(/,More,2(,|\r\n)/);
+    expect(downloads['willow-questions.csv']).toContain('en,hours,How many hours a day?,');
     expect(downloads['willow-YouTube-watch-history.csv']).toContain('Lime blossom tea');
     expect(downloads['willow-values.csv']!.toLowerCase()).not.toContain('madeleines');
 

@@ -24,7 +24,7 @@ import {
 } from '@combray/seal';
 
 import { type Me, type Member, type Project, type ProjectSummary, type Site, ApiError, api, projectName } from './api';
-import { answersCsv, consentCsv, openAll, safeFileName, toCsv, valuesCsv } from './decrypt';
+import { answersCsv, consentCsv, openAll, questionsCsv, safeFileName, toCsv, valuesCsv } from './decrypt';
 import { action, download, h, message, show } from './dom';
 import { authenticate, passkeysAvailable, register, signInWithPasskey } from './passkey';
 import * as vault from './vault';
@@ -677,6 +677,8 @@ async function donationsBlock(project: Project, seed: Uint8Array): Promise<HTMLE
         download(`${base}-values.csv`, valuesCsv(result.opened), 'text/csv');
         const answers = answersCsv(result.opened);
         if (answers) download(`${base}-answers.csv`, answers, 'text/csv');
+        const questions = questionsCsv(result.opened);
+        if (questions) download(`${base}-questions.csv`, questions, 'text/csv');
         const consent = consentCsv(result.opened);
         if (consent) download(`${base}-consent.csv`, consent, 'text/csv');
         download(`${base}-donations.json`, JSON.stringify(result.opened, null, 2), 'application/json');

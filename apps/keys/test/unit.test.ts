@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { answersCsv, consentCsv, csvCell, type Opened, safeFileName, toCsv, valuesCsv } from '../src/decrypt';
+import { answersCsv, consentCsv, csvCell, type Opened, questionsCsv, safeFileName, toCsv, valuesCsv } from '../src/decrypt';
 import { assertionJson, creationOptions, registrationJson } from '../src/passkey';
 
 const donation = (id: string, payload: Partial<Opened['payload']> = {}, answers?: Record<string, string>): Opened => ({
@@ -75,6 +75,13 @@ describe('CSV export', () => {
     ]);
     expect(csv).toBe('donation,day,language,statement\r\nd1,2026-11-01,nl,Ik ben 16 of ouder.\r\nd1,2026-11-01,nl,Ik heb bekeken wat ik deel.\r\n');
     expect(consentCsv([donation('d2')])).toBeUndefined();
+  });
+
+  it('writes the questions as each participant read them', () => {
+    const questions = [{ id: 'q1', prompt: 'Hoe vaak?', options: ['Vaak', 'Soms'] }, { id: 'q2', prompt: 'Waarom?' }];
+    const csv = questionsCsv([donation('d1', { consent: { language: 'nl', statements: [] }, questions }), donation('d2')]);
+    expect(csv).toBe('donation,day,language,question,prompt,options\r\nd1,2026-11-01,nl,q1,Hoe vaak?,Vaak | Soms\r\nd1,2026-11-01,nl,q2,Waarom?,\r\n');
+    expect(questionsCsv([donation('d2')])).toBeUndefined();
   });
 
   it('makes safe file names', () => {

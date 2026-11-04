@@ -69,7 +69,10 @@ export function pointProject(point: UploadPoint): PointProject | undefined {
     if (own.get(point.id)?.files !== files) {
       try {
         const importer = parseImporterFile(point.importer);
-        own.set(point.id, { files, project: project(configOf(importer), parseStructureFile(point.structure).root) });
+        own.set(point.id, {
+          files,
+          project: project(configOf(importer), parseStructureFile(point.structure).root),
+        });
       } catch {
         // A configuration the client cannot read: fall back to the pack, if there is one.
         own.delete(point.id);
@@ -80,7 +83,12 @@ export function pointProject(point: UploadPoint): PointProject | undefined {
   }
   const pack = packs.find((p) => p.id === point.pack);
   if (!pack) return undefined;
-  if (!projects.has(pack.id)) projects.set(pack.id, { config: configOf(pack.importer), seen: pack.structure.root, tree: packTree(pack) });
+  if (!projects.has(pack.id))
+    projects.set(pack.id, {
+      config: configOf(pack.importer),
+      seen: pack.structure.root,
+      tree: packTree(pack),
+    });
   return projects.get(pack.id);
 }
 
@@ -108,7 +116,12 @@ function nest(tables: TableDef[], rows: DerivedRow[][]): Row[][] {
 function columnInfo(column: ColumnDef, tables: TableDef[], tree: ProjectNode, added: Set<string>): ColumnInfo {
   const full = column.at;
   const isNew = full.some((_, i) => added.has(pathKey(full.slice(0, i + 1))));
-  const info: ColumnInfo = { id: column.id, name: column.name, type: column.type, state: column.state };
+  const info: ColumnInfo = {
+    id: column.id,
+    name: column.name,
+    type: column.type,
+    state: column.state,
+  };
   if (isNew) info.new = true;
   if (column.role) info.role = column.role;
   if (column.unnamed) info.unnamed = true;
@@ -207,6 +220,7 @@ export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project
     }
     const collection = anyColumn(columns, (c) => c.type !== 'table' && !c.undecided);
     const table: DerivedTable = {
+      key: def.id,
       name: def.name,
       path: def.where,
       record: def.rows === undefined,

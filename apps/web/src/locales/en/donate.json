@@ -59,5 +59,8 @@
   "withdraw": {
     "unreachable": "We could not reach the study's server just now. Please try again in a moment.",
     "failed": "We could not withdraw this donation. Please let the researchers know, with its code."
-  }
+  },
+  "answersTitle": "Your answers",
+  "answersIntro": "These answers to the questions in your story are shared along with your data. Remove any you would rather keep to yourself.",
+  "removeAnswer": "Remove"
 }

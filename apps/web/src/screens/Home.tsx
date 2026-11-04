@@ -17,6 +17,13 @@ interface Props {
   onOpenTable: (table: TableSummary) => void;
   /** Open the donation. Offered once something the study asks for has been added. */
   onDonate: () => void;
+  /** Open the study's story, when it has one. Offered once data has been added. */
+  onStory?: () => void;
+}
+
+/** Whether something the study asks participants to share has been added. */
+export function asksForData(datasets: DatasetSummary[]): boolean {
+  return datasets.some((d) => d.tables.some((table) => table.derived?.requested));
 }
 
 /** Tables the project shows or asks for come first, the ones it asks for before the others. */
@@ -44,7 +51,7 @@ function TableButton({ table, onOpen, path }: { table: TableSummary; onOpen: (t:
   );
 }
 
-export function Home({ datasets, points, onChanged, onOpenTable, onDonate }: Props) {
+export function Home({ datasets, points, onChanged, onOpenTable, onDonate, onStory }: Props) {
   const { t, i18n } = useTranslation();
   const [busy, setBusy] = useState(false);
 
@@ -64,7 +71,17 @@ export function Home({ datasets, points, onChanged, onOpenTable, onDonate }: Pro
         ))}
       </div>
 
-      {datasets.some((d) => d.tables.some((table) => table.derived?.requested)) && (
+      {onStory && datasets.length > 0 && (
+        <section className="card story-call" aria-labelledby="story-call-title">
+          <h2 id="story-call-title">{t('story.open')}</h2>
+          <p>{t('story.openIntro')}</p>
+          <button type="button" className="button" onClick={onStory}>
+            {t('story.openButton')}
+          </button>
+        </section>
+      )}
+
+      {asksForData(datasets) && (
         <section className="card donate-call" aria-labelledby="donate-call-title">
           <h2 id="donate-call-title">{t('donate.open')}</h2>
           <p>{t('donate.openIntro')}</p>

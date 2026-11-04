@@ -13,14 +13,20 @@ import {
   donationValues,
   extractShape,
   knownKeys,
+  localize,
   normalizeTree,
+  parseStory,
+  storyQuestions,
+  validAnswer,
   withoutRows,
+  type Answer,
   type DonatedRow,
   type DonationContent,
   type Localized,
+  type Story,
   type TreeNode,
 } from '@combray/core';
-import { donationRequest, encodePayload, fingerprint, fromBase64Url, sealDonation, type DonationConsent } from '@combray/seal';
+import { donationRequest, encodePayload, fingerprint, fromBase64Url, sealDonation, type DonationConsent, type DonationQuestion } from '@combray/seal';
 
 import { uploadPoints } from '../projectConfig';
 import type { DonateResult, DonationOverview, DonationRow, DonationTable, Page, StudyConsent, UploadPoint } from './api';
@@ -39,16 +45,25 @@ export interface UploadDonation {
  */
 export function uploadDonation(sourceId: string, raw: TreeNode, project: PointProject): UploadDonation {
   const prepared = normalizeTree(raw, { keys: knownKeys(project.tree) });
-  const tree = buildTree(project.config, extractShape(prepared), { seen: project.seen }).tree;
+  const tree = buildTree(project.config, extractShape(prepared), {
+    seen: project.seen,
+  }).tree;
   const tables = deriveTables(tree);
   const content = donationValues(prepared, tree, tables);
   const names = new Map<string, { name: Localized; fields: Map<string, Localized> }>();
   for (const t of tables) {
-    const entry = names.get(t.id) ?? { name: t.name, fields: new Map<string, Localized>() };
+    const entry = names.get(t.id) ?? {
+      name: t.name,
+      fields: new Map<string, Localized>(),
+    };
     for (const c of t.columns) if (!entry.fields.has(c.id)) entry.fields.set(c.id, c.name);
     names.set(t.id, entry);
   }
-  return { content, keys: content.rows.map((r) => JSON.stringify([sourceId, r.table, r.path])), names };
+  return {
+    content,
+    keys: content.rows.map((r) => JSON.stringify([sourceId, r.table, r.path])),
+    names,
+  };
 }
 
 const rowId = (table: string, row: number) => `${table}\u0000${row}`;
@@ -110,13 +125,21 @@ export class Review {
       return {
         id: t.id,
         name: names?.name ?? t.name,
-        fields: t.fields.map((f) => ({ id: f.id, name: names?.fields.get(f.id) ?? f.name })),
+        fields: t.fields.map((f) => ({
+          id: f.id,
+          name: names?.fields.get(f.id) ?? f.name,
+        })),
         ...(parent !== undefined ? { parent } : {}),
         rowCount: rows.length,
         leftOut: rows.filter((r) => dropped.has(rowId(r.table, r.row))).length,
       };
     });
-    return { tables, rows: this.content.rows.length, leftOut: dropped.size, ...(this.consent ? { consent: this.consent } : {}) };
+    return {
+      tables,
+      rows: this.content.rows.length,
+      leftOut: dropped.size,
+      ...(this.consent ? { consent: this.consent } : {}),
+    };
   }
 
   private matches(row: DonatedRow, query: string): boolean {
@@ -142,7 +165,12 @@ export class Review {
       items: rows.slice(offset, offset + limit).map((r) => {
         const key = this.keyOf.get(r)!;
         const out = dropped.has(rowId(r.table, r.row));
-        return { key, cells: this.cells.get(rowId(r.table, r.row)) ?? {}, leftOut: out && leftOut.has(key), withParent: out && !leftOut.has(key) };
+        return {
+          key,
+          cells: this.cells.get(rowId(r.table, r.row)) ?? {},
+          leftOut: out && leftOut.has(key),
+          withParent: out && !leftOut.has(key),
+        };
       }),
     };
   }
@@ -156,24 +184,36 @@ export class Review {
 /** The parts of a study's public config a donation needs. */
 export interface StudySettings {
   points: UploadPoint[];
-  /** The upload points and consent as sent, to tell when they change. */
+  /** The upload points, consent and story as sent, to tell when they change. */
   settings: string;
   consent?: StudyConsent;
+  /** The story participants are walked through, checked block by block. */
+  story?: Story;
   key?: { public_key: string; fingerprint: string };
 }
 
 /** The study's config, fetched fresh: settings the researcher changed today apply. */
 export async function fetchSettings(projectId: string): Promise<StudySettings | undefined> {
   try {
-    const response = await fetch(`/api/v1/p/${projectId}/config`, { cache: 'no-store', credentials: 'same-origin' });
+    const response = await fetch(`/api/v1/p/${projectId}/config`, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
     if (!response.ok) return undefined;
-    const config = (await response.json()) as { uploads?: unknown; consent?: unknown; donation_key?: { public_key?: unknown; fingerprint?: unknown } };
+    const config = (await response.json()) as {
+      uploads?: unknown;
+      consent?: unknown;
+      story?: unknown;
+      donation_key?: { public_key?: unknown; fingerprint?: unknown };
+    };
     const key = config.donation_key;
     const consent = studyConsent(config.consent);
+    const story = parseStory(config.story);
     return {
       points: uploadPoints(config.uploads),
-      settings: JSON.stringify([config.uploads ?? null, config.consent ?? null]),
+      settings: JSON.stringify([config.uploads ?? null, config.consent ?? null, config.story ?? null]),
       ...(consent ? { consent } : {}),
+      ...(story ? { story } : {}),
       ...(key && typeof key.public_key === 'string' && typeof key.fingerprint === 'string'
         ? { key: { public_key: key.public_key, fingerprint: key.fingerprint } }
         : {}),
@@ -193,7 +233,34 @@ export function studyConsent(raw: unknown): StudyConsent | undefined {
   const information = isLocalized(c.information) ? c.information : undefined;
   const statements = Array.isArray(c.statements) ? c.statements.filter(isLocalized) : [];
   if (!information && statements.length === 0) return undefined;
-  return { ...(information ? { information } : {}), ...(statements.length > 0 ? { statements } : {}) };
+  return {
+    ...(information ? { information } : {}),
+    ...(statements.length > 0 ? { statements } : {}),
+  };
+}
+
+/**
+ * The answers that go with a donation: to the story's questions as it is now, and only answers
+ * that fit them. The questions go along as the participant read them, in their language.
+ */
+export function donatedAnswers(
+  story: Story | undefined,
+  answers: Record<string, Answer>,
+  language: string,
+): { answers: Record<string, Answer>; questions: DonationQuestion[] } {
+  const out: Record<string, Answer> = {};
+  const questions: DonationQuestion[] = [];
+  for (const q of storyQuestions(story)) {
+    const answer = answers[q.id];
+    if (answer === undefined || !validAnswer(q, answer)) continue;
+    out[q.id] = answer;
+    questions.push({
+      id: q.id,
+      prompt: localize(q.prompt, language),
+      ...(q.options ? { options: q.options.map((o) => localize(o, language)) } : {}),
+    });
+  }
+  return { answers: out, questions };
 }
 
 /**
@@ -206,13 +273,23 @@ export async function sendDonation(
   content: DonationContent,
   pin: string | undefined,
   consent: DonationConsent,
+  asked: { answers: Record<string, Answer>; questions: DonationQuestion[] },
 ): Promise<DonateResult | { status: 'sent'; donation: string; token: string }> {
   if (!study.key) return { status: 'no-key' };
   const publicKey = fromBase64Url(study.key.public_key);
   const actual = await fingerprint(publicKey);
   if (actual !== study.key.fingerprint || (pin !== undefined && pin !== actual)) return { status: 'wrong-key' };
-  const payload = encodePayload({ format: 'combray-donation/1', tables: content.tables, values: content.values, consent });
-  const sealed = await sealDonation(payload, { projectId, projectPublicKey: publicKey });
+  const payload = encodePayload({
+    format: 'combray-donation/1',
+    tables: content.tables,
+    values: content.values,
+    ...(asked.questions.length > 0 ? asked : {}),
+    consent,
+  });
+  const sealed = await sealDonation(payload, {
+    projectId,
+    projectPublicKey: publicKey,
+  });
   let response: Response;
   try {
     response = await fetch(`/api/v1/p/${projectId}/donations`, {
@@ -228,8 +305,15 @@ export async function sendDonation(
   if (response.status === 413) return { status: 'too-big' };
   if (response.status === 409) return { status: 'no-key' };
   if (response.status !== 201) return { status: 'failed' };
-  const body = (await response.json()) as { donation: string; withdrawal_token: string };
-  return { status: 'sent', donation: body.donation, token: body.withdrawal_token };
+  const body = (await response.json()) as {
+    donation: string;
+    withdrawal_token: string;
+  };
+  return {
+    status: 'sent',
+    donation: body.donation,
+    token: body.withdrawal_token,
+  };
 }
 
 /** Ask the server to forget a donation's key. */

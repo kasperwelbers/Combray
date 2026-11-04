@@ -23,7 +23,167 @@
       }
     ]
   },
-  "note": "An example project for development: import it with `pnpm admin project import deploy/examples/projects/*.json`, which creates the project and publishes it. Researchers edit projects in the studio. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match, such as W-[0-9]{4}; no quantified groups, at most two * or +, 100 characters) is optional and never sent to participants. uploads lists the platforms; each starts from a bundled platform pack (pack), or carries the project's own tree (structure and importer, as the studio saves them). consent (optional) holds the information participants read before donating (plain text, an empty line between paragraphs) and up to 10 statements they must all tick.",
+  "story": {
+    "slides": [
+      {
+        "id": "welcome",
+        "title": {
+          "en": "Your year on YouTube",
+          "nl": "Jouw jaar op YouTube"
+        },
+        "blocks": [
+          {
+            "type": "text",
+            "id": "welcome-text",
+            "text": {
+              "en": "Let's take a short walk through what you watched. Everything you see here is worked out on your own computer.\n\nAlong the way we ask a few questions. You can skip any of them.",
+              "nl": "We maken een korte wandeling door wat je hebt bekeken. Alles wat je hier ziet wordt op je eigen computer uitgerekend.\n\nOnderweg stellen we een paar vragen. Die mag je allemaal overslaan."
+            }
+          }
+        ]
+      },
+      {
+        "id": "amount",
+        "blocks": [
+          {
+            "type": "data",
+            "id": "watched-count",
+            "platform": "takeout",
+            "table": "youtube-watch-history",
+            "view": "amount",
+            "text": {
+              "en": "You watched {count} videos: about {per_day} a day.",
+              "nl": "Je keek {count} video's: ongeveer {per_day} per dag."
+            }
+          },
+          {
+            "type": "question",
+            "id": "expected",
+            "kind": "choice",
+            "prompt": {
+              "en": "Is that more or less than you expected?",
+              "nl": "Is dat meer of minder dan je had verwacht?"
+            },
+            "options": [
+              {
+                "en": "Less",
+                "nl": "Minder"
+              },
+              {
+                "en": "About what I expected",
+                "nl": "Ongeveer wat ik verwachtte"
+              },
+              {
+                "en": "More",
+                "nl": "Meer"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "top-channels",
+        "blocks": [
+          {
+            "type": "data",
+            "id": "top-channels",
+            "platform": "takeout",
+            "table": "youtube-watch-history",
+            "view": "top",
+            "column": "channels/channel",
+            "top": 5,
+            "text": {
+              "en": "Your number one: {top}.",
+              "nl": "Jouw nummer één: {top}."
+            }
+          },
+          {
+            "type": "question",
+            "id": "why-top",
+            "kind": "open",
+            "prompt": {
+              "en": "Why do you think this one is at the top?",
+              "nl": "Waarom denk je dat deze bovenaan staat?"
+            }
+          }
+        ]
+      },
+      {
+        "id": "over-time",
+        "blocks": [
+          {
+            "type": "data",
+            "id": "watched-over-time",
+            "platform": "takeout",
+            "table": "youtube-watch-history",
+            "view": "over-time",
+            "text": {
+              "en": "Your busiest time was {peak}.",
+              "nl": "Je drukste periode was {peak}."
+            }
+          },
+          {
+            "type": "question",
+            "id": "busy-why",
+            "kind": "open",
+            "prompt": {
+              "en": "What was going on in your life around then?",
+              "nl": "Wat speelde er in die tijd in je leven?"
+            }
+          }
+        ]
+      },
+      {
+        "id": "rhythm",
+        "blocks": [
+          {
+            "type": "data",
+            "id": "watched-hours",
+            "platform": "takeout",
+            "table": "youtube-watch-history",
+            "view": "rhythm",
+            "by": "hour",
+            "text": {
+              "en": "You watch most around {peak}.",
+              "nl": "Je kijkt het meest rond {peak}."
+            }
+          },
+          {
+            "type": "question",
+            "id": "hours-a-day",
+            "kind": "number",
+            "prompt": {
+              "en": "How many hours a day do you think you spend on YouTube?",
+              "nl": "Hoeveel uur per dag denk je dat je op YouTube zit?"
+            },
+            "min": 0,
+            "max": 24
+          }
+        ]
+      },
+      {
+        "id": "searches",
+        "blocks": [
+          {
+            "type": "data",
+            "id": "searches-count",
+            "platform": "takeout",
+            "table": "google-searches",
+            "view": "amount",
+            "text": {
+              "en": "And you searched Google {count} times.",
+              "nl": "En je zocht {count} keer op Google."
+            },
+            "empty": {
+              "en": "You did not add any Google searches. That's fine!",
+              "nl": "Je hebt geen Google-zoekopdrachten toegevoegd. Dat is prima!"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "note": "An example project for development: import it with `pnpm admin project import deploy/examples/projects/*.json`, which creates the project and publishes it. Researchers edit projects in the studio. participants.mode is anonymous, optional or required; participants.pattern (a regular expression the whole id must match, such as W-[0-9]{4}; no quantified groups, at most two * or +, 100 characters) is optional and never sent to participants. uploads lists the platforms; each starts from a bundled platform pack (pack), or carries the project's own tree (structure and importer, as the studio saves them). consent (optional) holds the information participants read before donating (plain text, an empty line between paragraphs) and up to 10 statements they must all tick. story (optional) is what participants are walked through: slides of text, data views (amount, top, over-time, rhythm) on a table and column by their ids, and questions (open, choice, number); the studio's Story tab edits it.",
   "uploads": [
     {
       "id": "takeout",

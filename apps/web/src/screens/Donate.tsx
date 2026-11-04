@@ -2,7 +2,7 @@ import { localize } from '@combray/core';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { DonationOverview, DonationProblem, DonationReceipt, DonationRow, DonationTable, Page } from '../worker/api';
+import type { DonationAnswer, DonationOverview, DonationProblem, DonationReceipt, DonationRow, DonationTable, Page } from '../worker/api';
 import { data } from '../worker/client';
 
 const PAGE = 50;
@@ -24,6 +24,7 @@ interface Props {
 export function Donate({ keyPin, onBack }: Props) {
   const { t, i18n } = useTranslation();
   const [overview, setOverview] = useState<DonationOverview | 'unreachable'>();
+  const [answers, setAnswers] = useState<DonationAnswer[]>([]);
   const [receipts, setReceipts] = useState<DonationReceipt[]>([]);
   const [sent, setSent] = useState<DonationReceipt>();
   const [problem, setProblem] = useState<DonationProblem>();
@@ -36,8 +37,9 @@ export function Donate({ keyPin, onBack }: Props) {
 
   const load = useCallback(async () => {
     setOverview(undefined);
-    const [o, r] = await Promise.all([data.donationOverview(), data.donations()]);
+    const [o, r, a] = await Promise.all([data.donationOverview(), data.donations(), data.donationAnswers()]);
     setOverview(o);
+    setAnswers(a === 'unreachable' ? [] : a);
     setReceipts(r);
     setTicked(new Set());
     setVersion((v) => v + 1);
@@ -99,29 +101,40 @@ export function Donate({ keyPin, onBack }: Props) {
         </p>
       ) : overview === 'unreachable' ? (
         <p className="message error">{t('donate.unreachable')}</p>
-      ) : overview.tables.length === 0 ? (
+      ) : overview.tables.length === 0 && answers.length === 0 ? (
         <p>{t('donate.nothingAsked')}</p>
       ) : (
         <>
           <p>{t('donate.intro')}</p>
-          <LeaveOutSearch onChanged={changed} />
-          <p className="meta" role="status">
-            {t('donate.summary', { count: overview.rows - overview.leftOut })}
-            {overview.leftOut > 0 && (
-              <>
-                {' · '}
-                {t('donate.leftOutCount', { count: overview.leftOut })}{' '}
-                <button type="button" className="link-button" onClick={async () => changed(await data.putBackAll())}>
-                  {t('donate.putBackAll')}
-                </button>
-              </>
-            )}
-          </p>
+          {overview.tables.length > 0 && <LeaveOutSearch onChanged={changed} />}
+          {overview.tables.length > 0 && (
+            <p className="meta" role="status">
+              {t('donate.summary', { count: overview.rows - overview.leftOut })}
+              {overview.leftOut > 0 && (
+                <>
+                  {' · '}
+                  {t('donate.leftOutCount', { count: overview.leftOut })}{' '}
+                  <button type="button" className="link-button" onClick={async () => changed(await data.putBackAll())}>
+                    {t('donate.putBackAll')}
+                  </button>
+                </>
+              )}
+            </p>
+          )}
           <div className="donate-tables">
             {overview.tables.map((table) => (
               <DonateTable key={table.id} table={table} parent={overview.tables.find((p) => p.id === table.parent)} version={version} onChanged={changed} />
             ))}
           </div>
+          {answers.length > 0 && (
+            <Answers
+              answers={answers}
+              onRemove={async (id) => {
+                await data.answer(id, null);
+                setAnswers((list) => list.filter((a) => a.id !== id));
+              }}
+            />
+          )}
 
           <form className="card consent" onSubmit={donate}>
             <h2>{t('donate.consentTitle')}</h2>
@@ -153,7 +166,9 @@ export function Donate({ keyPin, onBack }: Props) {
               <button
                 type="submit"
                 className="button"
-                disabled={!agreed || ticked.size < (overview.consent?.statements?.length ?? 0) || busy || overview.rows === overview.leftOut}
+                disabled={
+                  !agreed || ticked.size < (overview.consent?.statements?.length ?? 0) || busy || (overview.rows === overview.leftOut && answers.length === 0)
+                }
               >
                 {busy ? t('donate.sending') : t('donate.send')}
               </button>
@@ -167,10 +182,38 @@ export function Donate({ keyPin, onBack }: Props) {
   );
 }
 
+/** The participant's answers to the story's questions: shared with the data, or taken back. */
+function Answers({ answers, onRemove }: { answers: DonationAnswer[]; onRemove: (id: string) => Promise<void> }) {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? 'en';
+  return (
+    <section className="card donate-answers" aria-labelledby="donate-answers-title">
+      <h2 id="donate-answers-title">{t('donate.answersTitle')}</h2>
+      <p>{t('donate.answersIntro')}</p>
+      <dl>
+        {answers.map((a) => (
+          <div key={a.id} className="donate-answer">
+            <dt>{localize(a.prompt, language)}</dt>
+            <dd>
+              <span>{a.option ? localize(a.option, language) : typeof a.answer === 'number' ? a.answer.toLocaleString(language) : short(a.answer)}</span>
+              <button type="button" className="link-button" onClick={() => void onRemove(a.id)}>
+                {t('donate.removeAnswer')}
+              </button>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 /** The study's information: plain text, an empty line between paragraphs. Never HTML. */
 function Information({ text }: { text: string }) {
   const { t } = useTranslation();
-  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
   return (
     <section className="study-information" aria-label={t('donate.information')}>
       {paragraphs.map((p, i) => (
@@ -252,7 +295,13 @@ function DonateTable({
           {table.leftOut > 0 && ` · ${t('donate.leftOutCount', { count: table.leftOut })}`}
         </span>
       </summary>
-      {parent && <p className="meta">{t('donate.nested', { name: localize(parent.name, i18n.language) || t('donate.unnamedTable') })}</p>}
+      {parent && (
+        <p className="meta">
+          {t('donate.nested', {
+            name: localize(parent.name, i18n.language) || t('donate.unnamedTable'),
+          })}
+        </p>
+      )}
       {open && (
         <>
           <p className="search">
@@ -326,7 +375,10 @@ function DonateTable({
                 </table>
               </div>
               <p className="meta">
-                {t('donate.shown', { shown: page.items.length, count: page.total })}{' '}
+                {t('donate.shown', {
+                  shown: page.items.length,
+                  count: page.total,
+                })}{' '}
                 {page.total > page.items.length && (
                   <button type="button" className="link-button" onClick={() => setLimit((l) => l + PAGE)}>
                     {t('donate.more')}
@@ -365,7 +417,11 @@ function Receipt({ receipt, onDone }: { receipt: DonationReceipt; onDone: () => 
 function Receipts({ receipts, onChanged }: { receipts: DonationReceipt[]; onChanged: () => Promise<void> }) {
   const { t, i18n } = useTranslation();
   const [failed, setFailed] = useState<string>();
-  const date = (iso: string) => new Date(iso).toLocaleString(i18n.language, { dateStyle: 'long', timeStyle: 'short' });
+  const date = (iso: string) =>
+    new Date(iso).toLocaleString(i18n.language, {
+      dateStyle: 'long',
+      timeStyle: 'short',
+    });
 
   async function withdraw(r: DonationReceipt) {
     if (!window.confirm(t('donate.confirmWithdraw'))) return;
@@ -386,7 +442,11 @@ function Receipts({ receipts, onChanged }: { receipts: DonationReceipt[]; onChan
               <div>
                 <strong>{t('donate.sentOn', { date: date(r.sent) })}</strong>
                 <div className="meta">
-                  {r.tables.map((n) => localize(n, i18n.language)).filter(Boolean).join(', ')} · {t('donate.rows', { count: r.rows })}
+                  {r.tables
+                    .map((n) => localize(n, i18n.language))
+                    .filter(Boolean)
+                    .join(', ')}{' '}
+                  · {t('donate.rows', { count: r.rows })}
                 </div>
                 <div className="meta">
                   {t('donate.code')} <code>{r.code}</code>

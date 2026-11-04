@@ -148,6 +148,10 @@ describe('donation envelopes', () => {
     expect(decodePayload(bytes({ ...base, consent })).consent).toEqual(consent);
     expect(() => decodePayload(bytes({ ...base, consent: { language: 'nl', statements: [1] } }))).toThrow('invalid consent');
     expect(() => decodePayload(bytes({ ...base, consent: { statements: [] } }))).toThrow('invalid consent');
+    const questions = [{ id: 'q1', prompt: 'Hoe vaak?', options: ['Vaak', 'Soms'] }, { id: 'q2', prompt: 'Waarom?' }];
+    expect(decodePayload(bytes({ ...base, answers: { q1: 'Often', q2: 'Daarom' }, questions })).questions).toEqual(questions);
+    expect(() => decodePayload(bytes({ ...base, questions: [{ id: 'q1' }] }))).toThrow('invalid questions');
+    expect(() => decodePayload(bytes({ ...base, questions: [{ id: 'q1', prompt: 'x', options: [1] }] }))).toThrow('invalid questions');
   });
 
   it('refuses tampering, truncation, the wrong key and the wrong donation', async () => {

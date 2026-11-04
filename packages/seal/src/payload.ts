@@ -43,8 +43,18 @@ export interface DonationPayload {
   values: DonatedValue[];
   /** Answers to the project's questions, by question id. */
   answers?: Record<string, Cell>;
+  /** The questions answered, as the participant read them: so researchers know what was asked. */
+  questions?: DonationQuestion[];
   /** What the participant read and agreed to, as they saw it. */
   consent?: DonationConsent;
+}
+
+/** A question of the study's story, in the language the participant read it. */
+export interface DonationQuestion {
+  id: string;
+  prompt: string;
+  /** For a choice: the options as shown. The answer is the option's text in English (or its first language). */
+  options?: string[];
 }
 
 /** The study's information and consent statements, in the language the participant read them. */
@@ -93,6 +103,14 @@ export function decodePayload(bytes: Uint8Array): DonationPayload {
   if (!value.values.every(validValue)) throw new Error('invalid value in payload');
   if (value.answers !== undefined && (typeof value.answers !== 'object' || !Object.values(value.answers).every(isCell))) {
     throw new Error('invalid answers in payload');
+  }
+  const q = value.questions;
+  if (
+    q !== undefined &&
+    (!Array.isArray(q) ||
+      !q.every((x) => typeof x === 'object' && x !== null && isText(x.id) && isText(x.prompt) && (x.options === undefined || (Array.isArray(x.options) && x.options.every(isText)))))
+  ) {
+    throw new Error('invalid questions in payload');
   }
   const c = value.consent;
   if (

@@ -1,4 +1,5 @@
 import type {
+  Answer,
   ColumnDef,
   DisplayHints,
   Localized,
@@ -8,6 +9,7 @@ import type {
   RootChoice,
   Row,
   Shape,
+  Story,
   UploadProblem,
   ValueType,
 } from '@combray/core';
@@ -63,6 +65,11 @@ export interface ColumnInfo {
 
 /** What a table derived through a project tree adds to its manifest. */
 export interface DerivedTable {
+  /**
+   * The table's stable id in the project (`TableDef.id`: its name's id, or the path of its rows),
+   * which stories refer to it by. Missing on tables imported before stories.
+   */
+  key?: string;
   name: Localized;
   /** Where its rows are in the project tree, for breadcrumbs. */
   path: NodePath;
@@ -132,7 +139,12 @@ export interface DonationManifest {
   withdrawn?: string;
 }
 
-export type DatasetManifest = SourceManifest | TableManifest | FileManifest | LeftOutManifest | DonationManifest;
+/** The participant's answers to the story's questions, by question id. Encrypted. */
+export interface AnswersManifest {
+  type: 'answers';
+}
+
+export type DatasetManifest = SourceManifest | TableManifest | FileManifest | LeftOutManifest | DonationManifest | AnswersManifest;
 
 export interface TableSummary {
   id: string;
@@ -250,6 +262,8 @@ export interface ProjectInfo {
   participants: { mode: 'anonymous' | 'optional' | 'required' };
   /** Without upload points, uploads go through the YAML importers. */
   uploads?: UploadPoint[];
+  /** The study has a story for participants. */
+  story?: true;
 }
 
 /** A project that has a store on this device. */
@@ -260,9 +274,7 @@ export interface LocalProject {
 }
 
 /** Why a store could not be created or opened. `retryAfter` is in seconds. */
-export type KeyServiceProblem =
-  | { status: 'too-many-attempts'; retryAfter: number }
-  | { status: 'unreachable' };
+export type KeyServiceProblem = { status: 'too-many-attempts'; retryAfter: number } | { status: 'unreachable' };
 
 export type CreateResult =
   | { status: 'ok' }
@@ -286,6 +298,44 @@ export type UnlockResult =
   /** The server no longer has this store's key, so the data cannot be opened again. */
   | { status: 'store-gone' }
   | KeyServiceProblem;
+
+/**
+ * What a data block of a story shows, computed from the participant's own tables on their device
+ * (`apps/web/src/worker/story.ts`). Dates are local days (`YYYY-MM-DD`).
+ */
+export type StoryView =
+  | {
+      view: 'amount';
+      count: number;
+      first?: string;
+      last?: string;
+      days?: number;
+    }
+  | { view: 'top'; items: { value: string; count: number }[]; distinct: number }
+  | {
+      view: 'over-time';
+      unit: TimeUnit;
+      buckets: { start: string; count: number }[];
+    }
+  /** Counts per hour (0 to 23) or per weekday (Monday first). */
+  | { view: 'rhythm'; by: 'hour' | 'weekday'; counts: number[] };
+
+/** The study's story, with what its data blocks show of this participant's data, and their answers. */
+export interface StoryOverview {
+  story: Story;
+  /** By data block id; blocks without data for this participant are missing. */
+  views: Record<string, StoryView>;
+  answers: Record<string, Answer>;
+}
+
+/** A question the participant answered, for the donation review. */
+export interface DonationAnswer {
+  id: string;
+  prompt: Localized;
+  answer: Answer;
+  /** For a choice: the option chosen, to show in the participant's language. */
+  option?: Localized;
+}
 
 /** A table of the donation, as the participant reviews it. */
 export interface DonationTable {
@@ -366,11 +416,7 @@ export interface DataApi {
    * Import an upload. With an upload point, its root is found for the point's project tree;
    * without, everything is read for the YAML importers.
    */
-  importFiles(
-    uploads: Upload[],
-    onProgress: (progress: ImportProgress) => void,
-    point?: UploadPoint,
-  ): Promise<ImportResult>;
+  importFiles(uploads: Upload[], onProgress: (progress: ImportProgress) => void, point?: UploadPoint): Promise<ImportResult>;
   /** Continue an import that returned `choose`, with the ids of the chosen places. */
   chooseRoots(ids: number[], onProgress: (progress: ImportProgress) => void): Promise<ImportResult>;
   /** Forget an import that is waiting for a choice. */
@@ -384,6 +430,15 @@ export interface DataApi {
   getRows(tableId: string, filter: RowFilter, offset: number, limit: number): Promise<Page<Row>>;
   getTimeline(tableId: string, filter: RowFilter, unit?: TimeUnit): Promise<Timeline>;
   getTopItems(tableId: string, field: string, filter: RowFilter, limit: number): Promise<TopItems>;
+  /**
+   * The study's story, with its data blocks computed from this participant's tables, and their
+   * answers. `none` when the study has no story; `unreachable` when its settings cannot be fetched.
+   */
+  story(): Promise<StoryOverview | 'none' | 'unreachable'>;
+  /** Keep an answer to a question of the story on this device; `null` removes it. */
+  answer(questionId: string, answer: Answer | null): Promise<void>;
+  /** The answers that would go with a donation, to the story's questions as they are now. */
+  donationAnswers(): Promise<DonationAnswer[] | 'unreachable'>;
   /**
    * What a donation would hold: the fields the study asks for, from every upload, with the
    * study's current settings (fetched fresh). `unreachable` when the settings cannot be fetched.

@@ -59,5 +59,8 @@
   "withdraw": {
     "unreachable": "We konden de server van het onderzoek nu niet bereiken. Probeer het zo nog eens.",
     "failed": "We konden deze donatie niet intrekken. Laat het de onderzoekers alsjeblieft weten, met de code."
-  }
+  },
+  "answersTitle": "Jouw antwoorden",
+  "answersIntro": "Deze antwoorden op de vragen in je verhaal worden samen met je gegevens gedeeld. Haal weg wat je liever voor jezelf houdt.",
+  "removeAnswer": "Weghalen"
 }
