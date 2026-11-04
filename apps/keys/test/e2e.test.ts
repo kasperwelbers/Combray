@@ -16,7 +16,8 @@ import { donationRequest, encodePayload, fromBase64Url, sealDonation } from '@co
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { fixtureZip } from '../../../importers/test/load';
+import { defaultRoot, extractShape, normalizeTree, readSpot } from '../../../packages/core/src';
+import { fixtureListing, fixtureZip } from '../../../importers/test/load';
 
 const enabled = process.env.COMBRAY_E2E === '1';
 const repo = join(__dirname, '../../..');
@@ -346,6 +347,22 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByText('Signed in as ada@uni.example').waitFor();
     await page.getByText('ready for donations').waitFor();
     expect(page.url()).toBe(`${MAIN}/studio/`);
+    // The story plays in the studio on a test package kept with the project, read as a participant's device reads it.
+    const listing = await fixtureListing('google-takeout-en');
+    const tree = normalizeTree((await readSpot(listing, await defaultRoot(listing))).tree, { keys: () => true });
+    const body = JSON.stringify({ name: 'Synthetic takeout', shape: extractShape(tree), data: tree, declaration: 'synthetic-or-not-sensitive' });
+    const added = await page.evaluate(
+      async (b) => (await fetch('/api/v1/projects/willow/draft/platforms/takeout/test-packages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: b })).status,
+      body,
+    );
+    expect(added).toBe(201);
+    await page.goto(`${MAIN}/studio/p/willow/story/`);
+    await page.getByRole('combobox', { name: 'Google Takeout' }).filter({ hasText: 'Synthetic takeout' }).waitFor();
+    await page.getByRole('button', { name: 'Play the story' }).click();
+    await page.getByText(/^You watched 3 videos\.$/).waitFor();
+    await page.getByRole('button', { name: 'Close the story' }).click();
+    await page.goto(`${MAIN}/studio/`);
+    await page.getByRole('heading', { name: 'Your projects' }).waitFor();
     // The studio session cannot fetch envelopes or keys: those are for the key page only.
     const status = await page.evaluate(async () => (await fetch('/api/v1/projects/willow/donation-keys', { method: 'POST', body: '{"ids":[]}', headers: { 'content-type': 'application/json' } })).status);
     expect([404, 405]).toContain(status);

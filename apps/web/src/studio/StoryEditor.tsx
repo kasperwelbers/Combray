@@ -18,7 +18,6 @@ import {
   QUESTION_KINDS,
   slideFromTemplate,
   STORY_LIMITS,
-  type ColumnDef,
   type DataBlock,
   type DataViewKind,
   type Localized,
@@ -26,8 +25,8 @@ import {
   type QuestionKind,
   type Slide,
   type SlideTemplate,
+  type Story,
   type StoryBlock,
-  type TableDef,
 } from '@combray/core';
 import { packs } from '@combray/importers';
 import { useEffect, useMemo, useState } from 'react';
@@ -36,57 +35,15 @@ import { useTranslation } from 'react-i18next';
 import { Block } from '../components/StoryBlocks';
 import type { StoryView } from '../worker/api';
 import { fromFiles } from './model';
+import { storyTables, type StoryTable } from './storyTables';
+import { PlayOverlay, PreviewBar, previewViews, useStoryPreview, type PlatformFiles } from './StoryPreview';
 import { ApiFailure, projectApi, type Draft } from './projectApi';
 import { textIn } from './text';
 
-/** A table participants can have, from one of the project's platforms. */
-export interface StoryTable {
-  platform: string;
-  platformName: Localized;
-  id: string;
-  name: Localized;
-  /** Columns with one value (or a list of values) per row; nested tables' columns as `table/column`. */
-  columns: { id: string; name: string }[];
-  /** Columns read as dates and times. The first one with the date role is the table's date. */
-  dates: { id: string; name: string }[];
-  date?: string;
-}
-
-const isDate = (c: ColumnDef) => c.role === 'date' || c.as === 'datetime';
-
-/** The tables of a platform's tree that participants see, by id (tables that share a name are one). */
-export function storyTables(platform: string, platformName: Localized, tables: TableDef[]): StoryTable[] {
-  const out = new Map<string, StoryTable>();
-  tables.forEach((table) => {
-    if (table.parent !== undefined || table.rows === undefined) return;
-    const entry = out.get(table.id) ?? { platform, platformName, id: table.id, name: table.name, columns: [], dates: [] };
-    const add = (list: { id: string; name: string }[], id: string, name: string) => {
-      if (!list.some((c) => c.id === id)) list.push({ id, name });
-    };
-    for (const column of table.columns) {
-      const name = localize(column.name, 'en') || column.id;
-      if (column.type === 'table') {
-        // Nested tables count their values in each row, as the participant's views do.
-        for (const nested of tables[column.table!]?.columns ?? []) {
-          if (nested.type === 'value' || nested.type === 'list') add(entry.columns, `${column.id}/${nested.id}`, `${name} › ${localize(nested.name, 'en') || nested.id}`);
-        }
-        continue;
-      }
-      add(entry.columns, column.id, name);
-      if (isDate(column)) {
-        add(entry.dates, column.id, name);
-        if (column.role === 'date' && entry.date === undefined) entry.date = column.id;
-      }
-    }
-    entry.date ??= entry.dates[0]?.id;
-    out.set(table.id, entry);
-  });
-  return [...out.values()];
-}
-
-/** The tables of every platform of the project, as its draft has them. */
-async function loadTables(draft: Draft): Promise<StoryTable[]> {
-  const out: StoryTable[] = [];
+/** Every platform of the project as its draft has it, with its tables. */
+async function loadPlatforms(draft: Draft): Promise<{ platforms: PlatformFiles[]; tables: StoryTable[] }> {
+  const platforms: PlatformFiles[] = [];
+  const tables: StoryTable[] = [];
   for (const summary of draft.platforms) {
     try {
       const platform = await projectApi.platform(draft.id, summary.id);
@@ -95,33 +52,18 @@ async function loadTables(draft: Draft): Promise<StoryTable[]> {
       const importer = platform.importer ?? pack?.importer;
       if (!structure || !importer) continue;
       const { config, seen } = fromFiles(parseStructureFile(structure), parseImporterFile(importer));
-      out.push(...storyTables(summary.id, summary.name, deriveTables(buildTree(config, seen).tree)));
+      tables.push(...storyTables(summary.id, summary.name, deriveTables(buildTree(config, seen).tree)));
+      platforms.push({ platform: summary.id, name: summary.name, ...(platform.pack ? { pack: platform.pack } : {}), structure, importer });
     } catch {
       // A platform that cannot be read offers no tables; the data explorer says why.
     }
   }
-  return out;
+  return { platforms, tables };
 }
 
 const tableKey = (platform: string, table: string) => JSON.stringify([platform, table]);
 
-/** Made-up numbers, so researchers see what each view looks like. */
-function sampleView(block: DataBlock): StoryView {
-  if (block.view === 'amount') return { view: 'amount', count: 4312, first: '2024-01-01', last: '2024-12-31', days: 366 };
-  if (block.view === 'top') {
-    const items = ['Example one', 'Example two', 'Example three', 'Example four', 'Example five', 'Example six', 'Example seven', 'Example eight', 'Example nine', 'Example ten'];
-    return { view: 'top', items: items.slice(0, block.top ?? 5).map((value, i) => ({ value, count: Math.round(240 / (i + 1.4)) })), distinct: 120 };
-  }
-  if (block.view === 'over-time') {
-    return {
-      view: 'over-time',
-      unit: 'month',
-      buckets: Array.from({ length: 12 }, (_, i) => ({ start: `2024-${String(i + 1).padStart(2, '0')}-01`, count: Math.round(300 + 180 * Math.sin(i / 2) + (i === 9 ? 260 : 0)) })),
-    };
-  }
-  if (block.by === 'weekday') return { view: 'rhythm', by: 'weekday', counts: [52, 48, 50, 55, 70, 96, 88] };
-  return { view: 'rhythm', by: 'hour', counts: Array.from({ length: 24 }, (_, h) => Math.round(h < 7 ? 4 : 30 + 40 * Math.sin(((h - 7) / 17) * Math.PI) + (h === 22 ? 40 : 0))) };
-}
+const NO_SLIDES: Slide[] = [];
 
 const TEMPLATES: SlideTemplate[] = ['amount', 'top', 'over-time', 'rhythm', 'question'];
 
@@ -129,6 +71,8 @@ export function StoryEditor({ draft }: { draft: Draft }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [slides, setSlides] = useState<Slide[]>();
   const [tables, setTables] = useState<StoryTable[]>([]);
+  const [platforms, setPlatforms] = useState<PlatformFiles[]>([]);
+  const [playing, setPlaying] = useState<Story>();
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<{ text: string; error?: boolean }>();
 
@@ -141,8 +85,13 @@ export function StoryEditor({ draft }: { draft: Draft }) {
       },
       () => setStatus({ text: t('studio.story.loadFailed'), error: true }),
     );
-    void loadTables(draft).then(setTables);
+    void loadPlatforms(draft).then((loaded) => {
+      setTables(loaded.tables);
+      setPlatforms(loaded.platforms);
+    });
   }, [draft, t]);
+
+  const preview = useStoryPreview(draft.id, platforms, slides ?? NO_SLIDES);
 
   if (!slides) return status ? <p className="message error">{status.text}</p> : null;
 
@@ -155,7 +104,7 @@ export function StoryEditor({ draft }: { draft: Draft }) {
   function addSlide(template: SlideTemplate) {
     const needsDate = template === 'over-time' || template === 'rhythm';
     const table = tables.find((x) => (needsDate ? x.date : template === 'top' ? x.columns.length > 0 : true));
-    const column = template === 'top' ? table?.columns.find((c) => !table.dates.some((d) => d.id === c.id))?.id ?? table?.columns[0]?.id : undefined;
+    const column = template === 'top' ? (table?.columns.find((c) => !table.dates.some((d) => d.id === c.id))?.id ?? table?.columns[0]?.id) : undefined;
     update([...slides!, slideFromTemplate(template, table ? { platform: table.platform, table: table.id, ...(column ? { column } : {}) } : undefined)]);
   }
 
@@ -181,6 +130,9 @@ export function StoryEditor({ draft }: { draft: Draft }) {
         {tables.length === 0 && <p className="message">{t('studio.story.noTables')}</p>}
       </section>
 
+      {platforms.length > 0 && <PreviewBar preview={preview} platforms={platforms} {...(checked ? { onPlay: () => setPlaying(checked) } : {})} />}
+      {playing && <PlayOverlay story={playing} views={previewViews(playing, preview.viewOf)} onClose={() => setPlaying(undefined)} />}
+
       {slides.map((slide, i) => (
         <SlideEditor
           key={slide.id}
@@ -188,6 +140,7 @@ export function StoryEditor({ draft }: { draft: Draft }) {
           index={i}
           count={slides.length}
           tables={tables}
+          viewOf={preview.viewOf}
           incomplete={(b) => !kept.has(`${slide.id}\u0000${b.id}`)}
           onChange={(next) => update(slides.map((s, j) => (j === i ? next : s)))}
           onMove={(by) => {
@@ -234,6 +187,7 @@ function SlideEditor({
   index,
   count,
   tables,
+  viewOf,
   incomplete,
   onChange,
   onMove,
@@ -243,6 +197,7 @@ function SlideEditor({
   index: number;
   count: number;
   tables: StoryTable[];
+  viewOf: (b: DataBlock) => StoryView | undefined;
   incomplete: (b: StoryBlock) => boolean;
   onChange: (s: Slide) => void;
   onMove: (by: number) => void;
@@ -258,11 +213,23 @@ function SlideEditor({
     onChange({ ...slide, blocks });
   };
   const addBlock = (type: StoryBlock['type']) => {
-    const template = slideFromTemplate(type === 'question' ? 'question' : 'amount', tables[0] ? { platform: tables[0].platform, table: tables[0].id } : undefined);
+    const template = slideFromTemplate(
+      type === 'question' ? 'question' : 'amount',
+      tables[0] ? { platform: tables[0].platform, table: tables[0].id } : undefined,
+    );
     const block: StoryBlock = type === 'text' ? { type: 'text', id: template.blocks[0]!.id.replace(/^d/, 't'), text: '' } : template.blocks[0]!;
     onChange({ ...slide, blocks: [...slide.blocks, block] });
   };
-  const views = useMemo(() => Object.fromEntries(slide.blocks.flatMap((b) => (b.type === 'data' ? [[b.id, sampleView(b)]] : []))), [slide.blocks]);
+  const views = useMemo(
+    () =>
+      Object.fromEntries(
+        slide.blocks.flatMap((b) => {
+          const v = b.type === 'data' ? viewOf(b) : undefined;
+          return v ? [[b.id, v]] : [];
+        }),
+      ),
+    [slide.blocks, viewOf],
+  );
 
   return (
     <section className="card story-slide-editor" aria-label={t('studio.story.slide', { n: index + 1 })}>
@@ -287,6 +254,9 @@ function SlideEditor({
       {preview ? (
         <div className="story-preview">
           <p className="meta">{t('studio.story.previewNote')}</p>
+          {slide.blocks.some((b) => b.type === 'data') && slide.blocks.every((b) => b.type !== 'data' || (!views[b.id] && !b.empty)) && (
+            <p className="message">{t('studio.story.skippedInPreview')}</p>
+          )}
           <div className="story-slide">
             {slide.title && <h2>{localize(slide.title, 'en')}</h2>}
             {slide.blocks.map((block) => (
@@ -296,7 +266,12 @@ function SlideEditor({
         </div>
       ) : (
         <>
-          <LocalizedInput label={t('studio.story.title')} help={t('studio.story.titleHelp')} value={slide.title} onChange={(title) => onChange(withOptional(slide, 'title', title))} />
+          <LocalizedInput
+            label={t('studio.story.title')}
+            help={t('studio.story.titleHelp')}
+            value={slide.title}
+            onChange={(title) => onChange(withOptional(slide, 'title', title))}
+          />
           <ol className="story-blocks">
             {slide.blocks.map((block, i) => (
               <li key={block.id} className="story-block-editor">
@@ -315,7 +290,14 @@ function SlideEditor({
                     </button>
                   </span>
                 </div>
-                {block.type === 'text' && <LocalizedInput label={t('studio.story.text')} multiline value={block.text} onChange={(text) => setBlock(i, { ...block, text: text ?? '' })} />}
+                {block.type === 'text' && (
+                  <LocalizedInput
+                    label={t('studio.story.text')}
+                    multiline
+                    value={block.text}
+                    onChange={(text) => setBlock(i, { ...block, text: text ?? '' })}
+                  />
+                )}
                 {block.type === 'data' && <DataEditor block={block} tables={tables} onChange={(b) => setBlock(i, b)} />}
                 {block.type === 'question' && <QuestionEditor block={block} onChange={(b) => setBlock(i, b)} />}
               </li>
@@ -465,7 +447,13 @@ function DataEditor({ block, tables, onChange }: { block: DataBlock; tables: Sto
           </label>
           <label className="field">
             {t('studio.story.howMany')}
-            <input type="number" min={3} max={10} value={block.top ?? 5} onChange={(e) => onChange({ ...block, top: Math.min(10, Math.max(3, Number(e.target.value) || 5)) })} />
+            <input
+              type="number"
+              min={3}
+              max={10}
+              value={block.top ?? 5}
+              onChange={(e) => onChange({ ...block, top: Math.min(10, Math.max(3, Number(e.target.value) || 5)) })}
+            />
           </label>
         </div>
       )}
@@ -475,7 +463,11 @@ function DataEditor({ block, tables, onChange }: { block: DataBlock; tables: Sto
           <label className="field">
             {t('studio.story.date')}
             <select value={block.date ?? ''} onChange={(e) => onChange(withOptional(block, 'date', e.target.value || undefined))}>
-              <option value="">{table?.date ? t('studio.story.tableDate', { name: table.dates.find((d) => d.id === table.date)?.name ?? table.date }) : t('studio.story.noDate')}</option>
+              <option value="">
+                {table?.date
+                  ? t('studio.story.tableDate', { name: table.dates.find((d) => d.id === table.date)?.name ?? table.date })
+                  : t('studio.story.noDate')}
+              </option>
               {(table?.dates ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -503,7 +495,12 @@ function DataEditor({ block, tables, onChange }: { block: DataBlock; tables: Sto
       />
       <details className="story-empty">
         <summary>{t('studio.story.emptyTitle')}</summary>
-        <LocalizedInput label={t('studio.story.empty')} help={t('studio.story.emptyHelp')} value={block.empty} onChange={(empty) => onChange(withOptional(block, 'empty', empty))} />
+        <LocalizedInput
+          label={t('studio.story.empty')}
+          help={t('studio.story.emptyHelp')}
+          value={block.empty}
+          onChange={(empty) => onChange(withOptional(block, 'empty', empty))}
+        />
       </details>
     </div>
   );
@@ -517,12 +514,17 @@ function QuestionEditor({ block, onChange }: { block: QuestionBlock; onChange: (
   function setKind(kind: QuestionKind) {
     const next: QuestionBlock = { type: 'question', id: block.id, kind, prompt: block.prompt };
     if (block.required) next.required = true;
-    if (kind === 'choice') next.options = block.options ?? [{ en: 'Yes', nl: 'Ja' }, { en: 'No', nl: 'Nee' }];
+    if (kind === 'choice')
+      next.options = block.options ?? [
+        { en: 'Yes', nl: 'Ja' },
+        { en: 'No', nl: 'Nee' },
+      ];
     onChange(next);
   }
 
   const options = block.options ?? [];
-  const bound = (key: 'min' | 'max', text: string) => onChange(withOptional(block, key, text.trim() === '' || Number.isNaN(Number(text)) ? undefined : Number(text)));
+  const bound = (key: 'min' | 'max', text: string) =>
+    onChange(withOptional(block, key, text.trim() === '' || Number.isNaN(Number(text)) ? undefined : Number(text)));
 
   return (
     <div className="story-question-editor">
@@ -587,7 +589,11 @@ function QuestionEditor({ block, onChange }: { block: QuestionBlock; onChange: (
         </div>
       )}
       <label className="check">
-        <input type="checkbox" checked={block.required === true} onChange={(e) => onChange(withOptional(block, 'required', e.target.checked ? true : undefined))} />
+        <input
+          type="checkbox"
+          checked={block.required === true}
+          onChange={(e) => onChange(withOptional(block, 'required', e.target.checked ? true : undefined))}
+        />
         {t('studio.story.required')}
       </label>
     </div>

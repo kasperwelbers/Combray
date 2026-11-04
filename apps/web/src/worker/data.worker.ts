@@ -45,7 +45,6 @@ import type {
   LocalProject,
   SourceManifest,
   StoreStatus,
-  StoryView,
   TableManifest,
   TableSummary,
   UploadPoint,
@@ -55,7 +54,7 @@ import { donatedAnswers, fetchSettings, Review, sendDonation, uploadDonation, wi
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
-import { storyView } from './story';
+import { addStoryTables, storyViews, type StoryTables } from './story';
 import { listUpload } from './upload';
 import { rows, timeline, topItems } from './tables';
 
@@ -343,27 +342,17 @@ async function saveAnswers(values: Record<string, Answer>): Promise<void> {
   answers = { id, values };
 }
 
-/**
- * The rows of each table the story refers to, by platform and table id: from every upload of
- * the platform, so two uploads of one platform count together.
- */
-async function storyTables(): Promise<Map<string, { rows: Row[]; date?: string }>> {
+/** The rows of each table the story can refer to, from every upload made through an upload point. */
+async function storyTables(): Promise<StoryTables> {
   const datasets = await (await unlockedStore()).listDatasets();
   const points = new Map<string, string | undefined>();
   for (const d of datasets) if (d.manifest.type === 'source') points.set(d.id, pointOf(d.id, d.manifest, datasets));
-  const out = new Map<string, { rows: Row[]; date?: string }>();
+  const out: StoryTables = new Map();
   for (const d of datasets) {
-    const key = d.manifest.type === 'table' ? d.manifest.derived?.key : undefined;
-    if (d.manifest.type !== 'table' || key === undefined) continue;
+    if (d.manifest.type !== 'table' || d.manifest.derived?.key === undefined) continue;
     const point = points.get(d.manifest.sourceId);
     if (!point) continue;
-    const id = JSON.stringify([point, key]);
-    const entry = out.get(id) ?? {
-      rows: [],
-      ...(d.manifest.display.date ? { date: d.manifest.display.date } : {}),
-    };
-    entry.rows.push(...(await tableOf(d.id)).rows);
-    out.set(id, entry);
+    addStoryTables(out, point, [{ key: d.manifest.derived.key, date: d.manifest.display.date, rows: (await tableOf(d.id)).rows }]);
   }
   return out;
 }
@@ -569,19 +558,7 @@ const api: DataApi = {
     const study = await fetchSettings(projectId!);
     if (!study) return 'unreachable';
     if (!study.story) return 'none';
-    const tables = await storyTables();
-    const views: Record<string, StoryView> = {};
-    for (const slide of study.story.slides) {
-      for (const block of slide.blocks) {
-        if (block.type !== 'data') continue;
-        const table = tables.get(JSON.stringify([block.platform, block.table]));
-        if (!table) continue;
-        // Word lists leave out the most common words.
-        const words = block.column !== undefined && table.rows.some((r) => Array.isArray(r[block.column!]));
-        const view = storyView(block, table.rows, block.date ?? table.date, words ? STOPWORDS : undefined);
-        if (view) views[block.id] = view;
-      }
-    }
+    const views = storyViews(study.story, await storyTables());
     return { story: study.story, views, answers: await storedAnswers() };
   },
 

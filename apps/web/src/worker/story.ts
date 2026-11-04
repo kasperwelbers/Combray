@@ -3,10 +3,52 @@
  * (docs/plans/2026-11-05-stories-and-exploration.md). Only counts leave this module, and only
  * to the participant's own screen: nothing here is sent.
  */
-import type { DataBlock, Row } from '@combray/core';
+import type { DataBlock, Row, Story } from '@combray/core';
 
 import type { StoryView, TimeUnit } from './api';
+import { STOPWORDS } from './stopwords';
 import { localTime, timeline, topItems } from './tables';
+
+/** The rows of the tables a story can refer to, by `storyTableKey`, with each table's date. */
+export type StoryTables = Map<string, { rows: Row[]; date?: string }>;
+
+/** A table of one platform (upload point), by its id. */
+export const storyTableKey = (platform: string, table: string) => JSON.stringify([platform, table]);
+
+/**
+ * Add the tables of one upload to the story's tables: rows of uploads of the same platform
+ * count together. `tables` are as `deriveImport` gives them (with `key`, the table's id).
+ */
+export function addStoryTables(
+  out: StoryTables,
+  platform: string,
+  tables: { key?: string | undefined; date?: string | undefined; rows: Row[] }[],
+): void {
+  for (const table of tables) {
+    if (table.key === undefined) continue;
+    const id = storyTableKey(platform, table.key);
+    const entry = out.get(id) ?? { rows: [], ...(table.date ? { date: table.date } : {}) };
+    entry.rows.push(...table.rows);
+    out.set(id, entry);
+  }
+}
+
+/** What each data block of a story shows, by block id; blocks without data are left out. */
+export function storyViews(story: Story, tables: StoryTables): Record<string, StoryView> {
+  const views: Record<string, StoryView> = {};
+  for (const slide of story.slides) {
+    for (const block of slide.blocks) {
+      if (block.type !== 'data') continue;
+      const table = tables.get(storyTableKey(block.platform, block.table));
+      if (!table) continue;
+      // Word lists leave out the most common words.
+      const words = block.column !== undefined && table.rows.some((r) => Array.isArray(r[block.column!]));
+      const view = storyView(block, table.rows, block.date ?? table.date, words ? STOPWORDS : undefined);
+      if (view) views[block.id] = view;
+    }
+  }
+  return views;
+}
 
 const DAY = 86_400_000;
 

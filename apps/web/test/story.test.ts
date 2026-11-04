@@ -1,10 +1,11 @@
-import { deriveTables, parseStory, type DataBlock } from '@combray/core';
+import { deriveTables, locateRoot, parseStory, type DataBlock } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
-import { storyTables } from '../src/studio/StoryEditor';
-import { pointProject } from '../src/worker/derived';
+import { storyTables } from '../src/studio/storyTables';
+import { fixtureListing } from '../../../importers/test/load';
+import { deriveImport, pointProject } from '../src/worker/derived';
 import { donatedAnswers } from '../src/worker/donate';
-import { storyView } from '../src/worker/story';
+import { addStoryTables, storyView, storyViews, type StoryTables } from '../src/worker/story';
 
 const block = (view: DataBlock['view'], extra: Partial<DataBlock> = {}): DataBlock => ({ type: 'data', id: 'b', platform: 'p', table: 't', view, ...extra });
 
@@ -100,5 +101,37 @@ describe('tables for the story editor', () => {
     // Nested tables are not tables of their own here: their columns are in their parent's.
     expect(tables.some((t) => t.id === 'channels')).toBe(false);
     expect(new Set(tables.map((t) => t.id)).size).toBe(tables.length);
+  });
+});
+
+describe('a story over an upload', () => {
+  it('shows what the upload holds, the way a participant device reads it', async () => {
+    const point = { id: 'takeout', pack: 'google-takeout' };
+    const project = pointProject(point)!;
+    const located = await locateRoot(await fixtureListing('google-takeout-en'), project.tree);
+    if (located.status !== 'found') throw new Error(located.status);
+    const derived = deriveImport(located.root, project, point);
+    const tables: StoryTables = new Map();
+    addStoryTables(tables, 'takeout', derived.tables.map((t) => ({ key: t.table.key, date: t.table.display.date, rows: t.rows })));
+    const story = parseStory({
+      slides: [
+        {
+          id: 's',
+          blocks: [
+            { type: 'data', id: 'count', platform: 'takeout', table: 'youtube-watch-history', view: 'amount' },
+            { type: 'data', id: 'channels', platform: 'takeout', table: 'youtube-watch-history', view: 'top', column: 'channels/channel' },
+            { type: 'data', id: 'hours', platform: 'takeout', table: 'youtube-watch-history', view: 'rhythm' },
+            { type: 'data', id: 'other', platform: 'tiktok', table: 'tiktok-likes', view: 'amount' },
+          ],
+        },
+      ],
+    })!;
+    const views = storyViews(story, tables);
+    const rows = derived.tables.find((t) => t.table.key === 'youtube-watch-history')!.rows.length;
+    expect(views.count).toMatchObject({ view: 'amount', count: rows });
+    expect(views.channels?.view === 'top' && views.channels.items.length).toBeGreaterThan(0);
+    expect(views.hours?.view === 'rhythm' && views.hours.counts.reduce((a, b) => a + b, 0)).toBe(rows);
+    // No TikTok upload: nothing to show.
+    expect(views.other).toBeUndefined();
   });
 });

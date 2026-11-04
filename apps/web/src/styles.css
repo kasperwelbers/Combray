@@ -2632,3 +2632,26 @@ main.wide {
     grid-template-columns: 1fr;
   }
 }
+
+.story-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 0.25rem 0 0;
+}
+
+/* The studio plays the story over the page, as participants see it. */
+.story-play-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow-y: auto;
+  padding: 1.5rem 1rem 3rem;
+  background: var(--paper);
+}
+
+.story-play-note {
+  max-width: 44rem;
+  margin: 0 auto 0.5rem;
+}

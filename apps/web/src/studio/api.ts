@@ -1,6 +1,6 @@
-import type { ChartData, ChartSpec, ColumnDef, Localized, ProjectNode, Shape, TableDef, TreeNode } from '@combray/core';
+import type { ChartData, ChartSpec, ColumnDef, Localized, ProjectNode, Shape, Story, TableDef, TreeNode } from '@combray/core';
 
-import type { ImportProgress, Upload } from '../worker/api';
+import type { ImportProgress, StoryView, Upload } from '../worker/api';
 
 /** An export the researcher loaded into the workspace. Kept in the worker's memory only. */
 export interface StudioExport {
@@ -71,6 +71,22 @@ export interface StudioApi {
   examples(tree: ProjectNode, paths: string[][], perField: number): Promise<Record<string, string[]>>;
   /** A chart over all rows of the loaded exports. Only counts and summaries come back. */
   chart(tree: ProjectNode, spec: ChartSpec): Promise<ChartData>;
+  /** Keep a test package for previewing the story, apart from the loaded exports. */
+  loadStoryPackage(key: string, tree: TreeNode): Promise<void>;
+  /**
+   * What the story's data blocks show for one test package per platform, read the way a
+   * participant's device reads it. Only counts come back.
+   */
+  storyViews(story: Story, sources: StoryPreviewSource[]): Promise<Record<string, StoryView>>;
+}
+
+/** A platform's files as the draft has them, with the test package (`loadStoryPackage` key) to preview with. */
+export interface StoryPreviewSource {
+  platform: string;
+  structure?: unknown;
+  importer?: unknown;
+  pack?: string;
+  package: string;
 }
 
 /** A test package kept with a project's platform on the server (`/test-packages`). */

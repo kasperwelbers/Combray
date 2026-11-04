@@ -25,6 +25,8 @@ import {
 } from '@combray/core';
 import * as Comlink from 'comlink';
 
+import { deriveImport, pointProject } from '../worker/derived';
+import { addStoryTables, storyViews, type StoryTables } from '../worker/story';
 import { listUpload } from '../worker/upload';
 import type { PreviewRow, PreviewTable, PreviewValue, StudioApi, StudioExport } from './api';
 
@@ -36,6 +38,8 @@ const EXAMPLE_LENGTH = 40;
 const MAX_NESTED = 2000;
 
 const exports = new Map<number, { info: StudioExport; tree: TreeNode }>();
+/** Test packages for the story preview, by key; kept apart so they never mix into the exports. */
+const storyPackages = new Map<string, TreeNode>();
 let nextId = 1;
 
 function text(value: unknown): string | null {
@@ -76,6 +80,29 @@ function allRows(projectTree: ProjectNode, tables: TableDef[], only?: number): D
 }
 
 const api: StudioApi = {
+  async loadStoryPackage(key, tree) {
+    storyPackages.set(key, tree);
+  },
+
+  async storyViews(story, sources) {
+    // As on a participant's device: the package read through the platform's tree, its tables
+    // derived, and the views computed from their rows.
+    const tables: StoryTables = new Map();
+    for (const source of sources) {
+      const tree = storyPackages.get(source.package);
+      const point = { id: source.platform, ...(source.pack ? { pack: source.pack } : {}), structure: source.structure, importer: source.importer };
+      const project = tree && pointProject(point);
+      if (!tree || !project) continue;
+      const derived = deriveImport({ prepared: tree, shape: extractShape(tree) }, project, point);
+      addStoryTables(
+        tables,
+        source.platform,
+        derived.tables.map((t) => ({ key: t.table.key, date: t.table.display.date, rows: t.rows })),
+      );
+    }
+    return storyViews(story, tables);
+  },
+
   async addExport(uploads, onProgress) {
     onProgress({ step: 'looking' });
     // The researcher's own export defines the root: a file or picked folder as it is, an

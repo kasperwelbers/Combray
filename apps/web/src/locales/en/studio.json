@@ -519,7 +519,7 @@
     "titleHelp": "A short heading above the slide.",
     "preview": "Preview",
     "edit": "Edit",
-    "previewNote": "With made-up numbers: participants see their own.",
+    "previewNote": "With the test package or the made-up numbers chosen above.",
     "moveUp": "Move up",
     "moveDown": "Move down",
     "removeSlide": "Remove slide",
@@ -571,6 +571,14 @@
     "saved": "Saved. Participants see it once you publish the project.",
     "unsaved": "Unsaved changes",
     "invalid": "The story could not be saved: it is too long.",
-    "unknownTable": "This table is not in the project's platforms now, so participants will not see this view. Choose another table, or add the platform in the data explorer."
+    "unknownTable": "This table is not in the project's platforms now, so participants will not see this view. Choose another table, or add the platform in the data explorer.",
+    "previewWith": "Preview with",
+    "previewWithHelp": "A test package per platform, read the way a participant's device reads it, or made-up numbers. Only test packages whose values you kept with the project can be used (add them in the data explorer).",
+    "madeUp": "Made-up numbers",
+    "play": "Play the story",
+    "playNote": "Preview: answers are not kept.",
+    "previewBusy": "Working out the views…",
+    "previewFailed": "A test package could not be loaded; showing made-up numbers for it.",
+    "skippedInPreview": "Participants with data like this test package skip this slide: none of its views has data."
   }
 }
