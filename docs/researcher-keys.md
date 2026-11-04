@@ -6,6 +6,20 @@ How researchers sign in, how their keys are made and kept, how a colleague is gi
 
 A researcher signs in with a link sent by email, then with a **passkey** (Face ID, a fingerprint, a phone or a security key). The passkey does double duty: it is the second factor, and through the WebAuthn **PRF** extension it gives the browser a secret that unlocks the researcher's **personal key**. The server keeps the personal key only locked under that secret, so it cannot open it. Each project has one **project key**; every member with access has a copy of it sealed to their personal key. A colleague gets access when an existing member seals a copy for them in their own browser, after both compare a short **key code** by phone or in person. Donations are sealed to the project key and opened on the **key page**, a small page on its own address that does nothing else. A one-time **recovery code**, printed or saved when the key is made, replaces a lost passkey.
 
+## The keys, and what researchers see
+
+The same things have a technical name (in the code and these docs) and a name researchers see on screen. Researchers only ever meet the passkey, the recovery code, the project encryption key and the key code; the personal key is explained in the [researcher explainer](explainers/keys.html#chain), not asked about.
+
+| On screen | In code and docs | What it is |
+| --- | --- | --- |
+| Passkey | Passkey | Signs the researcher in on the key page, alone, without email. Its PRF output unlocks the personal key. Whoever can use it has full access, so it belongs on the researcher's own devices only |
+| Recovery code | Master secret | The researcher's personal key, written out. Replaces a lost passkey; store it well |
+| (explained only) | Personal key | The researcher's own X-Wing key pair (called the researcher key in early notes). Opens their copies of project keys |
+| Project encryption key, or "encryption key" where the project is clear | Project key | The project's X-Wing key pair. Donation keys are sealed to it; each member with access has a copy sealed to their personal key |
+| Key code | Key code | A short fingerprint of a personal key, compared by phone before giving access |
+| (not shown) | Donation key | A fresh key per donation, sealed to the project key |
+| Email code | Email code | Proves the address once: for the first passkey, a device without a passkey, a lost passkey, or starting over |
+
 ## Why not a local tool, and why not keys on the server
 
 The plan was a small local tool for key pairs and decryption. For the researchers Combray is for, installing and keeping a signed desktop tool is a real barrier, and a key file plus passphrase is something people lose. A browser page with a passkey asks for nothing to install and nothing new to remember.

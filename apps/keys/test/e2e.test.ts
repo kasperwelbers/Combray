@@ -123,10 +123,10 @@ async function setUp(page: Page, email: string): Promise<string> {
   if (await oneMore.isVisible()) await oneMore.click();
   await code.waitFor();
   const recovery = (await code.textContent())!;
-  expect(await page.getByText('This passkey cannot hold your key').count()).toBe(0);
+  expect(await page.getByText('This passkey cannot unlock your project encryption keys').count()).toBe(0);
   await page.getByLabel('I have saved my recovery code somewhere safe').check();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('heading', { name: 'Your keys' }).waitFor();
+  await page.getByRole('heading', { name: 'Your projects' }).waitFor();
   return recovery;
 }
 
@@ -168,7 +168,7 @@ describe.skipIf(!enabled)('key page', () => {
   it('signs in again with the passkey alone', async () => {
     await ada.page.getByRole('button', { name: 'Sign out' }).click();
     await ada.page.getByRole('button', { name: 'Use your passkey' }).click();
-    await ada.page.getByRole('heading', { name: 'Your keys' }).waitFor();
+    await ada.page.getByRole('heading', { name: 'Your projects' }).waitFor();
   }, 30_000);
 
   it('opens a donation and exports it as CSV', async () => {
@@ -184,7 +184,7 @@ describe.skipIf(!enabled)('key page', () => {
 
     await ada.page.reload();
     await ada.page.getByRole('button', { name: 'Use passkey' }).click();
-    await ada.page.getByRole('heading', { name: 'Your keys' }).waitFor();
+    await ada.page.getByRole('heading', { name: 'Your projects' }).waitFor();
     await ada.page.getByText('1 donation(s), 0 withdrawn.').waitFor();
 
     const downloads: Record<string, string> = {};
@@ -213,7 +213,7 @@ describe.skipIf(!enabled)('key page', () => {
     // Leaving the key page locked the keys: unlock again for the next steps.
     await page.goto(KEYS);
     await page.getByRole('button', { name: 'Use passkey' }).click();
-    await page.getByRole('heading', { name: 'Your keys' }).waitFor();
+    await page.getByRole('heading', { name: 'Your projects' }).waitFor();
   }, 60_000);
 
   it.skipIf(!hasWeb)('takes a researcher from the studio to the key page and straight back, signed in', async () => {
@@ -226,12 +226,12 @@ describe.skipIf(!enabled)('key page', () => {
     // Only paths in the studio: anything else is ignored, and the key page stays.
     await page.goto(`${MAIN}/`);
     await page.goto(`${KEYS}/#studio=https://elsewhere.example/`);
-    await page.getByRole('heading', { name: 'Use your passkey' }).or(page.getByRole('heading', { name: 'Your keys' })).waitFor();
+    await page.getByRole('heading', { name: 'Use your passkey' }).or(page.getByRole('heading', { name: 'Your projects' })).waitFor();
     expect(page.url().startsWith(KEYS)).toBe(true);
     await page.goto(KEYS);
-    await page.getByRole('button', { name: 'Use passkey' }).or(page.getByRole('heading', { name: 'Your keys' })).first().waitFor();
+    await page.getByRole('button', { name: 'Use passkey' }).or(page.getByRole('heading', { name: 'Your projects' })).first().waitFor();
     if (await page.getByRole('button', { name: 'Use passkey' }).isVisible()) await page.getByRole('button', { name: 'Use passkey' }).click();
-    await page.getByRole('heading', { name: 'Your keys' }).waitFor();
+    await page.getByRole('heading', { name: 'Your projects' }).waitFor();
   }, 60_000);
 
   it('gives a colleague access after comparing key codes', async () => {
@@ -265,7 +265,7 @@ describe.skipIf(!enabled)('key page', () => {
     await lost.page.getByRole('button', { name: 'Continue' }).click();
     await lost.page.getByRole('heading', { name: 'Add a new passkey' }).waitFor();
     await lost.page.getByRole('button', { name: 'Create passkey' }).click();
-    await lost.page.getByRole('heading', { name: 'Your keys' }).waitFor();
+    await lost.page.getByRole('heading', { name: 'Your projects' }).waitFor();
     await lost.page.getByText('1 donation(s), 0 withdrawn.').waitFor();
     await lost.context.close();
   }, 60_000);
@@ -276,7 +276,7 @@ describe.skipIf(!enabled)('key page', () => {
       await signInByEmail(b.page, email);
       await b.page.getByRole('button', { name: 'I lost my passkey: use my recovery code' }).click();
       await b.page.getByRole('button', { name: 'I lost my recovery code too' }).click();
-      await b.page.getByRole('button', { name: 'Start over with a new key' }).click();
+      await b.page.getByRole('button', { name: 'Start over', exact: true }).click();
       return b;
     };
     // Bob also has access to willow, so Ada can start over; Bob can give her access again.

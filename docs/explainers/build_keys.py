@@ -7,7 +7,7 @@ import os
 out_repo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys.html")
 out_fragment = sys.argv[1] if len(sys.argv) > 1 else None
 
-C = {"gold": "var(--madeleine)", "dusk": "var(--dusk)", "green": "var(--tilleul)", "terra": "var(--terracotta)"}
+C = {"gold": "var(--madeleine)", "dusk": "var(--dusk)", "green": "var(--tilleul)", "terra": "var(--terracotta)", "rose": "var(--hawthorn)"}
 
 def use(sym, x, y, w, h, color=None, extra=""):
     st = f' style="color:{C[color]}"' if color else ""
@@ -67,14 +67,14 @@ S4 = scene("You choose what to share; it is locked with a new donation key, whic
     + use("letterbox", 296, 150, 44, 38, "terra") + use("locked", 346, 150, 44, 36, "green")
     + label(343, 206, "kept apart", "middle", "cap"))
 
-S5 = scene("Each time, the researcher fetches the box from the server, opens it with the project key, reads, and throws the donation key away",
+S5 = scene("Each time, the researcher fetches the box from the server, opens it with the project encryption key, reads, and throws the donation key away",
     hall(16, 44) + use("letterbox", 20, 150, 44, 38, "terra") + use("locked", 68, 150, 44, 36, "green")
     + arrow("M66 160 C130 120, 180 110, 238 104")
     + label(150, 100, "every time", "middle", "cap")
     + use("laptop", 238, 46, 132, 102) + label(304, 36, "Researcher", "middle")
     + use("cards", 262, 58, 48, 38) + use("key", 318, 78, 40, 17, "green")
     + use("key", 160, 44, 52, 22, "terra") + arrow("M214 56 C226 58, 236 64, 244 74")
-    + label(186, 36, "project key", "middle", "cap")
+    + label(186, 36, "encryption key", "middle", "cap")
     + use("locked", 246, 162, 44, 36, "green") + label(268, 210, "stays locked", "middle", "cap")
     + arrow("M346 102 L354 150") + use("bin", 338, 152, 38, 44))
 
@@ -131,12 +131,12 @@ STEPS = [
         "This is what makes shared lab computers safe: the next person at the computer cannot open anything without the password, and password guessing is limited by the server.",
     ], note="You never get the data key. It covers everything a participant loaded, including what they choose not to share."),
     step(3, S4, "A donation gets its own key, locked for you", [
-        "When a participant donates, they choose exactly what to share. The browser makes a fresh <b>donation key</b> for that selection, and seals it to your project's public key: like a letterbox, anyone can put a key in, only your project key opens it.",
+        "When a participant donates, they choose exactly what to share. The browser makes a fresh <b>donation key</b> for that selection, and seals it to the public half of your <b>project encryption key</b>: like a letterbox, anyone can put a key in, only the project encryption key opens it.",
         "The server stores the encrypted donation and the sealed key in separate places, and can open neither. The sealing uses a hybrid post-quantum construction (X-Wing), so recording the traffic today does not help an attacker with a future quantum computer.",
     ]),
     step(4, S5, "Your tools borrow the key, every time", [
-        "You open donations on the <b>key page</b>, a small page of its own that you unlock with your passkey (Face ID, a fingerprint, or your phone). Every time, it fetches the sealed keys from the server, opens them with the project key, decrypts in memory, and throws the keys away when it is done. Later the R package will work the same way.",
-        "The server keeps the project key only locked for each researcher, and your copy only locked under your passkey, so it cannot open anything itself. Nothing is installed on your computer, and nothing is left on it unless you save an export.",
+        "You open donations on the <b>key page</b>, a small page of its own that you unlock with your passkey (Face ID, a fingerprint, or your phone). Every time, it fetches the sealed keys from the server, opens them with the project encryption key, decrypts in memory, and throws the keys away when it is done. Later the R package will work the same way.",
+        "Your passkey does not hold the project encryption key itself. It unlocks your <b>personal key</b>, a key pair of your own, which opens your copy of the project encryption key (see <a href=\"#chain\">how the keys fit together</a>). The server keeps all of these only locked, so it cannot open anything itself. Nothing is installed on your computer, and nothing is left on it unless you save an export.",
     ]),
     step(5, S6, "Withdrawal reaches every copy", [
         "When a participant withdraws, or asks you to withdraw for them, the server deletes the sealed keys and the envelope, and keeps a note that the donation was withdrawn. Your tool then deletes its local copy too. Any copy that is left, anywhere, can no longer be opened.",
@@ -147,6 +147,26 @@ STEPS = [
     ], soon=True),
 ]
 
+def chain_node(x, inner, cap1, cap2=""):
+    return inner + label(x, 112, cap1, "middle", "cap") + (label(x, 127, cap2, "middle", "cap") if cap2 else "")
+
+CHAIN = ('<svg class="scene" viewBox="0 0 400 140" role="img"><title>Your passkey or recovery code unlocks your personal key, which opens your copy of the project encryption key, which opens each donation key, which opens its donation</title>'
+    + chain_node(40, '<rect class="ol fp" x="12" y="54" width="56" height="34" rx="8"/>' + label(40, 76, "passkey", "middle"), "or recovery", "code")
+    + arrow("M72 71 H96")
+    + chain_node(126, use("key", 100, 59, 52, 23, "rose"), "personal key")
+    + arrow("M156 71 H180")
+    + chain_node(212, use("letterbox", 186, 44, 52, 46, "terra"), "project", "encryption key")
+    + arrow("M242 71 H266")
+    + chain_node(294, use("key", 270, 59, 50, 22, "green"), "donation key")
+    + arrow("M324 71 H344")
+    + chain_node(372, use("locked", 348, 50, 48, 40, "green"), "donation")
+    + label(84, 40, "unlocks", "middle", "cap") + label(168, 40, "opens", "middle", "cap") + label(254, 40, "opens", "middle", "cap") + label(334, 40, "opens", "middle", "cap")
+    + '</svg>')
+
+CHAIN_SECTION = f'''<section class="step" id="chain"><div class="art">{CHAIN}</div><div class="copy"><h2>How the keys fit together</h2>
+<p>Every donation has its own <b>donation key</b>, sealed to the <b>project encryption key</b>. Each researcher with access has a copy of the project encryption key, sealed to their <b>personal key</b>. The personal key is unlocked by your <b>passkey</b>, or by your <b>recovery code</b> if you lose the passkey.</p>
+<p>The project encryption key and personal keys are post-quantum key pairs (X-Wing). The passkey does not hold one; it gives the key page a secret that unlocks your personal key, and that secret never leaves your browser. Because the project has its own key, a colleague who joins later can read earlier donations, and removing someone needs no re-encryption.</p></div></section>'''
+
 TABLE = '''<div class="tablewrap"><table>
 <thead><tr><th></th><th>Data on the participant's computer</th><th>Donations</th></tr></thead>
 <tbody>
@@ -155,10 +175,13 @@ TABLE = '''<div class="tablewrap"><table>
 <tr><th>The server operator</th><td><span class="no">○</span>Only with the participant's computer too</td><td><span class="no">○</span>No</td></tr>
 <tr><th>You, the researcher</th><td><span class="no">○</span>No</td><td><span class="yes">●</span>Yes, until withdrawn or you are removed from the project</td></tr>
 <tr><th>Someone with your email</th><td><span class="no">○</span>No</td><td><span class="no">○</span>No: they also need your passkey or recovery code</td></tr>
+<tr><th>Someone who can use your passkey</th><td><span class="no">○</span>No</td><td><span class="yes">●</span>Yes, without your email: keep it on your own devices</td></tr>
 </tbody></table></div>'''
 
 CHECKLIST = '''<ul class="checks">
-<li><b>Keep your recovery code safe</b>, printed or saved apart from your passkey. If you lose both, a colleague can give you access again; if nobody on the project has access, nobody can open the donations.</li>
+<li><b>Store your recovery code well</b>, printed or saved apart from your passkey: it is the only way back to your project encryption keys if you lose your passkey. If you lose both, a colleague can give you access again; if nobody on the project has access, nobody can open the donations.</li>
+<li><b>Keep your passkey to yourself.</b> Whoever can use it can open your projects' donations, without your email. Set it up only on your own devices and accounts.</li>
+<li><b>Add a trusted backup researcher</b> to each project, who can give you access to the encryption key again.</li>
 <li><b>Compare key codes</b> when you give a colleague access, by phone or in person. It is what stops anyone slipping in a key of their own.</li>
 <li><b>Analyse without saving.</b> Write scripts that start from the encrypted donations and fetch the keys, rather than saving decrypted data.</li>
 <li><b>In R, turn off "Save workspace on exit"</b> (RStudio: Tools, Global Options, General, set it to Never). Otherwise <code>.RData</code> quietly keeps decrypted data.</li>
@@ -187,8 +210,9 @@ LEGEND = '<ul class="legend">' + "".join([
     keyitem("box", None, "Small box.", "The wrapped data key, on the participant's computer."),
     keyitem("key", "dusk", "Box key.", "Held by the server, released only for the participant's password."),
     keyitem("key", "green", "Donation key.", "Fresh for every donation, covering only what was shared."),
-    keyitem("letterbox", "terra", "Sealed key.", "The donation key sealed to your public key, kept by the server."),
-    keyitem("key", "terra", "Project key.", "Opens sealed keys. Kept locked for each researcher, under their passkey."),
+    keyitem("letterbox", "terra", "Sealed key.", "The donation key sealed to your project encryption key, kept by the server."),
+    keyitem("key", "terra", "Project encryption key.", "One per project. Opens sealed keys. Each researcher on the project has a copy, locked with their personal key."),
+    keyitem("key", "rose", "Personal key.", "Yours alone. Opens your copies of project encryption keys, and is unlocked by your passkey or recovery code."),
 ]) + "</ul>"
 
 BODY = f'''
@@ -203,6 +227,7 @@ BODY = f'''
 </ul>
 {LEGEND}
 {"".join(STEPS)}
+{CHAIN_SECTION}
 <h2 class="sec">Who can see what</h2>
 {TABLE}
 <h2 class="sec">What this asks of you</h2>

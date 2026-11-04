@@ -47,7 +47,7 @@ export function watchIdle(callback: () => void): void {
 
 export class KeyMismatch extends Error {
   constructor(what: string) {
-    super(`The ${what} from the server does not match the one your key produces. Do not continue, and tell the server operator.`);
+    super(`The ${what} from the server does not match the one this page works out from your passkey or recovery code. Do not continue, and tell the server operator.`);
     this.name = 'KeyMismatch';
   }
 }
@@ -76,7 +76,7 @@ export function isUnlocked(): boolean {
 }
 
 export function personal(): Unlocked {
-  if (!unlocked) throw new Error('Your keys are locked. Use your passkey to unlock them.');
+  if (!unlocked) throw new Error('This page is locked. Use your passkey to unlock it.');
   return unlocked;
 }
 

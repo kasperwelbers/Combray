@@ -27,7 +27,7 @@ Privacy is the reason a participant can trust Combray with years of their search
 | AI model provider | Hosted model logs prompts | Local data | The helper only ever receives structure metadata; instructions run locally |
 | Enrichment observer | Server or its logs link a participant to the URLs they watched | Behavioural profile | Consent-scoped, sanitised URL batches; unlinkable cache; no URL logging (see [enrichment.md](enrichment.md)) |
 | Substituted project key | Server or attacker swaps the public key in a project config | Donations | Project key fingerprint in the participant link's URL fragment (`#k=`), checked before sealing; signed configs later |
-| Substituted researcher key | Server slips in its own public key when a colleague is given access | Donations | Both researchers compare a key code before the project key is sealed to the colleague |
+| Substituted personal key | Server slips in its own public key when a colleague is given access | Donations | Both researchers compare a key code before the project key is sealed to the colleague |
 | Malicious page from the server | Server serves a key page that leaks keys | Project keys | Key page on its own origin, a single hash-pinned file with a published release hash; an active, visible attack, not ruled out |
 
 Out of scope, stated honestly: malware running as the participant on the same machine while the store is unlocked; a compromised server that serves malicious JavaScript to the browser (an inherent limit of web apps; see "Code integrity" below for mitigations); participants who screenshot or retype their own data.
@@ -138,7 +138,7 @@ Not a substitute for a DPIA, but Combray should ship with: a data flow descripti
 
 - ~~Is the device key plus server secret combination worth its complexity?~~ Decided: server key only ([ADR 0004](decisions/0004-server-held-store-keys.md)).
 - Should participants be able to unlock with a QR code on a card (scan with the lab webcam) instead of typing a code?
-- ~~Is the passkey-protected key backup worth offering?~~ Decided: passkeys hold researcher keys, on a separate key page ([ADR 0007](decisions/0007-browser-key-page.md)).
+- ~~Is the passkey-protected key backup worth offering?~~ Decided: passkeys unlock researchers' personal keys, on a separate key page ([ADR 0007](decisions/0007-browser-key-page.md)).
 - How do the R and Python packages get the personal key, since they cannot use a passkey? A device key added from the key page is the likely answer.
 - Do we want a hybrid signature (Ed25519 + ML-DSA) on project configs from v1, or Ed25519 only and upgrade later? Signatures are verified at use time, so the quantum risk is lower than for encryption.
 - Who reviews the crypto design? A university security group, or an external audit once the format is stable?
