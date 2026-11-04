@@ -1,6 +1,6 @@
 {
   "title": "Add your data",
-  "intro": "Choose the zip file you downloaded from a platform (such as Google Takeout or TikTok), a folder, or single files. Everything is read and kept on this computer only.",
+  "intro": "Choose the zip file you downloaded from a platform, a folder, or single files. Everything is read and kept on this computer only.",
   "titleFor": "Add your {{name}} data",
   "introFor": "Choose the zip file or folder you downloaded from {{name}}. We only open what belongs to your {{name}} export, and everything is read and kept on this computer only.",
   "yourData": "data",

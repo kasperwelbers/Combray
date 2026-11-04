@@ -13,7 +13,7 @@
 **Combray** is an open source data donation tool built for **qualitative research**. Participants load the data that platforms hold about them (Google Takeout, TikTok, Instagram, and so on), explore it, reflect on it, and, only if they choose, donate parts of it to a research project.
 
 Most data donation tools are designed for survey participants who donate remotely and quickly.
-Without throwing shade (since I've worked on some of them), the focus is on getting the data, and the participant experience is primarily a means to that end.
+Without throwing shade (and we've worked on some of them), the focus is on getting the data, and the participant experience is primarily a means to that end.
 Combray is designed with a focus on the participant experience, and the data is a means to this experience.
 Donating the data is only a possible outcome, not the goal.
 Example use cases are:
@@ -21,12 +21,14 @@ Example use cases are:
 * A participant looks at the data together with a researcher. The purpose of the data is to evoke memories and reflections.
 * A participant explores their own data, in a lab or at home, and answers questions about the data and/or their own reflections.
 
-This focus measn that participants need to have sessions they can come back to. This is achieved by storing data locally in IndexedDB, encrypted with a key that is only released after the participant logs in to the server. The server cannot see the data, and the data is only decrypted when the participant is authenticated.
+We want users to engage more deeply with the data, which has implications for design. Users need to be able to take their time and revisit data, which requires secure, local storage. This different time frame in turn also presents new opportunities for data enrichment and processing.
+Another design goal is to make it no-code first, so that researchers without programmign skills can autonomously build data importers and visualizations. 
 
 Combray also implements some new idea, and builds on lessons learned from earlier tools:
 
-* Donations are encrypted, and the key is sealed to the researcher's passkey using the WebAuthn PRF extension. This 
-* Most donation packages have a fairly simple structure. Combray standardizes any uploaded data to a tree structure, so researrchers only need to indicate what parts of the tree the participants sees, and what parts to optionally donate. The exploration part is optimized to explore and visualize these trees. This enables a no-code first experience for researchers. 
+* Donations are encrypted client side, and can only be decrypted by the participant or the researcher - never by the server. Combray uses a recently standardized extension to WebAuthn, the Pseudo Random Function (PRF), to seal researcher access to their passkeys. This mediates the problem of researchers needing a way to store the decryption key save and not lose it, by integrating it with the modern best pratice for two factor authentication.
+* Most data export packages have a fairly simple tree-like structure. Instead of writing import scripts for specific file types, Combray turns all data into a universal tree structure, and researchers can use a no-code UI to indicate what parts of the tree the participant sees, and what parts to optionally donate. Custom scripts are supported, but only needed for edge cases. 
+* The great challenge of working with data export packages is that their format is inconsistent across time and users. So the data import script needs to be flexible and easy to update. The tree structure handles this elegantly, because it just grows the tree with new paths that the researcher needs to decide what to do with. When a client imports data, Combray identifies any paths it hasn't seen yet, and asks the user (a researcher or participant) if they are willing to submit the non-sensitive path metadata. So writing and maintaining importers basically becomes a gardening project.
 
 > **Status:** early development, not yet used in a study. Participants can import a data download package in the browser, keep it encrypted on their computer, explore it and donate parts of it. Researchers can sign in, build an importer in the studio, and open donations on the key page with their passkey. Enrichment and hosting come next. Start with [docs/](docs/README.md).
 
