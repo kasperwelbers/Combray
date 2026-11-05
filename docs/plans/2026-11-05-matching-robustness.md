@@ -41,19 +41,29 @@ Paths are matched from the root of the export, and the root is found flexibly ([
 
 ## Proposal: exact matches stay the rule; near matches ask the participant
 
-1. **What a near match is.** For each table the study shows or asks for, the studio works out its **distinguishing path** when it publishes: the shortest end of its path that is unique among the seen structures of the platform (`YouTube/history/watch-history.json` → `watch-history.json`, or `activity/[*]` → `Browser/activity/[*]`). It is stored in the published version, so it is fixed per version: what a version matches does not change when new structures arrive later. A near match is a part of a package that is not matched exactly, but whose path ends with a table's distinguishing path.
-2. **Tables, not fields.** Near matches are about where a table is. Inside a near-matched table, fields are matched exactly, relative to the table. A field renamed inside a table is not guessed; that is what new matches are for.
-3. **The table must look the same inside.** A short path alone can land on something unrelated (a `history` in another file). So a near match also needs every field that was **always present** in that table in the seen data: the table's fingerprint. It is worked out at publish time with the distinguishing path, stored in the version, and the studio shows it on the table so the researcher can see what a near match requires. "Always" means in every seen structure that has the table, not in every row, since fields that some rows lack are common. A part whose path fits but whose fields do not (a `history` table with four of the five usual fields) is not offered for donation. It is a new structure, so the participant is asked to share it ([structure sharing](../structure-versions.md)), and the researcher decides.
-4. **Never guess between candidates.** If the distinguishing path matches more than one place in a package, or a table is already matched exactly, there is no near match.
+1. **Only folders may differ.** A near match keeps the file name and the path inside the file exactly as the researcher matched them; only the folders above the file may be different. That covers the cases we know about (a moved file, extra wrapper folders, a single file taken out of the zip) and never jumps to another file, or to another table in the same file.
+2. **The distinguishing path.** For each table the study shows or asks for, the studio works out, when it publishes, the shortest end of its file path that is unique among the seen structures of the platform: `watch-history.json` when only one file has that name, or `YouTube/MyActivity.html` when a Takeout also has `Search/MyActivity.html`. It is stored in the published version, so what a version matches does not change when new structures arrive later. A table without a unique file path (the same file name in several places with nothing to tell them apart) gets no near matches.
+3. **Known places are never candidates.** A file at a place where the seen data has something else (`Search/MyActivity.html`, while the study asks for the YouTube one) is that other thing, not a moved copy of the table. The seen structures are kept one by one ([ADR 0012](../decisions/0012-names-and-matches.md)), so the studio knows which files and tables occur together, and that a table seen next to ours is a different table.
+4. **The fingerprint.** A file name alone can still hold something else (a `data.json`). So a near match also needs every field that was **always present** in that table in the seen data: the table's fingerprint. "Always" means in every seen structure that has the table, not in every row, since fields that some rows lack are common. The fingerprint is worked out at publish time, stored in the version, and shown on the table in the studio. A table whose fingerprint has fewer than two fields has no clear fingerprint, and gets no near matches; the studio says so. Generic tables (an HTML `div` with a link and a time) are the reason: their fields alone would fit half of every package, which is also why rules 1 and 3 come first.
+
+The outcome for each table the study shows or asks for:
+
+| Found | Shown | Donated | Structure |
+| --- | --- | --- | --- |
+| At the exact path | Yes | Yes, as always | |
+| Elsewhere (rules 1 to 3), with the full fingerprint, at one place only | Yes, marked as found elsewhere | With extra attention (below), unticked at first | |
+| Elsewhere, with part of the fingerprint, or at several places | No (participants still see it under "Raw data") | No | The participant is asked to share the structure, and the researcher decides |
+| Elsewhere, for a table without a unique path or a clear fingerprint | No | No | Asked, as above |
+
 5. **Participants are asked to look closer.** Participants already see everything they are asked to donate, so the only difference is emphasis. A near-matched table is shown, marked as found in another place. In the review it is set apart: "We found something that looks like your **watch history**, but in a different place than the researchers expected. Please check it before you share it." It is unticked until the participant ticks it.
 6. **The donation says so.** Values from a near match keep their raw path (as all values do), and the donation marks the table as near-matched, so researchers can filter or check those rows. The key page adds a column for it.
 7. **The researcher closes the gap.** Structure sharing reports the new place. The studio suggests adding it as an exact match for the next version, with one click.
-8. **A single file is a near match.** When nothing fits as the root and the upload is one file whose name is a table's distinguishing path, it is read as that table, with the same question to the participant. This brings back the case dropped on 2026-11-02, without a separate mechanism.
+8. **A single file is a near match.** When nothing fits as the root and the upload is one file whose name is a table's whole distinguishing path (so not for `YouTube/MyActivity.html`, which needs its folder), it is read as that table, with the same question to the participant. This brings back the case dropped on 2026-11-02, without a separate mechanism.
 9. **A switch per platform**, on by default: "Offer near matches when the package is organised differently." A researcher who wants strict exact locations turns it off.
 
 In short: **we choose precision, and so the protection of participants' data, and when we only find a partial match we say so and ask the participant for help.** Privacy stays as it is: matching runs on the device, nothing new is sent, and the researcher marks the exact locations while the participant approves anything outside them.
 
-Not proposed: similarity scores or fuzzy name matching at runtime, matching individual fields by name anywhere in a package, and rematching old donations.
+Not proposed: similarity scores or fuzzy name matching at runtime, near matches inside a file or across files, matching individual fields by name anywhere in a package, and rematching old donations. A separate request for the structure of every donated or shown part with each donation was considered (Kasper, 2026-11-05) and left out: donated values already carry their raw paths, shown parts matched exactly by definition, and the structure we lack, of partial and new cases, is asked for in the last two rows above. Note that sharing structure after upload is not built yet, so this would be its first use.
 
 ## What to look for in real packages
 
@@ -70,8 +80,9 @@ A small script can measure this once we have the structures: for each pair of pa
 
 ## Open questions
 
-- How short may a distinguishing path be? A file name alone (`watch-history.json`) seems fine; a generic name (`data.json`, `[*]`, `items`) should probably need at least one parent.
-- With few seen structures, the fingerprint is strict (every field is "always present"); with many, it may shrink to almost nothing. Should it have a minimum, such as at least two fields or one donated field?
+- Should a generic file name (`data.json`, `index.html`) need at least one folder in its distinguishing path, even when it is unique in the seen data?
+- With few seen structures, the fingerprint is strict (every field is "always present"). Is a minimum of two fields right, or should one of them be a donated field?
+- HTML exports change inside files more often than folders move. If real packages show that, near matches inside a file would need rule 3 (tables seen side by side are different tables) at the level of tables; the seen structures support that.
 - Should near matches count for `required` nodes, so that a package with a moved required part still fits?
 - Is the participant question clear enough without showing the path? The path is on their device only, so it may be shown to them.
 - Should the switch default to on, or should a researcher opt in after seeing a near match reported?
