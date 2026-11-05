@@ -390,6 +390,37 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByRole('heading', { name: 'Your projects' }).waitFor();
   }, 60_000);
 
+  it.skipIf(!hasWeb)('opens an example project without signing in, kept in the tab', async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    page.on('console', (m) => {
+      if (m.type() === 'error') consoleErrors.push(m.text());
+    });
+    page.on('pageerror', (e) => consoleErrors.push(e.message));
+    await page.goto(`${MAIN}/studio/`);
+    await page.getByRole('heading', { name: 'Example projects' }).waitFor();
+    await page.getByRole('link', { name: 'Example study' }).click();
+    await page.getByText(/^This is an example project/).waitFor();
+    expect(page.url()).toBe(`${MAIN}/studio/example/youtube/`);
+    // Changes are kept in the tab, across a reload.
+    const description = page.getByRole('group', { name: 'Description' }).getByLabel('English');
+    await description.fill('Tried in the e2e test.');
+    await page.getByRole('button', { name: 'Save details' }).click();
+    await page.getByText('Saved to the draft.').waitFor();
+    await page.reload();
+    expect(await description.inputValue()).toBe('Tried in the e2e test.');
+    // The story plays on the bundled synthetic packages.
+    await page.getByRole('link', { name: 'Story' }).click();
+    await page.getByRole('combobox', { name: 'Google Takeout' }).filter({ hasText: 'Google Takeout, in English (JSON)' }).waitFor();
+    await page.getByRole('button', { name: 'Play the story' }).click();
+    await page.getByRole('button', { name: 'Next →' }).click();
+    await page.getByText(/^You watched 3 videos: about/).waitFor();
+    await page.getByRole('button', { name: 'Close the story' }).click();
+    await page.getByRole('link', { name: 'Donations' }).click();
+    await page.getByText(/^Example projects get no donations/).waitFor();
+    await context.close();
+  }, 60_000);
+
   it('gives a colleague access after comparing key codes', async () => {
     await ada.page.getByLabel('Add a colleague by email').fill('bob@uni.example');
     await ada.page.getByRole('button', { name: 'Add', exact: true }).click();

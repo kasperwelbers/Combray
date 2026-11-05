@@ -2,8 +2,8 @@
  * Where the visitor is: the landing page at `/`, which explains Combray and leads to the two areas;
  * the participant area at `/p/` (the studies with data on this computer), a project at
  * `/p/{project}/`, with its questions and answers at `/p/{project}/faq`. The researcher workspace is at `/studio/` (sign-in
- * and the researcher's projects) `/studio/p/{project}/` (one project's workspace) and `/studio/learn/` (a practice tree editor
- * with example data, open without sign-in). Projects
+ * and the researcher's projects) `/studio/p/{project}/` (one project's workspace) and `/studio/example/{example}/` (an example
+ * project, open without sign-in, kept in the tab). Projects
  * live under `/p/` so their ids never clash with the app's own pages (ADR 0008).
  *
  * The studio may carry a one-time sign-in code from the key page (`/studio/#handoff=…`), which
@@ -20,7 +20,7 @@
 export type Route =
   | { kind: 'home' }
   | { kind: 'studies' }
-  | { kind: 'studio'; projectId?: string; tab?: StudioTab; learn?: true }
+  | { kind: 'studio'; projectId?: string; tab?: StudioTab; example?: true }
   | { kind: 'project'; projectId: string; participantId?: string; resetToken?: string; keyPin?: string; page?: 'faq' };
 
 const PROJECT_ID = /^[a-z0-9-]{1,64}$/;
@@ -57,11 +57,11 @@ export function parseRoute(pathname: string, hash: string): Route {
   const [first, projectId, ...rest] = pathname.split('/').filter(Boolean);
   if (first === 'studio') {
     if (projectId === undefined) return { kind: 'studio' };
-    if (projectId === 'learn') return rest.length === 0 ? { kind: 'studio', learn: true } : { kind: 'home' };
     const [id, tab, ...more] = rest;
-    if (projectId !== 'p' || !id || !PROJECT_ID.test(id) || more.length > 0) return { kind: 'home' };
-    if (tab === undefined) return { kind: 'studio', projectId: id };
-    return isTab(tab) ? { kind: 'studio', projectId: id, tab } : { kind: 'home' };
+    if ((projectId !== 'p' && projectId !== 'example') || !id || !PROJECT_ID.test(id) || more.length > 0) return { kind: 'home' };
+    const route: Route = { kind: 'studio', projectId: id, ...(projectId === 'example' ? { example: true as const } : {}) };
+    if (tab === undefined) return route;
+    return isTab(tab) ? { ...route, tab } : { kind: 'home' };
   }
   if (first === 'p' && projectId === undefined) return { kind: 'studies' };
   const faq = rest.length === 1 && rest[0] === 'faq';
@@ -88,13 +88,14 @@ export function projectPath(projectId: string, page?: 'faq'): string {
   return page ? `/p/${projectId}/${page}` : `/p/${projectId}/`;
 }
 
-/** The practice page of the researcher workspace: the tree editor with example data, no sign-in. */
-export const STUDIO_LEARN_PATH = '/studio/learn/';
-
-/** The address of the researcher workspace, of one project in it, or of one of its tabs. */
-export function studioPath(projectId?: string, tab?: StudioTab): string {
+/**
+ * The address of the researcher workspace, of one project in it (or of an example project), or of
+ * one of its tabs.
+ */
+export function studioPath(projectId?: string, tab?: StudioTab, example = false): string {
   if (!projectId) return '/studio/';
-  return tab ? `/studio/p/${projectId}/${tab}/` : `/studio/p/${projectId}/`;
+  const base = `/studio/${example ? 'example' : 'p'}/${projectId}/`;
+  return tab ? `${base}${tab}/` : base;
 }
 
 export function readRoute(): Route {
@@ -115,7 +116,7 @@ export function readRoute(): Route {
     }
   } else if (route.kind === 'studio') {
     // Keep the fragment: the studio reads a handoff code from the key page there.
-    const path = route.learn ? STUDIO_LEARN_PATH : studioPath(route.projectId, route.tab);
+    const path = studioPath(route.projectId, route.tab, route.example);
     if (location.pathname !== path) history.replaceState(null, '', path + location.hash);
   } else if (route.kind === 'studies') {
     if (location.pathname !== STUDIES_PATH) history.replaceState(null, '', STUDIES_PATH);

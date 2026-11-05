@@ -8,7 +8,7 @@ import { fromFiles, toFiles } from './model';
 import { both, textIn } from './text';
 import {
   ApiFailure,
-  projectApi,
+  useProjectApi,
   type Donations,
   type Draft,
   type Member,
@@ -16,6 +16,7 @@ import {
   type ProjectDetails,
   type ProjectInfo,
 } from './projectApi';
+import { resetExample } from './exampleApi';
 import { StoryEditor } from './StoryEditor';
 import { Studio, type DraftStore } from './Studio';
 
@@ -29,6 +30,7 @@ const english = (text: Localized | undefined): string => (text === undefined ? '
  */
 export function Project({ projectId, tab: initialTab, account, keysUrl }: { projectId: string; tab?: StudioTab; account: ReactNode; keysUrl?: string }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
   const [draft, setDraft] = useState<Draft>();
   const [info, setInfo] = useState<ProjectInfo>();
   const [failed, setFailed] = useState(false);
@@ -37,7 +39,7 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
   const refresh = useCallback(() => {
     void projectApi.draft(projectId).then(setDraft, () => setFailed(true));
     void projectApi.project(projectId).then(setInfo, () => undefined);
-  }, [projectId]);
+  }, [projectApi, projectId]);
   useEffect(refresh, [refresh]);
 
   useEffect(() => {
@@ -51,7 +53,7 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
 
   function open(next: StudioTab) {
     if (next === tab) return;
-    history.pushState(null, '', studioPath(projectId, next));
+    history.pushState(null, '', studioPath(projectId, next, projectApi.example));
     setTab(next);
   }
 
@@ -71,17 +73,18 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
   return (
     <div className="studio">
       <p className="meta">
-        <a href={studioPath()}>{t('studio.allProjects')}</a>
+        <a href={studioPath()}>{projectApi.example ? t('studio.examples.back') : t('studio.allProjects')}</a>
       </p>
       <h1>{english(draft.details.name) || draft.id}</h1>
       {account}
+      {projectApi.example && <ExampleBanner projectId={projectId} />}
       {info?.key && !info.has_access && <p className="message">{t('studio.project.noAccess')}</p>}
-      {info && <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} onConsent={() => open('consent')} />}
+      {info && !projectApi.example && <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} onConsent={() => open('consent')} />}
       <nav className="tabs" aria-label={t('studio.project.tabsLabel')}>
         {STUDIO_TABS.map((key) => (
           <a
             key={key}
-            href={studioPath(projectId, key)}
+            href={studioPath(projectId, key, projectApi.example)}
             className="tab"
             aria-current={key === tab ? 'page' : undefined}
             onClick={(e) => {
@@ -98,10 +101,41 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
         {tab === 'consent' && <ConsentTab draft={draft} onSaved={refresh} />}
         {tab === 'data' && <DataExplorer draft={draft} onChanged={refresh} />}
         {tab === 'story' && <StoryEditor draft={draft} />}
-        {tab === 'researchers' && <ResearchersTab projectId={projectId} keysUrl={keysUrl} />}
-        {tab === 'donations' && <DonationsTab projectId={projectId} />}
+        {tab === 'researchers' && (projectApi.example ? <NotInExamples tab={tab} /> : <ResearchersTab projectId={projectId} keysUrl={keysUrl} />)}
+        {tab === 'donations' && (projectApi.example ? <NotInExamples tab={tab} /> : <DonationsTab projectId={projectId} />)}
       </div>
     </div>
+  );
+}
+
+/** An example project says so, and can start over. */
+function ExampleBanner({ projectId }: { projectId: string }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  return (
+    <p className="message example-banner">
+      {t('studio.examples.banner')}{' '}
+      <button
+        type="button"
+        className="link-button"
+        onClick={() => {
+          if (!window.confirm(t('studio.examples.confirmReset'))) return;
+          resetExample(projectId);
+          location.reload();
+        }}
+      >
+        {t('studio.examples.reset')}
+      </button>
+    </p>
+  );
+}
+
+function NotInExamples({ tab }: { tab: 'researchers' | 'donations' }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  return (
+    <section className="card">
+      <h2>{t(`studio.project.tab.${tab}`)}</h2>
+      <p className="meta">{t(`studio.examples.no.${tab}`)}</p>
+    </section>
   );
 }
 
@@ -198,6 +232,7 @@ function PublishBar({ draft, keysUrl }: { draft: Draft; keysUrl?: string }) {
 
 function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
   const d = draft.details;
   const text = textIn;
   const [nameEn, setNameEn] = useState(text(d.name, 'en'));
@@ -291,6 +326,7 @@ function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
 
 function ConsentTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
   const consent = draft.details.consent;
   const [infoEn, setInfoEn] = useState(textIn(consent?.information, 'en'));
   const [infoNl, setInfoNl] = useState(textIn(consent?.information, 'nl'));
@@ -380,6 +416,7 @@ const MAX_STATEMENTS = 10;
 
 function DataExplorer({ draft, onChanged }: { draft: Draft; onChanged: () => void }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
   const [selected, setSelected] = useState<string | undefined>(draft.platforms[0]?.id);
   const [message, setMessage] = useState<{ text: string; error?: boolean }>();
   const available = packs.filter((p) => !draft.platforms.some((x) => x.id === p.id));
@@ -455,6 +492,7 @@ const SAVE_DELAY_MS = 800;
 /** One platform: its tree loaded from the draft and saved back shortly after every change. */
 function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectId: string; platformId: string; onSaved: () => void; onRemove: () => void }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
   const [platform, setPlatform] = useState<PlatformDraft | 'failed'>();
   const [saving, setSaving] = useState<'saving' | 'saved' | 'failed'>();
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -462,7 +500,7 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
 
   useEffect(() => {
     void projectApi.platform(projectId, platformId).then(setPlatform, () => setPlatform('failed'));
-  }, [projectId, platformId]);
+  }, [projectApi, projectId, platformId]);
 
   // Save what is waiting when the editor closes (another platform, another tab).
   useEffect(
@@ -475,7 +513,7 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
     [],
   );
 
-  const packages = useMemo(() => projectApi.testPackages(projectId, platformId), [projectId, platformId]);
+  const packages = useMemo(() => projectApi.testPackages(projectId, platformId), [projectApi, projectId, platformId]);
 
   const store = useMemo((): DraftStore | 'unreadable' | undefined => {
     if (!platform || platform === 'failed') return undefined;
@@ -512,7 +550,7 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
         }, SAVE_DELAY_MS);
       },
     };
-  }, [platform, projectId, platformId, onSaved]);
+  }, [projectApi, platform, projectId, platformId, onSaved]);
 
   if (platform === 'failed' || store === 'unreadable') return <p className="message error">{t('studio.project.platformFailed')}</p>;
   if (!platform || !store) return null;
@@ -536,10 +574,11 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
 
 function ResearchersTab({ projectId, keysUrl }: { projectId: string; keysUrl?: string }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
   const [members, setMembers] = useState<Member[]>();
   useEffect(() => {
     void projectApi.members(projectId).then(setMembers, () => setMembers([]));
-  }, [projectId]);
+  }, [projectApi, projectId]);
   return (
     <section className="card">
       <h2>{t('studio.project.tab.researchers')}</h2>
@@ -566,10 +605,11 @@ function ResearchersTab({ projectId, keysUrl }: { projectId: string; keysUrl?: s
 
 function DonationsTab({ projectId }: { projectId: string }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
   const [donations, setDonations] = useState<Donations | 'failed'>();
   useEffect(() => {
     void projectApi.donations(projectId).then(setDonations, () => setDonations('failed'));
-  }, [projectId]);
+  }, [projectApi, projectId]);
   if (donations === 'failed') return <p className="message error">{t('studio.project.donationsFailed')}</p>;
   if (!donations) return null;
   const byDay = new Map<string, number>();

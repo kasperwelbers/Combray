@@ -48,7 +48,7 @@ pnpm dev        # web client with hot reload on http://localhost:5173, plus the 
 | `/p/example/` | Example study (participant id optional) |
 | `/p/willow/#id=W-1234` | Example study that requires a participant id |
 | `/studio/` | Researcher workspace |
-| `/studio/learn/` | Practice with the tree editor and example data, no sign-in |
+| `/studio/example/youtube/` | An example project with synthetic data, no sign-in; kept in the browser tab |
 
 The development server keeps its databases in `.dev/` and does not send mail: sign-in codes are written to `.dev/outbox/` as files.
 

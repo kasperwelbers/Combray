@@ -51,6 +51,8 @@ export interface StudioApi {
     uploads: Upload[],
     onProgress: (p: ImportProgress) => void,
   ): Promise<{ export: StudioExport; shape: Shape }>;
+  /** Read a package's files (an example's) into a tree, without loading it. */
+  readPackage(files: { path: string; text: string }[]): Promise<{ tree: TreeNode; shape: Shape }>;
   /** A package kept with the project: its tree as read before, from the server. */
   addTree(name: string, tree: TreeNode): Promise<{ export: StudioExport; shape: Shape }>;
   /** A loaded package's tree, to keep it with the project. */
@@ -102,8 +104,8 @@ export interface StoredPackage {
 
 /**
  * Where a platform's test packages are kept: its structure always, its values when the
- * researcher declares they are synthetic or not sensitive. Absent on the practice page, where
- * packages are temporary.
+ * researcher declares they are synthetic or not sensitive. In an example project, they are kept in
+ * this tab (`exampleApi.ts`).
  */
 export interface PackageStore {
   list(): Promise<{ packages: StoredPackage[]; shapes: { hash: string; shape: Shape }[] }>;

@@ -27,6 +27,7 @@ import * as Comlink from 'comlink';
 
 import { deriveImport, pointProject } from '../worker/derived';
 import { addStoryTables, storyViews, type StoryTables } from '../worker/story';
+import type { Upload } from '../worker/api';
 import { listUpload } from '../worker/upload';
 import type { PreviewRow, PreviewTable, PreviewValue, StudioApi, StudioExport } from './api';
 
@@ -79,7 +80,23 @@ function allRows(projectTree: ProjectNode, tables: TableDef[], only?: number): D
   return all;
 }
 
+/** A package the researcher (or an example) gives, read into a tree. */
+async function readUpload(uploads: Upload[]): Promise<{ name: string; tree: TreeNode }> {
+  // The researcher's own export defines the root: a file or picked folder as it is, an
+  // archive stepped into once (docs/tree-decisions.md#finding-the-export-in-an-upload).
+  const listing = await listUpload(uploads);
+  const read = await readSpot(listing, await defaultRoot(listing));
+  // HTML is normalised so rows and positions compare (docs/tree-decisions.md#html). Header
+  // text may name columns here: this is the researcher's own export, and they see it.
+  return { name: listing.name, tree: normalizeTree(read.tree, { keys: () => true }) };
+}
+
 const api: StudioApi = {
+  async readPackage(files) {
+    const { tree } = await readUpload(files.map((f) => ({ file: new File([f.text], f.path.split('/').pop() ?? f.path), path: f.path })));
+    return { tree, shape: extractShape(tree) };
+  },
+
   async loadStoryPackage(key, tree) {
     storyPackages.set(key, tree);
   },
@@ -105,14 +122,8 @@ const api: StudioApi = {
 
   async addExport(uploads, onProgress) {
     onProgress({ step: 'looking' });
-    // The researcher's own export defines the root: a file or picked folder as it is, an
-    // archive stepped into once (docs/tree-decisions.md#finding-the-export-in-an-upload).
-    const listing = await listUpload(uploads);
-    const read = await readSpot(listing, await defaultRoot(listing));
-    // HTML is normalised so rows and positions compare (docs/tree-decisions.md#html). Header
-    // text may name columns here: this is the researcher's own export, and they see it.
-    const tree = normalizeTree(read.tree, { keys: () => true });
-    const info: StudioExport = { id: nextId++, name: listing.name, nodeCount: countNodes(tree) };
+    const { name, tree } = await readUpload(uploads);
+    const info: StudioExport = { id: nextId++, name, nodeCount: countNodes(tree) };
     exports.set(info.id, { info, tree });
     onProgress({ step: 'done' });
     return { export: info, shape: extractShape(tree) };

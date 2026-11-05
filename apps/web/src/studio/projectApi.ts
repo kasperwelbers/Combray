@@ -1,5 +1,10 @@
-/** The studio's calls to the project API on its own site (`/api/v1`), with the studio session cookie. */
+/**
+ * The studio's calls about one project: to the project API on its own site (`/api/v1`), with the
+ * studio session cookie, or to an example project kept in this tab (`exampleApi.ts`). The
+ * project's screens get them from `useProjectApi`.
+ */
 import type { Localized } from '@combray/core';
+import { createContext, useContext } from 'react';
 
 import type { PackageStore } from './api';
 
@@ -88,22 +93,49 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 const project = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
-export const projectApi = {
-  create: (id: string, name: Localized) => call<{ id: string }>('POST', '/projects', { id, name }),
-  draft: (id: string) => call<Draft>('GET', `${project(id)}/draft`),
-  saveDetails: (id: string, details: ProjectDetails) => call<void>('PUT', `${project(id)}/draft/details`, details),
+/** What is saved for a platform. */
+export interface PlatformValue {
+  name: Localized;
+  pack?: string;
+  structure?: unknown;
+  importer?: unknown;
+}
+
+/** Everything a project's screens ask about it. */
+export interface ProjectApi {
+  /** An example project: kept in this tab, never published, without researchers or donations. */
+  example: boolean;
+  draft(id: string): Promise<Draft>;
+  saveDetails(id: string, details: ProjectDetails): Promise<void>;
   /** The draft's story, as stored (participants' devices check it block by block); `null` for none. */
-  story: (id: string) => call<{ story: unknown }>('GET', `${project(id)}/draft/story`).then((r) => r.story),
-  saveStory: (id: string, story: unknown) => call<void>('PUT', `${project(id)}/draft/story`, { story }),
-  platform: (id: string, platform: string) => call<PlatformDraft>('GET', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
-  savePlatform: (id: string, platform: string, value: { name: Localized; pack?: string; structure?: unknown; importer?: unknown }) =>
-    call<void>('PUT', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`, value),
-  removePlatform: (id: string, platform: string) => call<void>('DELETE', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
-  project: (id: string) => call<ProjectInfo>('GET', project(id)),
-  members: (id: string) => call<{ members: Member[] }>('GET', project(id)).then((p) => p.members),
-  donations: (id: string) => call<Donations>('GET', `${project(id)}/donations`),
+  story(id: string): Promise<unknown>;
+  saveStory(id: string, story: unknown): Promise<void>;
+  platform(id: string, platform: string): Promise<PlatformDraft>;
+  savePlatform(id: string, platform: string, value: PlatformValue): Promise<void>;
+  removePlatform(id: string, platform: string): Promise<void>;
+  project(id: string): Promise<ProjectInfo>;
+  members(id: string): Promise<Member[]>;
+  donations(id: string): Promise<Donations>;
   /** A platform's test packages, as a store for the tree editor. */
-  testPackages: (id: string, platform: string): PackageStore => {
+  testPackages(id: string, platform: string): PackageStore;
+}
+
+/** Start a project on the server; its creator is its first member. */
+export const createProject = (id: string, name: Localized) => call<{ id: string }>('POST', '/projects', { id, name });
+
+export const serverApi: ProjectApi = {
+  example: false,
+  draft: (id) => call<Draft>('GET', `${project(id)}/draft`),
+  saveDetails: (id, details) => call<void>('PUT', `${project(id)}/draft/details`, details),
+  story: (id) => call<{ story: unknown }>('GET', `${project(id)}/draft/story`).then((r) => r.story),
+  saveStory: (id, story) => call<void>('PUT', `${project(id)}/draft/story`, { story }),
+  platform: (id, platform) => call<PlatformDraft>('GET', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
+  savePlatform: (id, platform, value) => call<void>('PUT', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`, value),
+  removePlatform: (id, platform) => call<void>('DELETE', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
+  project: (id) => call<ProjectInfo>('GET', project(id)),
+  members: (id) => call<{ members: Member[] }>('GET', project(id)).then((p) => p.members),
+  donations: (id) => call<Donations>('GET', `${project(id)}/donations`),
+  testPackages: (id, platform) => {
     const base = `${project(id)}/draft/platforms/${encodeURIComponent(platform)}/test-packages`;
     return {
       list: () => call('GET', base),
@@ -114,3 +146,8 @@ export const projectApi = {
     };
   },
 };
+
+export const ProjectApiContext = createContext<ProjectApi>(serverApi);
+
+/** The project API of the project on screen: the server's, or an example's. */
+export const useProjectApi = () => useContext(ProjectApiContext);

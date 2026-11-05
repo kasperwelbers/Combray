@@ -1365,6 +1365,26 @@ main.wide {
   font-size: 1.1rem;
 }
 
+.studio-examples {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.studio-examples li {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.studio-examples a {
+  font-weight: 600;
+}
+
+.example-banner {
+  max-width: none;
+}
+
 /* The landing page: what Combray is, and the two ways in. */
 .landing {
   max-width: 56rem;

@@ -37,11 +37,11 @@ import type { StoryView } from '../worker/api';
 import { fromFiles } from './model';
 import { storyTables, type StoryTable } from './storyTables';
 import { PlayOverlay, PreviewBar, previewViews, useStoryPreview, type PlatformFiles } from './StoryPreview';
-import { ApiFailure, projectApi, type Draft } from './projectApi';
+import { ApiFailure, useProjectApi, type Draft, type ProjectApi } from './projectApi';
 import { textIn } from './text';
 
 /** Every platform of the project as its draft has it, with its tables. */
-async function loadPlatforms(draft: Draft): Promise<{ platforms: PlatformFiles[]; tables: StoryTable[] }> {
+async function loadPlatforms(projectApi: ProjectApi, draft: Draft): Promise<{ platforms: PlatformFiles[]; tables: StoryTable[] }> {
   const platforms: PlatformFiles[] = [];
   const tables: StoryTable[] = [];
   for (const summary of draft.platforms) {
@@ -75,6 +75,7 @@ export function StoryEditor({ draft }: { draft: Draft }) {
   const [playing, setPlaying] = useState<Story>();
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<{ text: string; error?: boolean }>();
+  const projectApi = useProjectApi();
 
   useEffect(() => {
     void projectApi.story(draft.id).then(
@@ -85,11 +86,11 @@ export function StoryEditor({ draft }: { draft: Draft }) {
       },
       () => setStatus({ text: t('studio.story.loadFailed'), error: true }),
     );
-    void loadPlatforms(draft).then((loaded) => {
+    void loadPlatforms(projectApi, draft).then((loaded) => {
       setTables(loaded.tables);
       setPlatforms(loaded.platforms);
     });
-  }, [draft, t]);
+  }, [projectApi, draft, t]);
 
   const preview = useStoryPreview(draft.id, platforms, slides ?? NO_SLIDES);
 

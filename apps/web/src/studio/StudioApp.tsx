@@ -1,10 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { STUDIO_LEARN_PATH, studioPath, type StudioTab } from '../route';
-import { Learn } from './Learn';
+import { studioPath, type StudioTab } from '../route';
+import { EXAMPLES, exampleApi, type ExampleProject } from './exampleApi';
 import { Project } from './Project';
-import { ApiFailure, projectApi, SIGNED_OUT_EVENT } from './projectApi';
+import { ApiFailure, createProject, ProjectApiContext, SIGNED_OUT_EVENT } from './projectApi';
 
 /**
  * The researcher workspace: sign in, pick a project, work on it (docs/researcher-keys.md).
@@ -14,8 +14,8 @@ import { ApiFailure, projectApi, SIGNED_OUT_EVENT } from './projectApi';
  * key page can also send researchers here with a one-time code in the fragment
  * (`/studio/#handoff=…`), traded for the same kind of session.
  *
- * `/studio/learn/` is a practice tree editor with example data, open without sign-in. On a server
- * without researcher accounts, or without a server, that is all the studio shows.
+ * Example projects (`/studio/example/{id}/`) are open without sign-in, and kept in the tab. On a
+ * server without researcher accounts, or without a server, they are all the studio shows.
  */
 
 interface Site {
@@ -88,7 +88,7 @@ async function load(handoff?: string): Promise<State> {
   return { kind: 'signed-in', site, email: me.email, projects: list?.projects ?? [] };
 }
 
-export function StudioApp({ projectId, tab, learn }: { projectId?: string; tab?: StudioTab; learn?: boolean }) {
+export function StudioApp({ projectId, tab, example }: { projectId?: string; tab?: StudioTab; example?: boolean }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [state, setState] = useState<State>({ kind: 'loading' });
 
@@ -100,7 +100,7 @@ export function StudioApp({ projectId, tab, learn }: { projectId?: string; tab?:
   }, []);
 
   useEffect(() => {
-    if (learn) return;
+    if (example) return;
     let cancelled = false;
     void load(takeHandoff())
       .catch((): State => ({ kind: 'local' }))
@@ -110,12 +110,20 @@ export function StudioApp({ projectId, tab, learn }: { projectId?: string; tab?:
     return () => {
       cancelled = true;
     };
-  }, [learn]);
+  }, [example]);
 
-  if (learn) return <Learn />;
+  if (example && projectId) return <Example id={projectId} {...(tab ? { tab } : {})} />;
 
   if (state.kind === 'loading') return null;
-  if (state.kind === 'local') return <Learn noServer />;
+  if (state.kind === 'local') {
+    return (
+      <div className="studio">
+        <h1>{t('studio.examples.workspaceTitle')}</h1>
+        <p className="message">{t('studio.examples.noServer')}</p>
+        <Examples />
+      </div>
+    );
+  }
   if (state.kind === 'signed-out') {
     return (
       <SignIn site={state.site} {...(state.handoffFailed ? { handoffFailed: true } : {})} />
@@ -156,7 +164,7 @@ export function StudioApp({ projectId, tab, learn }: { projectId?: string; tab?:
           </ul>
         )}
         <NewProject />
-        <LearnLink />
+        <Examples />
         <p className="meta">
           {t('studio.keysElsewhere')}{' '}
           {state.site.keys_url && <a href={state.site.keys_url}>{t('studio.openKeyPage')}</a>}
@@ -187,7 +195,7 @@ function NewProject() {
     e.preventDefault();
     setError(undefined);
     try {
-      await projectApi.create(id, name.trim());
+      await createProject(id, name.trim());
       location.assign(studioPath(id, 'details'));
     } catch (failure) {
       setError(
@@ -266,18 +274,50 @@ function SignIn({ site, handoffFailed }: { site: Site; handoffFailed?: boolean }
         )}
         <p className="meta">{t('studio.signInFirstTime')}</p>
       </section>
-      <LearnLink />
+      <Examples />
     </div>
   );
 }
 
-/** To the practice page, which needs no account or passkey. */
-function LearnLink() {
+/** The example projects, open to anyone: no account or passkey needed. */
+function Examples() {
   const { t } = useTranslation(undefined, { lng: 'en' });
   return (
-    <section className="card">
-      <a href={STUDIO_LEARN_PATH}>{t('studio.learn.link')}</a>
-      <p className="meta">{t('studio.learn.linkHelp')}</p>
+    <section className="card" aria-labelledby="studio-examples">
+      <h2 id="studio-examples">{t('studio.examples.title')}</h2>
+      <p className="meta">{t('studio.examples.intro')}</p>
+      <ul className="studio-examples">
+        {EXAMPLES.map((e) => (
+          <li key={e.id}>
+            <a href={studioPath(e.id, undefined, true)}>{projectName({ id: e.id, name: e.config.name })}</a>
+            <span className="meta">{t(`studio.examples.about.${e.id}`)}</span>
+          </li>
+        ))}
+      </ul>
     </section>
+  );
+}
+
+/** One example project: the project screens over the example's API. */
+function Example({ id, tab }: { id: string; tab?: StudioTab }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const example = EXAMPLES.find((e) => e.id === id);
+  if (!example) {
+    return (
+      <div className="studio">
+        <h1>{t('studio.projectNotFound')}</h1>
+        <Examples />
+      </div>
+    );
+  }
+  return <ExampleProjectScreen example={example} {...(tab ? { tab } : {})} />;
+}
+
+function ExampleProjectScreen({ example, tab }: { example: ExampleProject; tab?: StudioTab }) {
+  const api = useMemo(() => exampleApi(example), [example]);
+  return (
+    <ProjectApiContext.Provider value={api}>
+      <Project projectId={example.id} {...(tab ? { tab } : {})} account={null} />
+    </ProjectApiContext.Provider>
   );
 }

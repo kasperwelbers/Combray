@@ -11,7 +11,7 @@ import { StoryPlayer } from '../components/StoryPlayer';
 import type { StoryView } from '../worker/api';
 import type { StoredPackage } from './api';
 import { studio } from './client';
-import { projectApi } from './projectApi';
+import { useProjectApi } from './projectApi';
 
 /** A platform's files as the draft has them. */
 export interface PlatformFiles {
@@ -80,6 +80,7 @@ export function useStoryPreview(projectId: string, platforms: PlatformFiles[], s
   const [views, setViews] = useState<Record<string, StoryView>>({});
   const [loading, setLoading] = useState(0);
   const [failed, setFailed] = useState(false);
+  const projectApi = useProjectApi();
 
   // The packages with values; the first one of each platform is chosen to start with.
   useEffect(() => {
@@ -96,7 +97,7 @@ export function useStoryPreview(projectId: string, platforms: PlatformFiles[], s
           () => undefined,
         );
     }
-  }, [projectId, platforms]);
+  }, [projectApi, projectId, platforms]);
 
   // Chosen packages go to the studio worker once.
   useEffect(() => {
@@ -117,7 +118,7 @@ export function useStoryPreview(projectId: string, platforms: PlatformFiles[], s
         )
         .finally(() => setLoading((n) => n - 1));
     }
-  }, [projectId, chosen, loaded]);
+  }, [projectApi, projectId, chosen, loaded]);
 
   const real = useCallback((platform: string) => Boolean(chosen[platform]) && loaded.has(packageKey(platform, chosen[platform]!)), [chosen, loaded]);
 

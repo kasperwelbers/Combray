@@ -40,8 +40,10 @@ describe('parseRoute', () => {
     expect(parseRoute('/studio/', '')).toEqual({ kind: 'studio' });
     expect(parseRoute('/studio', '#id=P1')).toEqual({ kind: 'studio' });
     expect(parseRoute('/studio/p/willow/', '')).toEqual({ kind: 'studio', projectId: 'willow' });
-    expect(parseRoute('/studio/learn/', '')).toEqual({ kind: 'studio', learn: true });
-    expect(parseRoute('/studio/learn/more', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/studio/example/youtube/', '')).toEqual({ kind: 'studio', projectId: 'youtube', example: true });
+    expect(parseRoute('/studio/example/youtube/story/', '')).toEqual({ kind: 'studio', projectId: 'youtube', example: true, tab: 'story' });
+    expect(parseRoute('/studio/example/', '')).toEqual({ kind: 'home' });
+    expect(parseRoute('/studio/learn/', '')).toEqual({ kind: 'home' });
     expect(parseRoute('/studio/p/Willow/', '')).toEqual({ kind: 'home' });
     expect(parseRoute('/studio/p/willow/extra', '')).toEqual({ kind: 'home' });
     expect(parseRoute('/studio/p/willow/data/', '')).toEqual({ kind: 'studio', projectId: 'willow', tab: 'data' });

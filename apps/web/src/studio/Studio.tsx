@@ -34,7 +34,7 @@ import {
   type Shape,
   type StructureFile,
 } from '@combray/core';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { examplePackages } from '@combray/importers';
@@ -61,7 +61,7 @@ import {
   type Shortcut,
   type StudioDraft,
 } from './model';
-import { download, loadView, VIEW_KEY } from './draft';
+import { download, loadView, VIEW_KEY } from './prefs';
 import { NodeDetails, type DetailSection } from './NodeDetails';
 import { Help, Popover } from './Popover';
 import { SelectionBar } from './SelectionBar';
@@ -110,7 +110,7 @@ function remapOpen(open: Set<string>, before: ProjectNode | undefined, after: Pr
   return out;
 }
 
-/** Where the configuration being edited is kept: the project's draft on the server, or this browser. */
+/** Where the configuration being edited is kept: the project's draft (on the server, or an example's). */
 export interface DraftStore {
   initial: StudioDraft | undefined;
   save(draft: StudioDraft | undefined): void;
@@ -123,21 +123,14 @@ export interface DraftStore {
  * structures seen (never values) are saved, through `draft`.
  */
 export function Studio({
-  title,
-  header,
   draft,
   pack,
   packages,
-  intro = true,
 }: {
-  title?: string;
-  header?: ReactNode;
   draft: DraftStore;
   pack?: string;
-  /** Where the platform's test packages are kept; without it, every package is temporary. */
-  packages?: PackageStore;
-  /** Explain what the editor is for (the practice page has its own introduction). */
-  intro?: boolean;
+  /** Where the platform's test packages are kept. */
+  packages: PackageStore;
 }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [initial] = useState(() => draft.initial);
@@ -249,7 +242,6 @@ export function Studio({
   // Packages kept with the platform: their structures, seen like any other, and their values
   // loaded into this tab.
   const refreshStored = useCallback(async () => {
-    if (!packages) return [];
     const list = await packages.list();
     const kept = list.shapes.map((s) => s.shape);
     setStored(list.packages);
@@ -261,7 +253,6 @@ export function Studio({
     return list.packages;
   }, [packages]);
   useEffect(() => {
-    if (!packages) return;
     let cancelled = false;
     void (async () => {
       setLoadingKept(true);
@@ -386,7 +377,7 @@ export function Studio({
         return same.id;
       }
       setExports((e) => [...e, info]);
-      const kept = packages ? await keepPackage(info, shape, keep) : undefined;
+      const kept = await keepPackage(info, shape, keep);
       if (same) {
         setMessage({ text: kept ?? t('studio.sameStructure', { name: same.name }) });
         return info.id;
@@ -424,7 +415,7 @@ export function Studio({
   async function keepPackage(info: StudioExport, shape: Shape, keep: boolean): Promise<string> {
     try {
       const data = keep ? await studio.exportTree(info.id) : undefined;
-      const saved = await packages!.add(info.name, shape, data);
+      const saved = await packages.add(info.name, shape, data);
       if (keep) setStoredOf((m) => new Map(m).set(info.id, saved.id));
       await refreshStored();
       return keep ? t('studio.kept.savedWithValues') : saved.new_structure ? t('studio.kept.savedStructure') : t('studio.kept.knownStructure');
@@ -436,7 +427,7 @@ export function Studio({
   }
 
   async function removeStored(id: string, name: string) {
-    if (!packages || !window.confirm(t('studio.kept.confirmRemove', { name }))) return;
+    if (!window.confirm(t('studio.kept.confirmRemove', { name }))) return;
     try {
       await packages.remove(id);
     } catch {
@@ -651,9 +642,7 @@ export function Studio({
 
   return (
     <div className="studio">
-      {title && <h1>{title}</h1>}
-      {header}
-      {intro && <p>{t('studio.intro')}</p>}
+      <p>{t('studio.intro')}</p>
 
       {tree && (
         <p className={`data-status ${exports.length > 0 ? 'with-data' : 'structure-only'}`}>
@@ -714,17 +703,15 @@ export function Studio({
           <>
             <section className="card">
               <h3>{t('studio.kept.addTitle')}</h3>
-              <p className="meta">{packages ? t('studio.kept.addIntro') : t('studio.exportsIntro')}</p>
+              <p className="meta">{t('studio.kept.addIntro')}</p>
               <Dropzone busy={busy} onFiles={async (files) => void (await addFiles(files, keepValues))} />
-              {packages && (
-                <div className="section-head check-row">
-                  <label className="check">
-                    <input type="checkbox" checked={keepValues} onChange={(e) => setKeepValues(e.target.checked)} />
-                    {t('studio.kept.keepValues')}
-                  </label>
-                  <Help topic={t('studio.kept.keepValues')}>{t('studio.kept.keepValuesHelp')}</Help>
-                </div>
-              )}
+              <div className="section-head check-row">
+                <label className="check">
+                  <input type="checkbox" checked={keepValues} onChange={(e) => setKeepValues(e.target.checked)} />
+                  {t('studio.kept.keepValues')}
+                </label>
+                <Help topic={t('studio.kept.keepValues')}>{t('studio.kept.keepValuesHelp')}</Help>
+              </div>
               {examples.length > 0 && (
                 <div className="examples">
                   <p className="meta">{t('studio.examplesIntro')}</p>
@@ -741,33 +728,31 @@ export function Studio({
               )}
             </section>
 
-            {packages && (
-              <section className="card">
-                <h3>{t('studio.kept.title')}</h3>
-                {loadingKept && <p className="meta">{t('studio.kept.loading')}</p>}
-                {stored.length === 0 ? (
-                  <p className="meta">{t('studio.kept.none')}</p>
-                ) : (
-                  <ul className="export-list">
-                    {stored.map((p) => (
-                      <li key={p.id}>
-                        <span>{p.name}</span>
-                        <span className="meta">
-                          {' · '}
-                          {p.has_data ? t('studio.kept.withValues', { size: megabytes(p.data_bytes) }) : t('studio.kept.structureOnly')}
-                          {' · '}
-                          {t('studio.kept.added', { date: new Date(p.added * 1000).toLocaleDateString('en-GB'), by: p.added_by ?? '–' })}
-                        </span>
-                        <button type="button" className="link-button" onClick={() => void removeStored(p.id, p.name)}>
-                          {t('studio.remove')}
-                          <span className="visually-hidden"> {p.name}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
+            <section className="card">
+              <h3>{t('studio.kept.title')}</h3>
+              {loadingKept && <p className="meta">{t('studio.kept.loading')}</p>}
+              {stored.length === 0 ? (
+                <p className="meta">{t('studio.kept.none')}</p>
+              ) : (
+                <ul className="export-list">
+                  {stored.map((p) => (
+                    <li key={p.id}>
+                      <span>{p.name}</span>
+                      <span className="meta">
+                        {' · '}
+                        {p.has_data ? t('studio.kept.withValues', { size: megabytes(p.data_bytes) }) : t('studio.kept.structureOnly')}
+                        {' · '}
+                        {t('studio.kept.added', { date: new Date(p.added * 1000).toLocaleDateString('en-GB'), by: p.added_by ?? '–' })}
+                      </span>
+                      <button type="button" className="link-button" onClick={() => void removeStored(p.id, p.name)}>
+                        {t('studio.remove')}
+                        <span className="visually-hidden"> {p.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
             {exports.some((e) => !storedOf.has(e.id)) && (
               <section className="card">
@@ -811,7 +796,7 @@ export function Studio({
                 }}
               />
               <section className="studio-section">
-                <TemporaryUpload busy={busy} keeps={packages !== undefined} onFiles={async (files) => void (await addFiles(files))} />
+                <TemporaryUpload busy={busy} onFiles={async (files) => void (await addFiles(files))} />
                 <p className="meta">
                   {t('studio.counts', { ...counts })}
                   {counts.undecided > 0 && ` ${t('studio.undecidedLeft', { count: counts.undecided })}`}
@@ -953,7 +938,7 @@ export function Studio({
                   )}
                 </select>
               </label>
-              <TemporaryUpload busy={busy} keeps={packages !== undefined} onFiles={async (files) => {
+              <TemporaryUpload busy={busy} onFiles={async (files) => {
                 const id = await addFiles(files);
                 if (id !== undefined) setPreviewSource(id);
               }} />
@@ -1014,7 +999,7 @@ const megabytes = (bytes: number) =>
  * Load a package for this tab only: its values are shown here and gone on reload. Its structure
  * is still kept with the platform, like any test package's.
  */
-function TemporaryUpload({ busy, keeps, onFiles }: { busy: boolean; keeps: boolean; onFiles: (files: Upload[]) => Promise<void> }) {
+function TemporaryUpload({ busy, onFiles }: { busy: boolean; onFiles: (files: Upload[]) => Promise<void> }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -1022,7 +1007,7 @@ function TemporaryUpload({ busy, keeps, onFiles }: { busy: boolean; keeps: boole
       <button type="button" className="button quiet" disabled={busy} onClick={() => input.current?.click()}>
         {t('studio.kept.temporaryButton')}
       </button>
-      <Help topic={t('studio.kept.temporaryButton')}>{keeps ? t('studio.kept.temporaryHelp') : t('studio.kept.temporaryHelpPractice')}</Help>
+      <Help topic={t('studio.kept.temporaryButton')}>{t('studio.kept.temporaryHelp')}</Help>
       <input
         ref={input}
         type="file"

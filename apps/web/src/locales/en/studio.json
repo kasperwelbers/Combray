@@ -1,6 +1,5 @@
 {
   "intro": "Work out what participants see and are asked to donate from this platform: load a test package, decide what happens to each part of it, and check the preview.",
-  "exportsIntro": "Data donation packages used only to work out the tree for this platform: your own (the zip or folder you downloaded from the platform) or a synthetic example. They stay in this browser tab: nothing is stored or sent, and closing the tab removes them. Only the tree and your decisions are saved, without any values. You can add several, for example in different languages; their structure is combined.",
   "filesIntro": "Save this platform's tree as structure.json and importer.json, or open files saved earlier or shared by another project.",
   "open": "Open files",
   "save": "Save files",
@@ -331,22 +330,6 @@
     "needsPackage": "This needs a tree to work on. Load a test package first, your own or one of the examples.",
     "toPackages": "Go to test packages"
   },
-  "learn": {
-    "title": "Learn how the studio works",
-    "link": "Learn how the studio works",
-    "linkHelp": "Try the tree editor with example data first. No account or passkey needed.",
-    "back": "Back to the researcher workspace",
-    "intro": "This is a place to practise. In a project you do the same thing for each platform you ask participants about: you work out what they will see, and what you will ask them to donate. Here you can try it with an example package, without a project.",
-    "stepsTitle": "How it works",
-    "steps": {
-      "packages": "Test packages: load an example, or a data download package of your own. Its structure becomes a tree.",
-      "decisions": "Decisions: for each part of the tree, choose whether participants see it, are asked to donate it, or whether it is ignored.",
-      "preview": "View as participant: see the tables a participant would get from this package.",
-      "chart": "Charts: try how the data can be counted and shown, as participants will explore it."
-    },
-    "privacy": "Packages stay in this browser tab and are gone when you close it. The tree and your decisions (never any values) are kept in this browser, so you can come back to them.",
-    "noServer": "This server has no researcher accounts, so only this practice workspace is available here."
-  },
   "help": "What is \"{{topic}}\"?",
   "platformSettings": "Platform settings",
   "cleanTitle": "Clean up",
@@ -417,8 +400,7 @@
     "knownStructure": "Its structure was already known.",
     "saveFailed": "It could not be kept with the platform; it is loaded in this tab only.",
     "too_big": "It is too big to keep its values (at most 25 MB); it is loaded in this tab only.",
-    "too_many": "This platform already keeps the values of 10 packages; remove one first. This one is loaded in this tab only.",
-    "temporaryHelpPractice": "Load a package to see its values here, in this tab only: nothing is stored anywhere."
+    "too_many": "This platform already keeps the values of 10 packages; remove one first. This one is loaded in this tab only."
   },
   "repeat": {
     "once": "one entry seen",
@@ -580,5 +562,22 @@
     "previewBusy": "Working out the views…",
     "previewFailed": "A test package could not be loaded; showing made-up numbers for it.",
     "skippedInPreview": "Participants with data like this test package skip this slide: none of its views has data."
+  },
+  "examples": {
+    "title": "Example projects",
+    "intro": "Try the studio on a project that is already set up, with synthetic data. No account or passkey needed: change anything, it is kept in this browser tab only.",
+    "workspaceTitle": "Researcher workspace",
+    "noServer": "This server has no researcher accounts, so only the example projects are available here.",
+    "about": {
+      "youtube": "Google Takeout and TikTok, with a story about a year on YouTube."
+    },
+    "back": "Back to the studio",
+    "banner": "This is an example project with synthetic data. Change anything you like: it is kept in this browser tab only, starts over when you close the tab, and cannot be published.",
+    "reset": "Start over now",
+    "confirmReset": "Start this example over? Your changes to it are lost.",
+    "no": {
+      "researchers": "Example projects have no researchers. In your own projects, colleagues you add can work on the project with you, and get access to its donations on the key page.",
+      "donations": "Example projects get no donations. In your own projects, this page counts the donations that came in; the key page opens them."
+    }
   }
 }
