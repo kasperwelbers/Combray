@@ -2864,3 +2864,52 @@ button.tag {
 .change-breaking h3 {
   color: var(--terracotta);
 }
+
+/* The Texts tab: one box per language, side by side where there is room. */
+.texts-editor .check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+}
+
+.texts-editor .check-row .check {
+  margin: 0.25rem 0;
+}
+
+.texts-platform + .texts-platform {
+  margin-top: 1.25rem;
+}
+
+.texts-table {
+  border-top: 1px solid var(--line);
+  padding: 0.4rem 0;
+}
+
+.texts-table > summary {
+  cursor: pointer;
+}
+
+.text-inputs {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0 1rem;
+}
+
+.texts-fields,
+.texts-app {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+
+.texts-fields li,
+.texts-app li {
+  margin: 0.6rem 0;
+}
+
+.texts-fields li {
+  padding-left: 1rem;
+}

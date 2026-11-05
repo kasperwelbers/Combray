@@ -28,7 +28,7 @@ import {
 } from '@combray/core';
 import { donationRequest, encodePayload, fingerprint, fromBase64Url, sealDonation, type DonationConsent, type DonationQuestion } from '@combray/seal';
 
-import { uploadPoints } from '../projectConfig';
+import { projectTexts, uploadPoints } from '../projectConfig';
 import type { DonateResult, DonationOverview, DonationRow, DonationTable, Page, StudyConsent, UploadPoint } from './api';
 import type { PointProject } from './derived';
 
@@ -205,6 +205,7 @@ export async function fetchSettings(projectId: string): Promise<StudySettings | 
     const config = (await response.json()) as {
       version?: unknown;
       uploads?: unknown;
+      texts?: unknown;
       consent?: unknown;
       story?: unknown;
       donation_key?: { public_key?: unknown; fingerprint?: unknown };
@@ -213,8 +214,8 @@ export async function fetchSettings(projectId: string): Promise<StudySettings | 
     const consent = studyConsent(config.consent);
     const story = parseStory(config.story);
     return {
-      points: uploadPoints(config.uploads),
-      settings: JSON.stringify([config.version ?? null, config.uploads ?? null, config.consent ?? null, config.story ?? null]),
+      points: uploadPoints(config.uploads, projectTexts(config.texts)),
+      settings: JSON.stringify([config.version ?? null, config.uploads ?? null, config.consent ?? null, config.story ?? null, config.texts ?? null]),
       ...(typeof config.version === 'number' && Number.isInteger(config.version) && config.version > 0 ? { version: config.version } : {}),
       ...(consent ? { consent } : {}),
       ...(story ? { story } : {}),

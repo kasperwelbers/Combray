@@ -43,7 +43,7 @@ import { empty, HttpError, json, jsonBody, noStore, type Reply, type Request, st
 import { RateLimit } from './limits.ts';
 import { log } from './log.ts';
 import { Mailer } from './mail.ts';
-import { MAX_STORY_BYTES, MAX_TREE_BYTES, ProjectFailure, Projects, validPlatformId, validProjectId } from './projects.ts';
+import { MAX_STORY_BYTES, MAX_TEXTS_BYTES, MAX_TREE_BYTES, ProjectFailure, Projects, validPlatformId, validProjectId } from './projects.ts';
 import { b64, canonicalJson, fromB64, randomToken, sha256, validRandomId } from './util.ts';
 
 /** How long a passkey ceremony may take between its start and finish. */
@@ -636,6 +636,19 @@ export class Research {
         return empty(204);
       },
 
+      getTexts: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        return noStore(json({ texts: call(() => r.projects.texts(req.params.id!)) }));
+      },
+
+      putTexts: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        call(() => r.projects.setTexts(req.params.id!, jsonBody(req).texts));
+        return empty(204);
+      },
+
       getPlatform: (req: Request, site: Site): Reply => {
         const who = signedIn(req, site);
         memberOf(who, req.params.id);
@@ -915,6 +928,9 @@ export { hostOf };
 
 /** A story, with room for the request around it. */
 export const STORY_BODY_LIMIT = MAX_STORY_BYTES + 16 * 1024;
+
+/** Texts, with room for the request around them. */
+export const TEXTS_BODY_LIMIT = MAX_TEXTS_BYTES + 16 * 1024;
 
 /** Platform drafts carry two project tree files. */
 export const PLATFORM_BODY_LIMIT = 2 * MAX_TREE_BYTES + 64 * 1024;

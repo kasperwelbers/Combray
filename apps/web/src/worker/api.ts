@@ -5,6 +5,7 @@ import type {
   Localized,
   NodeKind,
   NodePath,
+  PlatformTexts,
   Role,
   RootChoice,
   Row,
@@ -41,6 +42,8 @@ export interface UploadPoint {
   /** The project's own tree, as published from the studio (structure and settings files). */
   structure?: unknown;
   importer?: unknown;
+  /** The project's labels and descriptions for this platform's tables, over its pack's. */
+  texts?: PlatformTexts;
 }
 
 /** A column of a table derived through a project tree. */
@@ -266,6 +269,8 @@ export interface ProjectInfo {
   uploads?: UploadPoint[];
   /** The study has a story for participants. */
   story?: true;
+  /** The languages the study is in, the first one it is written in. */
+  languages?: string[];
 }
 
 /** A project that has a store on this device. */

@@ -13,6 +13,7 @@ export const HELP_GROUPS = {
   packages: ['test-packages', 'keep-values'],
   platform: ['undecided-shown', 'find'],
   notes: ['conflict', 'name-mismatch'],
+  participants: ['texts'],
 } as const;
 
 export type HelpTopic = (typeof HELP_GROUPS)[keyof typeof HELP_GROUPS][number];

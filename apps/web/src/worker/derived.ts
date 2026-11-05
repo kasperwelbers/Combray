@@ -59,8 +59,8 @@ const projects = new Map<string, PointProject>();
 /** The study's own configurations, by upload point, with the files they were read from. */
 const own = new Map<string, { files: string; project: PointProject }>();
 
-/** The labels of an upload point: its pack's, if it started from one. */
-const labelsFor = (point: UploadPoint): Labels => labelsOf(packs.find((p) => p.id === point.pack)?.texts);
+/** Labels of a platform's tables and fields: the project's over its pack's. */
+const labelsFor = (point: UploadPoint): Labels => labelsOf(packs.find((p) => p.id === point.pack)?.texts, point.texts);
 
 function project(config: ProjectConfig, seen: Shape, labels: Labels): PointProject {
   return { config, seen, tree: buildTree(config, seen).tree, labels };
@@ -73,7 +73,7 @@ function project(config: ProjectConfig, seen: Shape, labels: Labels): PointProje
 export function pointProject(point: UploadPoint): PointProject | undefined {
   if (point.structure !== undefined && point.importer !== undefined) {
     // Read again when the study's settings changed since (they are fetched fresh to donate).
-    const files = JSON.stringify([point.structure, point.importer]);
+    const files = JSON.stringify([point.structure, point.importer, point.texts ?? null]);
     if (own.get(point.id)?.files !== files) {
       try {
         const importer = parseImporterFile(point.importer);
@@ -91,14 +91,16 @@ export function pointProject(point: UploadPoint): PointProject | undefined {
   }
   const pack = packs.find((p) => p.id === point.pack);
   if (!pack) return undefined;
-  if (!projects.has(pack.id))
-    projects.set(pack.id, {
+  // The pack's tree is the same for every project; its labels may be the project's own.
+  const key = `${pack.id}\u0000${JSON.stringify(point.texts ?? null)}`;
+  if (!projects.has(key))
+    projects.set(key, {
       config: configOf(pack.importer),
       seen: pack.structure.root,
       tree: packTree(pack),
       labels: labelsFor(point),
     });
-  return projects.get(pack.id);
+  return projects.get(key);
 }
 
 /** Whether a node has, or something below it has, a researcher's show or donate decision. */

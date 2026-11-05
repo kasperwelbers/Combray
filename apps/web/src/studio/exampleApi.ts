@@ -20,6 +20,7 @@ interface ExampleConfig {
   participants: ProjectDetails['participants'];
   consent?: ProjectDetails['consent'];
   story?: unknown;
+  texts?: unknown;
   uploads: { id: string; pack?: string; name: Localized; structure?: unknown; importer?: unknown }[];
 }
 
@@ -49,6 +50,7 @@ interface ExampleState {
   details: ProjectDetails;
   platforms: (PlatformValue & { id: string })[];
   story: unknown;
+  texts: unknown;
   /** Per platform: the bundled packages taken away, and the packages added. */
   packages: Record<string, { removed: string[]; added: AddedPackage[] }>;
 }
@@ -72,6 +74,7 @@ function startState(config: ExampleConfig): ExampleState {
       };
     }),
     story: config.story ?? null,
+    texts: config.texts ?? null,
     packages: {},
   };
 }
@@ -222,6 +225,12 @@ export function exampleApi(example: ExampleProject): ProjectApi {
     },
     async saveStory(_id, story) {
       change(example, (s) => (s.story = structuredClone(story)));
+    },
+    async texts() {
+      return structuredClone(stateOf(example).texts ?? null);
+    },
+    async saveTexts(_id, texts) {
+      change(example, (s) => (s.texts = structuredClone(texts)));
     },
     async platform(_id, platformId) {
       const s = stateOf(example);

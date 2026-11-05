@@ -25,8 +25,10 @@ export {
 } from './config';
 export type { ConfigNode, Match, NodeSettings, ProjectConfig } from './config';
 export { isName, toName, typingName, defaultLabel, freeName, MAX_NAME } from './names';
-export { labelsOf, checkPlatformTexts, checkTranslations, parseTextsFile, TextsError, TEXTS_FORMAT, LANGUAGE } from './texts';
-export type { PlatformTexts, TableTexts, FieldTexts, TextsFile, Translations } from './texts';
+export { labelsOf, checkPlatformTexts, checkProjectTexts, checkTranslations, parseTextsFile, TextsError, TEXTS_FORMAT, LANGUAGE, APP_KEY } from './texts';
+export type { PlatformTexts, ProjectTexts, TableTexts, FieldTexts, TextsFile, Translations } from './texts';
+export { translationDocument, translationsToYaml, readTranslations, applyTranslations } from './translations';
+export type { TranslationDocument, TextSources, ShownTables, TableEntry, BlockEntry } from './translations';
 export { nameKind, currentName, nameGroup, nameProblem, setName, renameNode, keepNames, remapAfter } from './naming';
 export type { NameKind } from './naming';
 export { versionChanges, platformChanges } from './versions';

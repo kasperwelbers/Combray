@@ -152,6 +152,12 @@ describe('publishing', () => {
     expect((await s.main.get('/api/v1/projects/birch/draft/story', studioSession)).json).toEqual({ story: null });
     expect((await s.main.put('/api/v1/projects/birch/draft/story', { story }, studioSession)).status).toBe(204);
     expect((await s.main.get('/api/v1/projects/birch/draft/story', studioSession)).json).toEqual({ story });
+    // So are the texts: languages, labels over the pack's, and the app's texts worded for the study.
+    const texts = { languages: ['nl', 'en'], platforms: { tiktok: { tables: { tiktok_likes: { label: { nl: 'Vind-ik-leuks' } } } } }, app: { 'donate:title': { nl: 'Delen' } } };
+    expect((await s.main.get('/api/v1/projects/birch/draft/texts', studioSession)).json).toEqual({ texts: null });
+    expect((await s.main.put('/api/v1/projects/birch/draft/texts', { texts: { languages: 'nl' } }, studioSession)).status).toBe(400);
+    expect((await s.main.put('/api/v1/projects/birch/draft/texts', { texts }, studioSession)).status).toBe(204);
+    expect((await s.main.get('/api/v1/projects/birch/draft/texts', studioSession)).json).toEqual({ texts });
     // Publishing needs access to the project's encryption key, which Ada creates first.
     expect((await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session)).status).toBe(403);
     expect((await createProjectKey(s, ada.session, 'birch')).status).toBe(201);
@@ -174,6 +180,7 @@ describe('publishing', () => {
       participants: { mode: 'required' },
       consent,
       story,
+      texts,
       uploads: [{ id: 'tiktok', name: 'TikTok', pack: 'tiktok', structure: STRUCTURE, importer: IMPORTER }],
     });
     expect(config.text).not.toContain('B-[0-9]');

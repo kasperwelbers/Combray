@@ -12,8 +12,10 @@ export function loadView(): { view: TreeView; hideIgnored: boolean } {
   }
 }
 
-export function download(name: string, content: unknown): void {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' }));
+/** Save JSON (or, given a string and its type, text) as a file. */
+export function download(name: string, content: unknown, type?: string): void {
+  const text = type === undefined ? JSON.stringify(content, null, 2) : String(content);
+  const url = URL.createObjectURL(new Blob([text], { type: type ?? 'application/json' }));
   const a = document.createElement('a');
   a.href = url;
   a.download = name;

@@ -139,6 +139,23 @@ function storyText(value: unknown): string | null {
   return Buffer.byteLength(text) <= MAX_STORY_BYTES ? text : fail('invalid');
 }
 
+/** The largest set of texts, as JSON text. The web client checks its shape (`checkProjectTexts`). */
+export const MAX_TEXTS_BYTES = 256 * 1024;
+
+/**
+ * Texts as stored: an object of languages, platforms' labels and app texts, within the size limit;
+ * `null` for none. Like the story, participants' devices check them before they use them.
+ */
+function textsText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return fail('invalid');
+  const v = value as Record<string, unknown>;
+  const isMap = (x: unknown) => x === undefined || (typeof x === 'object' && x !== null && !Array.isArray(x));
+  if (!(v.languages === undefined || Array.isArray(v.languages)) || !isMap(v.platforms) || !isMap(v.app)) return fail('invalid');
+  const text = JSON.stringify(value);
+  return Buffer.byteLength(text) <= MAX_TEXTS_BYTES ? text : fail('invalid');
+}
+
 export interface Details {
   name: Localized;
   description?: Localized;
@@ -333,6 +350,19 @@ export class Projects {
     return parse(row.story);
   }
 
+  /** The draft's texts, or `null`. */
+  texts(id: string): unknown {
+    const row = this.db.select({ texts: projectDetails.texts }).from(projectDetails).where(eq(projectDetails.projectId, id)).get() ?? fail('not_found');
+    return parse(row.texts);
+  }
+
+  /** Replace the draft's texts (`null` removes them); throws `invalid`. */
+  setTexts(id: string, value: unknown): void {
+    const texts = textsText(value);
+    if (changes(this.db.update(projectDetails).set({ texts }).where(eq(projectDetails.projectId, id)).run()) === 0) fail('not_found');
+    this.touch(id);
+  }
+
   /** Replace the draft's story (`null` removes it); throws `invalid`. */
   setStory(id: string, value: unknown): void {
     const story = storyText(value);
@@ -521,6 +551,7 @@ export class Projects {
   publish(id: string): number {
     const summary = this.draft(id);
     const story = this.story(id);
+    const texts = this.texts(id);
     const live = {
       id,
       name: summary.details.name,
@@ -528,6 +559,7 @@ export class Projects {
       participants: summary.details.participants,
       ...(summary.details.consent ? { consent: summary.details.consent } : {}),
       ...(story !== null ? { story } : {}),
+      ...(texts !== null ? { texts } : {}),
       uploads: summary.platforms.map((p) => {
         const draft = this.platform(id, p.id);
         return {
@@ -564,6 +596,7 @@ export class Projects {
     if (!validProjectId(id)) return fail('invalid');
     const details = checkDetails({ ...c, name: c.name ?? id });
     const story = storyText(c.story);
+    const texts = textsText(c.texts);
     const uploads = Array.isArray(c.uploads) ? c.uploads : [];
     const platforms = uploads.map((u, position) => {
       if (!u || typeof u !== 'object') return fail('invalid');
@@ -590,6 +623,7 @@ export class Projects {
         participantsPattern: details.participants.pattern ?? null,
         consent: details.consent ? JSON.stringify(details.consent) : null,
         story,
+        texts,
       };
       tx.insert(projectDetails).values({ projectId: id, ...row }).onConflictDoUpdate({ target: projectDetails.projectId, set: row }).run();
       tx.delete(projectPlatforms).where(eq(projectPlatforms.projectId, id)).run();

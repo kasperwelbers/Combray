@@ -6,7 +6,8 @@ import { Madeleine, Skyline } from './components/Madeleine';
 import { useIdleLock } from './components/useIdleLock';
 import i18n, { LANGUAGES } from './i18n';
 import { saveLanguage } from './language';
-import { uploadPoints } from './projectConfig';
+import { applyAppTexts, studyLanguages } from './appTexts';
+import { projectTexts, uploadPoints } from './projectConfig';
 import { projectPath, readRoute, STUDIES_PATH } from './route';
 import { Donate } from './screens/Donate';
 import { Faq } from './screens/Faq';
@@ -48,15 +49,21 @@ export function App() {
         const response = await fetch(`/api/v1/p/${route.projectId}/config`, { cache: 'no-store' });
         if (response.status === 404) return setProject('not-found');
         if (!response.ok) return setProject('unreachable');
-        const config = (await response.json()) as Partial<Omit<ProjectInfo, 'uploads' | 'story'>> & { uploads?: unknown; story?: unknown };
+        const config = (await response.json()) as Partial<Omit<ProjectInfo, 'uploads' | 'story' | 'languages'>> & { uploads?: unknown; story?: unknown; texts?: unknown };
         await data.openProject(route.projectId);
-        const uploads = uploadPoints(config.uploads);
+        const texts = projectTexts(config.texts);
+        const uploads = uploadPoints(config.uploads, texts);
+        // The study's own wording of the app's texts, and its languages.
+        applyAppTexts(texts.app);
+        const languages = studyLanguages(texts);
+        if (!languages.includes(i18n.resolvedLanguage ?? '')) await i18n.changeLanguage(languages[0]);
         setProject({
           id: route.projectId,
           ...(config.name ? { name: config.name } : {}),
           participants: { mode: config.participants?.mode ?? 'optional' },
           ...(uploads.length > 0 ? { uploads } : {}),
           ...(parseStory(config.story) ? { story: true as const } : {}),
+          languages,
         });
       } catch {
         setProject('unreachable');
@@ -139,7 +146,7 @@ function Shell({ project, actions, wide, studio = false, home = STUDIES_PATH, ch
                   void i18n.changeLanguage(e.target.value);
                 }}
               >
-                {LANGUAGES.map((l) => (
+                {(project?.languages ?? LANGUAGES).map((l) => (
                   <option key={l} value={l}>
                     {l === 'nl' ? 'Nederlands' : 'English'}
                   </option>

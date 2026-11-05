@@ -116,6 +116,9 @@ export interface ProjectApi {
   /** The draft's story, as stored (participants' devices check it block by block); `null` for none. */
   story(id: string): Promise<unknown>;
   saveStory(id: string, story: unknown): Promise<void>;
+  /** The draft's texts (languages, labels, app texts), as stored; `null` for none. */
+  texts(id: string): Promise<unknown>;
+  saveTexts(id: string, texts: unknown): Promise<void>;
   platform(id: string, platform: string): Promise<PlatformDraft>;
   /** A published version, as participants got it: to compare the draft with. */
   version(id: string, version: number): Promise<PublishedVersion>;
@@ -137,6 +140,8 @@ export const serverApi: ProjectApi = {
   saveDetails: (id, details) => call<void>('PUT', `${project(id)}/draft/details`, details),
   story: (id) => call<{ story: unknown }>('GET', `${project(id)}/draft/story`).then((r) => r.story),
   saveStory: (id, story) => call<void>('PUT', `${project(id)}/draft/story`, { story }),
+  texts: (id) => call<{ texts: unknown }>('GET', `${project(id)}/draft/texts`).then((r) => r.texts),
+  saveTexts: (id, texts) => call<void>('PUT', `${project(id)}/draft/texts`, { texts }),
   platform: (id, platform) => call<PlatformDraft>('GET', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
   savePlatform: (id, platform, value) => call<void>('PUT', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`, value),
   version: (id, version) => call<PublishedVersion>('GET', `${project(id)}/versions/${version}`),

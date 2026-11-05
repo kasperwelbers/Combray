@@ -199,6 +199,7 @@
       "consent": "Information & consent",
       "data": "Data explorer",
       "story": "Story",
+      "texts": "Texts",
       "researchers": "Researchers",
       "donations": "Donations"
     },
@@ -509,7 +510,7 @@
     }
   },
   "helpTopics": {
-    "title": "Help with the tree editor",
+    "title": "Help with the studio",
     "open": "Help",
     "about": "Help: {{topic}}",
     "close": "Close help",
@@ -520,7 +521,8 @@
       "reading": "Reading the values",
       "packages": "Test packages",
       "platform": "The whole platform",
-      "notes": "Notes on rows"
+      "notes": "Notes on rows",
+      "participants": "What participants read"
     },
     "topics": {
       "seen-data": {
@@ -598,6 +600,10 @@
       "name-mismatch": {
         "title": "Different decisions under one name",
         "body": "Fields with this name in this table have different decisions. Each keeps its own decision for its own data, which is allowed but unusual: participants see one column with a mix."
+      },
+      "texts": {
+        "title": "Texts and translations",
+        "body": "Participants read **labels**, never names: per table and field, in each of the project’s languages. Without a label they see the platform pack’s label, or else the name with spaces instead of underscores.\n\nThe app’s own texts (buttons, explanations) can be worded your own way per project. Texts marked privacy explain how data is protected; keep them true.\n\n**Export for translation** gives one YAML file with every text participants read: labels, the app texts you changed, the story and the consent texts. Fill in the other languages, by hand or by asking an AI, and **read the translated file** back in. Only texts are read: names, decisions and the story’s layout stay as they are."
       }
     }
   },
@@ -685,5 +691,35 @@
       "filter-changed": "{{what}}: its filters changed.",
       "filter-removed": "{{what}}: a filter was taken away, so more rows are donated."
     }
+  },
+  "texts": {
+    "intro": "Everything participants read besides the story and the consent texts, in each of the project’s languages: the labels of tables and fields, and the app’s own texts where you want your own words. Export it all, story and consent included, as one file to translate, by hand or with an AI, and read the translated file back in.",
+    "save": "Save texts",
+    "saved": "Saved. Participants see the new texts once you publish.",
+    "invalid": "These texts cannot be saved: {{problem}}",
+    "loadFailed": "The texts could not be loaded.",
+    "export": "Export for translation",
+    "import": "Read a translated file",
+    "nothingChanged": "Nothing in this file differs from the texts you have.",
+    "read_one": "Read {{count}} text from the file and saved it.",
+    "read_other": "Read {{count}} texts from the file and saved them.",
+    "badFile": "This file cannot be read: {{problem}}",
+    "languages": "Languages",
+    "languagesHelp": "The languages participants can choose. The first is the main language: participants whose browser asks for another language see this one.",
+    "mainLanguage": "Main language",
+    "tables": "Tables and fields",
+    "tablesHelp": "What participants see for each table and field. An empty box keeps the text in grey: the platform’s own, or the name with spaces.",
+    "noTables": "No tables yet. Show or donate something in the data explorer first.",
+    "label": "Label",
+    "description": "Description",
+    "app": "The app’s texts",
+    "appHelp": "The texts of the app itself, such as buttons and explanations. Search for a word or a key to give it your own wording; texts you changed are listed here.",
+    "search": "Search the app’s texts",
+    "searchHint": "Type at least two letters to search.",
+    "more_one": "{{count}} more text matches; search more precisely to see it.",
+    "more_other": "{{count}} more texts match; search more precisely to see them.",
+    "careful": "privacy",
+    "carefulHelp": "Texts marked privacy explain how participants’ data is kept safe and what they agree to. Change them only to make them clearer, never so they promise less or more than Combray does.",
+    "text": "Text"
   }
 }

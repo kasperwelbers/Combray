@@ -10,6 +10,7 @@ import { ApiFailure, useProjectApi, type Donations, type Draft, type Member, typ
 import { resetExample } from './exampleApi';
 import { HelpProvider } from './Help';
 import { StoryEditor } from './StoryEditor';
+import { TextsEditor } from './TextsEditor';
 import { VersionChanges } from './VersionChanges';
 import type { Renamed } from './naming';
 import { Studio, type DraftStore } from './Studio';
@@ -99,6 +100,7 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
           {tab === 'consent' && <ConsentTab draft={draft} onSaved={refresh} />}
           {tab === 'data' && <DataExplorer draft={draft} onChanged={refresh} />}
           {tab === 'story' && <StoryEditor draft={draft} />}
+          {tab === 'texts' && <TextsEditor draft={draft} onSaved={refresh} />}
           {tab === 'researchers' && (projectApi.example ? <NotInExamples tab={tab} /> : <ResearchersTab projectId={projectId} keysUrl={keysUrl} />)}
           {tab === 'donations' && (projectApi.example ? <NotInExamples tab={tab} /> : <DonationsTab projectId={projectId} />)}
         </div>

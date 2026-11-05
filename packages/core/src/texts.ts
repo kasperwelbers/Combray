@@ -101,6 +101,56 @@ export function checkPlatformTexts(v: unknown, what = 'texts'): PlatformTexts {
   return Object.keys(tables).length > 0 ? { tables } : {};
 }
 
+/**
+ * A project's texts (`/draft/texts`, published as `texts`): its languages (the first is the one
+ * it is written in), labels and descriptions per platform over its pack's, and app texts worded
+ * for the study, by `namespace:key` (`donate:review.title`).
+ */
+export interface ProjectTexts {
+  languages?: string[];
+  platforms?: Record<string, PlatformTexts>;
+  app?: Record<string, Translations>;
+}
+
+/** An app text's key: its namespace (`donate`) and its key in it (`review.title`). */
+export const APP_KEY = /^[a-z]+:[A-Za-z0-9_.-]+$/;
+const MAX_LANGUAGES = 12;
+const PLATFORM = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+/** Check a project's texts. Empty entries are left out; anything else unexpected is refused. */
+export function checkProjectTexts(v: unknown): ProjectTexts {
+  if (v === undefined || v === null) return {};
+  check(isObject(v), 'texts must be an object');
+  const out: ProjectTexts = {};
+  if (v.languages !== undefined) {
+    check(Array.isArray(v.languages) && v.languages.length <= MAX_LANGUAGES, `languages must be a list of at most ${MAX_LANGUAGES}`);
+    const languages = [...new Set(v.languages as unknown[])];
+    for (const l of languages) check(typeof l === 'string' && LANGUAGE.test(l), `${String(l)} is not a language code`);
+    if (languages.length > 0) out.languages = languages as string[];
+  }
+  if (v.platforms !== undefined) {
+    check(isObject(v.platforms), 'platforms must be an object');
+    const platforms: Record<string, PlatformTexts> = {};
+    for (const [id, texts] of Object.entries(v.platforms)) {
+      check(PLATFORM.test(id), `${id} is not a platform id`);
+      const checked = checkPlatformTexts(texts, id);
+      if (checked.tables) platforms[id] = checked;
+    }
+    if (Object.keys(platforms).length > 0) out.platforms = platforms;
+  }
+  if (v.app !== undefined) {
+    check(isObject(v.app), 'app must be an object');
+    const app: Record<string, Translations> = {};
+    for (const [key, texts] of Object.entries(v.app)) {
+      check(APP_KEY.test(key), `${key} is not an app text`);
+      const checked = checkTranslations(texts, key);
+      if (checked) app[key] = checked;
+    }
+    if (Object.keys(app).length > 0) out.app = app;
+  }
+  return out;
+}
+
 export function parseTextsFile(json: unknown): TextsFile {
   check(isObject(json) && json.format === TEXTS_FORMAT, `not a ${TEXTS_FORMAT} file`);
   return { format: TEXTS_FORMAT, ...checkPlatformTexts(json, 'texts') };
