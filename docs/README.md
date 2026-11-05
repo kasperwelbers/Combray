@@ -16,6 +16,7 @@ Suggested reading order:
    - [plans/2026-11-04-names-and-matches.md](plans/2026-11-04-names-and-matches.md): names and matches instead of aliases, seen structures kept apart from the researcher's tree, repetition instead of count ranges (plan, built)
    - [plans/2026-11-05-researcher-experience.md](plans/2026-11-05-researcher-experience.md): example projects without an account, names always with one match dialog, one panel per setting in the tree editor, a central help dialog (plan, built)
    - [plans/2026-11-05-stories-and-exploration.md](plans/2026-11-05-stories-and-exploration.md): **next up** — stories (slides that walk participants through their data), free exploration, removing data, what researchers get, AI support; the donate step first (plan, for discussion)
+   - [plans/2026-11-05-matching-robustness.md](plans/2026-11-05-matching-robustness.md): exact paths versus resilient matching, and near matches that ask the participant; what to look for in real packages (plan, for discussion)
    - [exploration.md](exploration.md): value formats, the researcher's view of the tree, queries over nested tables, charts
 5. [enrichment.md](enrichment.md): URL metadata with consent
 6. [visualization.md](visualization.md): presenting data and prompting reflection

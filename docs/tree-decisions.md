@@ -191,6 +191,8 @@ The Takeout pack sets `skip` on the root, because a Takeout holds every Google p
 - **Google Takeout**: the root is the Takeout folder's contents; `find`: `Takeout`, `takeout-*.zip`; skips unknown products.
 - **TikTok**: the root is the JSON export itself, so `user_data.json` and `user_data_tiktok.json` need no matches; `find`: `user_data*.json`, for a JSON inside a bigger folder.
 
+How strict paths should be when packages change (exact paths versus the shortest unique path, and near matches that ask the participant) is discussed in [plans/2026-11-05-matching-robustness.md](plans/2026-11-05-matching-robustness.md).
+
 The researcher workspace reads the researcher's own exports without a tree to match: a file or picked folder as it is, a zip stepped into once if it holds one entry. The code is in `packages/core/src/locate.ts`.
 
 ## Names and matches
