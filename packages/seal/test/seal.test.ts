@@ -140,6 +140,10 @@ describe('donation envelopes', () => {
     const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
     const base = { format: 'combray-donation/1', tables: [], values: [] };
     expect(decodePayload(bytes(base)).values).toEqual([]);
+    // The project version it was made with: a positive whole number, when there.
+    expect(decodePayload(bytes({ ...base, version: 4 })).version).toBe(4);
+    expect(() => decodePayload(bytes({ ...base, version: 0 }))).toThrow('invalid version');
+    expect(() => decodePayload(bytes({ ...base, version: '4' }))).toThrow('invalid version');
     expect(() => decodePayload(bytes({ ...base, values: undefined, rows: [] }))).toThrow('unknown payload format');
     expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: -1, field: 'f', path: [], value: 1 }] }))).toThrow('invalid value');
     expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: 0, field: 'f', path: [], value: { x: 1 } }] }))).toThrow('invalid value');

@@ -29,6 +29,8 @@ export { labelsOf, checkPlatformTexts, checkTranslations, parseTextsFile, TextsE
 export type { PlatformTexts, TableTexts, FieldTexts, TextsFile, Translations } from './texts';
 export { nameKind, currentName, nameGroup, nameProblem, setName, renameNode, keepNames, remapAfter } from './naming';
 export type { NameKind } from './naming';
+export { versionChanges, platformChanges } from './versions';
+export type { ChangeKind, VersionChange, PlatformVersion } from './versions';
 export {
   buildTree,
   configTree,

@@ -3,10 +3,10 @@
  * version, one JSON document copied from the draft when it is published, which participants get.
  * Plus the participant policy checked when a participant's store is created.
  */
-import { and, asc, eq, max, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, max, sql } from 'drizzle-orm';
 
 import { changes, type Db, type Queries } from './db.ts';
-import { projectDetails, projectPlatforms, projects, researchers, testPackages } from './db/schema.ts';
+import { projectDetails, projectPlatforms, projects, projectVersions, researchers, testPackages } from './db/schema.ts';
 import { nowSecs, random, sha256 } from './util.ts';
 
 const sha256Hex = (text: string): string => sha256(text).toString('hex');
@@ -250,13 +250,41 @@ export class Projects {
   /** The published project, as participants see it (with the pattern, which the server uses). */
   live(id: unknown): Project | LoadError {
     if (!validProjectId(id)) return 'not_found';
-    const row = this.db.select({ live: projects.live }).from(projects).where(eq(projects.id, id)).get();
+    const row = this.db.select({ live: projects.live, version: projects.liveVersion }).from(projects).where(eq(projects.id, id)).get();
     if (!row?.live) return 'not_found';
     try {
-      return projectFromJson(JSON.parse(row.live));
+      // The version participants' devices stamp their donations with.
+      return projectFromJson({ ...(JSON.parse(row.live) as object), version: row.version });
     } catch {
       return 'invalid';
     }
+  }
+
+  /** The published versions of a project, newest first. */
+  versions(id: string): { version: number; at: number }[] {
+    this.db.select({ id: projects.id }).from(projects).where(eq(projects.id, id)).get() ?? fail('not_found');
+    return this.db
+      .select({ version: projectVersions.version, at: projectVersions.publishedAt })
+      .from(projectVersions)
+      .where(eq(projectVersions.projectId, id))
+      .orderBy(desc(projectVersions.version))
+      .all();
+  }
+
+  /** One published version, as participants got it (without the participant id pattern). */
+  version(id: string, version: number): { version: number; at: number; config: Record<string, unknown> } {
+    const row =
+      this.db
+        .select()
+        .from(projectVersions)
+        .where(and(eq(projectVersions.projectId, id), eq(projectVersions.version, version)))
+        .get() ?? fail('not_found');
+    const config = JSON.parse(row.config) as Record<string, unknown>;
+    if (config.participants && typeof config.participants === 'object') {
+      const { pattern: _hidden, ...rest } = config.participants as Record<string, unknown>;
+      config.participants = rest;
+    }
+    return { version: row.version, at: row.publishedAt, config: { ...config, version: row.version } };
   }
 
   /** The project's name, from the draft (falls back to the id). */
@@ -512,11 +540,16 @@ export class Projects {
       }),
     };
     const version = (summary.published?.version ?? 0) + 1;
-    this.db
-      .update(projects)
-      .set({ live: JSON.stringify(live), liveVersion: version, publishedAt: nowSecs(), publishedRevision: sql`${projects.draftRevision}` })
-      .where(eq(projects.id, id))
-      .run();
+    const at = nowSecs();
+    const text = JSON.stringify({ ...live, version });
+    this.db.transaction((tx) => {
+      tx.update(projects)
+        .set({ live: text, liveVersion: version, publishedAt: at, publishedRevision: sql`${projects.draftRevision}` })
+        .where(eq(projects.id, id))
+        .run();
+      // Every version is kept as it went live: donations say which one they were made with.
+      tx.insert(projectVersions).values({ projectId: id, version, config: text, publishedAt: at }).run();
+    });
     return version;
   }
 

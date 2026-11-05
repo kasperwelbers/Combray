@@ -190,6 +190,8 @@ export interface StudySettings {
   /** The story participants are walked through, checked block by block. */
   story?: Story;
   key?: { public_key: string; fingerprint: string };
+  /** The published version of the project: donations say which one they were made with. */
+  version?: number;
 }
 
 /** The study's config, fetched fresh: settings the researcher changed today apply. */
@@ -201,6 +203,7 @@ export async function fetchSettings(projectId: string): Promise<StudySettings | 
     });
     if (!response.ok) return undefined;
     const config = (await response.json()) as {
+      version?: unknown;
       uploads?: unknown;
       consent?: unknown;
       story?: unknown;
@@ -211,7 +214,8 @@ export async function fetchSettings(projectId: string): Promise<StudySettings | 
     const story = parseStory(config.story);
     return {
       points: uploadPoints(config.uploads),
-      settings: JSON.stringify([config.uploads ?? null, config.consent ?? null, config.story ?? null]),
+      settings: JSON.stringify([config.version ?? null, config.uploads ?? null, config.consent ?? null, config.story ?? null]),
+      ...(typeof config.version === 'number' && Number.isInteger(config.version) && config.version > 0 ? { version: config.version } : {}),
       ...(consent ? { consent } : {}),
       ...(story ? { story } : {}),
       ...(key && typeof key.public_key === 'string' && typeof key.fingerprint === 'string'
@@ -281,6 +285,7 @@ export async function sendDonation(
   if (actual !== study.key.fingerprint || (pin !== undefined && pin !== actual)) return { status: 'wrong-key' };
   const payload = encodePayload({
     format: 'combray-donation/1',
+    ...(study.version !== undefined ? { version: study.version } : {}),
     tables: content.tables,
     values: content.values,
     ...(asked.questions.length > 0 ? asked : {}),

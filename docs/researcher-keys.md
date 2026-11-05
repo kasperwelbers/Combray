@@ -151,7 +151,7 @@ The code comparison is what keeps a server from slipping in its own public key u
 
 1. lists the project's donations and withdrawals;
 2. fetches the sealed donation keys in batches, opens each with the project key, and downloads and opens each envelope ([key-design.md](key-design.md#5-analysing-fetch-on-use));
-3. drops the sealed keys, and offers one CSV per table (the donated values pivoted into rows, with donation id, day and row number in front, and the row a nested row is in), one CSV with every value and the path where it was in the participant's files, a CSV of answers, and the full JSON.
+3. drops the sealed keys, and offers one zip with one CSV per table (`table-{name}.csv`: the donated values pivoted into rows, with donation id, day and row number in front, and the row a nested row is in), `donations.csv` with each donation's day, the project version it was made with and the participant's language, one CSV with every value and the path where it was in the participant's files, CSVs of answers, questions and consent, and the full JSON.
 
 Nothing is stored by the page. Values a spreadsheet would run as a formula (starting with `=`, `+`, `-`, `@`, tab or carriage return) get a leading apostrophe. Saved files are the researcher's responsibility under the GDPR, and the page says so.
 

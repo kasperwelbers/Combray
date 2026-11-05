@@ -77,6 +77,8 @@ let review: Review | undefined;
 let leftOut: { id?: string; keys: Set<string> } | undefined;
 // The participant's answers to the story's questions (kept encrypted in the store).
 let answers: { id?: string; values: Record<string, Answer> } | undefined;
+/** The project version this device's tables were last checked against, in this session. */
+let checkedVersion: number | undefined;
 
 /** Forget everything kept in memory: on lock, and when switching projects. */
 function forget(): void {
@@ -85,6 +87,7 @@ function forget(): void {
   review = undefined;
   leftOut = undefined;
   answers = undefined;
+  checkedVersion = undefined;
 }
 
 async function getStore(): Promise<LocalStore<DatasetManifest>> {
@@ -230,6 +233,7 @@ async function storeDerived(
   sourceId: string,
   importedAt: string,
   derived: ReturnType<typeof deriveImport>,
+  version: number | undefined,
 ): Promise<TableSummary[]> {
   const summaries: TableSummary[] = [];
   for (const { table, rows } of derived.tables) {
@@ -237,9 +241,10 @@ async function storeDerived(
     const manifest: TableManifest = {
       type: 'table',
       sourceId,
+      // The project version the table was derived with (0 when not known): rebuilt on another.
       importer: {
         id: `${derived.point.id}:${derived.point.pack ?? 'project'}`,
-        version: 1,
+        version: version ?? 0,
       },
       name,
       importedAt,
@@ -258,6 +263,36 @@ async function storeDerived(
   return summaries;
 }
 
+/**
+ * When the study published a new version, the tables of uploads made with an older one are
+ * derived again from the stored tree, so participants see what the study now shows (ADR 0013).
+ * Without the server (offline), the tables stay as they are.
+ */
+async function upToDate(): Promise<void> {
+  if (!projectId) return;
+  const study = await fetchSettings(projectId);
+  if (study?.version === undefined || study.version === checkedVersion) return;
+  const s = await unlockedStore();
+  const datasets = await s.listDatasets();
+  for (const d of datasets) {
+    if (d.manifest.type !== 'source') continue;
+    const point = study.points.find((p) => p.id === pointOf(d.id, d.manifest as SourceManifest, datasets));
+    const project = point && pointProject(point);
+    if (!point || !project) continue;
+    const tables = datasets.filter((t) => t.manifest.type === 'table' && t.manifest.sourceId === d.id && t.manifest.derived !== undefined);
+    if (tables.length > 0 && tables.every((t) => (t.manifest as TableManifest).importer.version === study.version)) continue;
+    const manifest = d.manifest as SourceManifest;
+    const derived = deriveImport({ prepared: unflatten(await nodesOf(d.id)), shape: manifest.shape }, project, point);
+    for (const t of tables) {
+      tableCache.delete(t.id);
+      await s.deleteDataset(t.id);
+    }
+    await storeDerived(s, d.id, manifest.importedAt, derived, study.version);
+  }
+  review = undefined;
+  checkedVersion = study.version;
+}
+
 /** What to do with the result of looking for the root: store it, ask, or report a problem. */
 async function finish(listing: UploadListing, point: UploadPoint, located: LocateResult, onProgress: (p: ImportProgress) => void): Promise<ImportResult> {
   if (located.status === 'choose') {
@@ -271,8 +306,12 @@ async function finish(listing: UploadListing, point: UploadPoint, located: Locat
   pending = undefined;
   if (located.status !== 'found') return { status: located.status };
   const { root } = located;
-  const derived = deriveImport(root, pointProject(point)!, point);
-  return storeSource(listing, root, onProgress, (s, id, importedAt) => storeDerived(s, id, importedAt, derived), point);
+  // The tables are derived with the published version of the project, which they remember.
+  const study = await fetchSettings(projectId!);
+  const live = study?.points.find((p) => p.id === point.id);
+  const derived = deriveImport(root, pointProject(live ?? point)!, live ?? point);
+  const version = live ? study?.version : undefined;
+  return storeSource(listing, root, onProgress, (s, id, importedAt) => storeDerived(s, id, importedAt, derived, version), point);
 }
 
 /** The upload point a source was imported through: in its manifest, or (older) its tables'. */
@@ -490,6 +529,7 @@ const api: DataApi = {
   },
 
   async listDatasets() {
+    await upToDate();
     const datasets = await (await unlockedStore()).listDatasets();
     const tables = new Map<string, TableSummary[]>();
     for (const d of datasets) {

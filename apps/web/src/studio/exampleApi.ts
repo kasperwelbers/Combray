@@ -187,6 +187,12 @@ function packageStore(example: ExampleProject, platformId: string): PackageStore
   };
 }
 
+/** When the examples were "published": a fixed day, so nothing depends on the clock. */
+const EXAMPLE_PUBLISHED = Date.UTC(2026, 10, 1) / 1000;
+
+/** What researchers edit of an example: all but its test packages. */
+const withoutPackages = ({ packages: _packages, ...rest }: ExampleState) => rest;
+
 /** The project API of one example. */
 export function exampleApi(example: ExampleProject): ProjectApi {
   return {
@@ -197,10 +203,16 @@ export function exampleApi(example: ExampleProject): ProjectApi {
         id: example.id,
         details: s.details,
         platforms: s.platforms.map((p, position) => ({ id: p.id, name: p.name, pack: p.pack ?? null, position, has_tree: p.structure !== undefined })),
-        published: null,
-        unpublished_changes: false,
+        // The example as it starts counts as its published version, to show what changes.
+        published: { version: 1, at: EXAMPLE_PUBLISHED },
+        unpublished_changes: JSON.stringify(withoutPackages(s)) !== JSON.stringify(withoutPackages(startState(example.config))),
       };
       return structuredClone(draft);
+    },
+    async version(_id, version) {
+      if (version !== 1) throw notFound();
+      const start = startState(example.config);
+      return { version: 1, at: EXAMPLE_PUBLISHED, config: { uploads: start.platforms.map((p) => ({ id: p.id, name: p.name, structure: p.structure, importer: p.importer })) } };
     },
     async saveDetails(_id, details) {
       change(example, (s) => (s.details = structuredClone(details)));

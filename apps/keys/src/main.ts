@@ -24,7 +24,8 @@ import {
 } from '@combray/seal';
 
 import { type Me, type Member, type Project, type ProjectSummary, type Site, ApiError, api, projectName } from './api';
-import { answersCsv, consentCsv, openAll, questionsCsv, safeFileName, toCsv, valuesCsv } from './decrypt';
+import { answersCsv, consentCsv, donationsCsv, openAll, questionsCsv, safeFileName, toCsv, valuesCsv } from './decrypt';
+import { zipFiles } from './zip';
 import { action, download, h, message, show } from './dom';
 import { authenticate, passkeysAvailable, register, signInWithPasskey } from './passkey';
 import * as vault from './vault';
@@ -520,7 +521,14 @@ async function publishBlock(id: string, refresh: () => Promise<void>): Promise<H
   return h(
     'div',
     { class: 'notice' },
-    h('p', {}, status, ' The draft has changes participants do not see yet. Check them in the studio, then publish.'),
+    h(
+      'p',
+      {},
+      status,
+      draft.published
+        ? ' The draft has changes participants do not see yet. The studio lists what they change for donations; check it, then publish. Donations already made keep the version they were made with.'
+        : ' The draft has changes participants do not see yet. Check them in the studio, then publish.',
+    ),
     action(draft.published ? 'Publish the changes' : 'Publish the project', async () => {
       await api.post(`/projects/${id}/publish`);
       await refresh();
@@ -667,17 +675,20 @@ async function donationsBlock(project: Project, seed: Uint8Array): Promise<HTMLE
       action('Open and download', async () => {
         const result = await openAll(project.id, seed, (done, total) => (status.textContent = `Opening ${done} of ${total}…`));
         const base = safeFileName(project.id);
-        const tables = toCsv(result.opened);
-        // Named after the table's name, which is how stories and analyses refer to it (ADR 0013).
-        for (const [id, t] of tables) download(`${base}-${safeFileName(id)}.csv`, t.csv, 'text/csv');
-        download(`${base}-values.csv`, valuesCsv(result.opened), 'text/csv');
+        // One zip: browsers stop a page that starts many downloads at once.
+        const files: { name: string; text: string }[] = [];
+        // Tables are named after their names, which is how stories and analyses refer to them (ADR 0013).
+        for (const [id, t] of toCsv(result.opened)) files.push({ name: `table-${safeFileName(id)}.csv`, text: t.csv });
+        files.push({ name: 'donations.csv', text: donationsCsv(result.opened) });
+        files.push({ name: 'values.csv', text: valuesCsv(result.opened) });
         const answers = answersCsv(result.opened);
-        if (answers) download(`${base}-answers.csv`, answers, 'text/csv');
+        if (answers) files.push({ name: 'answers.csv', text: answers });
         const questions = questionsCsv(result.opened);
-        if (questions) download(`${base}-questions.csv`, questions, 'text/csv');
+        if (questions) files.push({ name: 'questions.csv', text: questions });
         const consent = consentCsv(result.opened);
-        if (consent) download(`${base}-consent.csv`, consent, 'text/csv');
-        download(`${base}-donations.json`, JSON.stringify(result.opened, null, 2), 'application/json');
+        if (consent) files.push({ name: 'consent.csv', text: consent });
+        files.push({ name: 'donations.json', text: JSON.stringify(result.opened, null, 2) });
+        download(`${base}-donations.zip`, zipFiles(files), 'application/zip');
         status.textContent =
           `Opened ${result.opened.length} donation(s).` + (result.failed.length ? ` ${result.failed.length} could not be opened: ${result.failed.map((f) => `${f.id} (${f.reason})`).join(', ')}.` : '');
       }),

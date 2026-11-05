@@ -39,6 +39,12 @@ export interface DonatedValue {
 
 export interface DonationPayload {
   format: 'combray-donation/1';
+  /**
+   * The published version of the project the donation was made with: which tables and fields,
+   * by which names (docs/decisions/0013-names-labels-versions.md#versions). Missing on donations
+   * from before versions were kept.
+   */
+  version?: number;
   tables: DonatedTable[];
   values: DonatedValue[];
   /** Answers to the project's questions, by question id. */
@@ -100,6 +106,7 @@ export function decodePayload(bytes: Uint8Array): DonationPayload {
       t.fields.every((f) => typeof f === 'object' && f !== null && isText(f.id) && isText(f.name));
     if (!ok) throw new Error('invalid table in payload');
   }
+  if (value.version !== undefined && !(Number.isInteger(value.version) && value.version > 0)) throw new Error('invalid version in payload');
   if (!value.values.every(validValue)) throw new Error('invalid value in payload');
   if (value.answers !== undefined && (typeof value.answers !== 'object' || !Object.values(value.answers).every(isCell))) {
     throw new Error('invalid answers in payload');

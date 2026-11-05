@@ -188,6 +188,22 @@ export const testPackages = sqliteTable(
   ],
 );
 
+/**
+ * Every published version of a project, kept as it went live: each donation says which version
+ * it was made with (docs/decisions/0013-names-labels-versions.md#versions). Never changed.
+ */
+export const projectVersions = sqliteTable(
+  'project_versions',
+  {
+    projectId: projectId(),
+    version: integer('version').notNull(),
+    /** The published config (JSON), as participants got it. */
+    config: text('config').notNull(),
+    publishedAt: integer('published_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.version] })],
+);
+
 /** The project public key; the private key exists only sealed to members (`members`). */
 export const projectKeys = sqliteTable('project_keys', {
   project: text('project')

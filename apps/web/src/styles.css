@@ -2850,3 +2850,17 @@ button.tag {
   text-align: left;
   padding-left: 0;
 }
+
+/* What publishing changes for donations: breaking changes stand out. */
+.version-changes h3 {
+  margin: 0.75rem 0 0;
+  font-size: 1rem;
+}
+
+.change-group ul {
+  margin: 0.25rem 0;
+}
+
+.change-breaking h3 {
+  color: var(--terracotta);
+}

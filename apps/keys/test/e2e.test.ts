@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { defaultRoot, extractShape, normalizeTree, readSpot } from '../../../packages/core/src';
 import { fixtureListing, fixtureZip } from '../../../importers/test/load';
+import { unzip } from './unzip';
 
 const enabled = process.env.COMBRAY_E2E === '1';
 const repo = join(__dirname, '../../..');
@@ -246,14 +247,16 @@ describe.skipIf(!enabled)('key page', () => {
 
     const downloads: Record<string, string> = {};
     ada.page.on('download', async (d) => {
-      downloads[d.suggestedFilename()] = readFileSync((await d.path())!, 'utf8');
+      // One zip with every file of the export.
+      expect(d.suggestedFilename()).toBe('willow-donations.zip');
+      for (const [name, text] of Object.entries(unzip(readFileSync((await d.path())!)))) downloads[`willow-${name}`] = text;
     });
     await ada.page.getByRole('button', { name: 'Open and download' }).click();
     await ada.page.getByText('Opened 1 donation(s).').waitFor();
     await expect
       .poll(() => Object.keys(downloads).sort())
-      .toEqual(['willow-answers.csv', 'willow-donations.json', 'willow-values.csv', 'willow-watch.csv']);
-    const csv = downloads['willow-watch.csv']!;
+      .toEqual(['willow-answers.csv', 'willow-donations.csv', 'willow-donations.json', 'willow-table-watch.csv', 'willow-values.csv']);
+    const csv = downloads['willow-table-watch.csv']!;
     expect(csv).toContain('donation,day,row,title,day');
     expect(csv).toContain(`'=HYPERLINK`);
     expect(csv).toContain('A video,2026-10-02');
@@ -317,18 +320,22 @@ describe.skipIf(!enabled)('key page', () => {
     await ada.page.getByText('2 donation(s), 0 withdrawn.').waitFor();
     const downloads: Record<string, string> = {};
     ada.page.on('download', async (d) => {
-      downloads[d.suggestedFilename()] = readFileSync((await d.path())!, 'utf8');
+      // One zip with every file of the export.
+      expect(d.suggestedFilename()).toBe('willow-donations.zip');
+      for (const [name, text] of Object.entries(unzip(readFileSync((await d.path())!)))) downloads[`willow-${name}`] = text;
     });
     await ada.page.getByRole('button', { name: 'Open and download' }).click();
     await ada.page.getByText('Opened 2 donation(s).').waitFor();
-    await expect.poll(() => Object.keys(downloads)).toContain('willow-youtube_watch_history.csv');
+    await expect.poll(() => Object.keys(downloads)).toContain('willow-table-youtube_watch_history.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-values.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-consent.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-questions.csv');
     expect(downloads['willow-consent.csv']).toContain('en,I am 16 or older.');
+    // Each donation says which published version of the project it was made with.
+    expect(downloads['willow-donations.csv']).toMatch(/,1,en\r\n/);
     expect(downloads['willow-answers.csv']).toMatch(/,More,2(,|\r\n)/);
     expect(downloads['willow-questions.csv']).toContain('en,hours,How many hours a day?,');
-    expect(downloads['willow-youtube_watch_history.csv']).toContain('Lime blossom tea');
+    expect(downloads['willow-table-youtube_watch_history.csv']).toContain('Lime blossom tea');
     expect(downloads['willow-values.csv']!.toLowerCase()).not.toContain('madeleines');
 
     // Withdrawn from the participant's own page.

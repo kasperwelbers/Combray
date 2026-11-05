@@ -144,6 +144,12 @@ export function valuesCsv(opened: Opened[]): string {
   return toFile([header, ...lines]);
 }
 
+/** One row per donation: its day, the project version it was made with, and the participant's language. */
+export function donationsCsv(opened: Opened[]): string {
+  const rows = opened.map((d): Cell[] => [d.id, d.day, d.payload.version ?? null, d.payload.consent?.language ?? null]);
+  return toFile([['donation', 'day', 'version', 'language'], ...rows]);
+}
+
 /** Answers to questions, one row per donation. */
 export function answersCsv(opened: Opened[]): string | undefined {
   const questions = [...new Set(opened.flatMap((d) => Object.keys(d.payload.answers ?? {})))];

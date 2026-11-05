@@ -41,6 +41,12 @@ export interface PlatformDraft {
   importer: unknown;
 }
 
+export interface PublishedVersion {
+  version: number;
+  at: number;
+  config: { uploads?: { id: string; name?: Localized; structure?: unknown; importer?: unknown }[] };
+}
+
 export interface Member {
   researcher_id: string;
   email: string;
@@ -111,6 +117,8 @@ export interface ProjectApi {
   story(id: string): Promise<unknown>;
   saveStory(id: string, story: unknown): Promise<void>;
   platform(id: string, platform: string): Promise<PlatformDraft>;
+  /** A published version, as participants got it: to compare the draft with. */
+  version(id: string, version: number): Promise<PublishedVersion>;
   savePlatform(id: string, platform: string, value: PlatformValue): Promise<void>;
   removePlatform(id: string, platform: string): Promise<void>;
   project(id: string): Promise<ProjectInfo>;
@@ -131,6 +139,7 @@ export const serverApi: ProjectApi = {
   saveStory: (id, story) => call<void>('PUT', `${project(id)}/draft/story`, { story }),
   platform: (id, platform) => call<PlatformDraft>('GET', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
   savePlatform: (id, platform, value) => call<void>('PUT', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`, value),
+  version: (id, version) => call<PublishedVersion>('GET', `${project(id)}/versions/${version}`),
   removePlatform: (id, platform) => call<void>('DELETE', `${project(id)}/draft/platforms/${encodeURIComponent(platform)}`),
   project: (id) => call<ProjectInfo>('GET', project(id)),
   members: (id) => call<{ members: Member[] }>('GET', project(id)).then((p) => p.members),

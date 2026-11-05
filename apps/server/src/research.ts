@@ -601,6 +601,21 @@ export class Research {
         return noStore(json(call(() => r.projects.draft(req.params.id!))));
       },
 
+      /** The published versions, and one of them as it went live (to compare with, or to read old donations by). */
+      listVersions: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        return noStore(json({ versions: call(() => r.projects.versions(req.params.id!)) }));
+      },
+
+      getVersion: (req: Request, site: Site): Reply => {
+        const who = signedIn(req, site);
+        memberOf(who, req.params.id);
+        const version = Number(req.params.version);
+        if (!/^[1-9][0-9]{0,8}$/.test(req.params.version ?? '')) throw fail(404, 'not_found');
+        return noStore(json(call(() => r.projects.version(req.params.id!, version))));
+      },
+
       putDetails: (req: Request, site: Site): Reply => {
         const who = signedIn(req, site);
         memberOf(who, req.params.id);

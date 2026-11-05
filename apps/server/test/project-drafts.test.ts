@@ -169,6 +169,7 @@ describe('publishing', () => {
     expect(donationKey).toEqual(expect.objectContaining({ fingerprint: 'fp' }));
     expect(served).toEqual({
       id: 'birch',
+      version: 1,
       name: 'Birch study',
       participants: { mode: 'required' },
       consent,
@@ -203,6 +204,22 @@ describe('publishing', () => {
     expect(refused.status).toBe(400);
     expect(refused.json).toEqual({ error: 'participant_required' });
     expect((await store('P1')).status).toBe(201);
+
+    // Every published version is kept as it went live, for the project's members only.
+    expect((await s.main.get('/api/v1/p/birch/config')).json.version).toBe(2);
+    const versions = await s.main.get('/api/v1/projects/birch/versions', studioSession);
+    expect(versions.json.versions).toEqual([
+      { version: 2, at: expect.any(Number) },
+      { version: 1, at: expect.any(Number) },
+    ]);
+    const first = await s.keys.get('/api/v1/projects/birch/versions/1', ada.session);
+    expect(first.status).toBe(200);
+    expect(first.json).toMatchObject({ version: 1, config: { id: 'birch', version: 1, participants: { mode: 'optional' } } });
+    expect((await s.main.get('/api/v1/projects/birch/versions/2', studioSession)).json.config.participants).toEqual({ mode: 'required' });
+    expect((await s.main.get('/api/v1/projects/birch/versions/3', studioSession)).status).toBe(404);
+    expect((await s.main.get('/api/v1/projects/birch/versions/x', studioSession)).status).toBe(404);
+    const eve = await setUpResearcher(s, EVE);
+    expect((await s.keys.get('/api/v1/projects/birch/versions', eve.session)).status).toBe(404);
   });
 
   it('is only for members with access to the encryption key', async () => {
@@ -223,6 +240,6 @@ describe('importing a project config', () => {
     const s = await startServer({ research: false });
     // The harness imported willow, oak and elm before the server started.
     const oak = await s.main.get('/api/v1/p/oak/config');
-    expect(oak.json).toEqual({ id: 'oak', name: 'oak', participants: { mode: 'required' }, uploads: [] });
+    expect(oak.json).toEqual({ id: 'oak', version: 1, name: 'oak', participants: { mode: 'required' }, uploads: [] });
   });
 });
