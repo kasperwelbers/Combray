@@ -2,7 +2,6 @@ import {
   addMatch,
   buildTree,
   combineConflicts,
-  combineNodes,
   combineProblem,
   configOf,
   createName,
@@ -11,7 +10,6 @@ import {
   getNode,
   ignoreOverrides,
   isDecidable,
-  matchText,
   newPositions,
   parseImporterFile,
   parseStructureFile,
@@ -26,7 +24,6 @@ import {
   type CombineSuggestion,
   type ImporterFile,
   type LeafDecision,
-  type Match,
   type Name,
   type NodePath,
   type ProjectConfig,
@@ -43,7 +40,9 @@ import { Dropzone, fromInput } from '../components/Dropzone';
 import type { ImportProgress, Upload } from '../worker/api';
 import type { FieldValues as FieldValuesSummary, PackageStore, PreviewTable, StoredPackage, StudioExport } from './api';
 import { addExport, studio } from './client';
-import { DecisionTree } from './DecisionTree';
+import { DecisionTree, type TreeActions } from './DecisionTree';
+import { HelpButton, HelpLink } from './Help';
+import { MatchDialog, type MatchHint } from './MatchDialog';
 import {
   addSeen,
   asParticipantsSee,
@@ -58,14 +57,12 @@ import {
   undecidedBelow,
   type NodePatch,
   type RowInfo,
-  type Shortcut,
   type StudioDraft,
 } from './model';
 import { download, loadView, VIEW_KEY } from './prefs';
-import { NodeDetails, type DetailSection } from './NodeDetails';
-import { Help, Popover } from './Popover';
-import { SelectionBar } from './SelectionBar';
-import { Suggestions } from './Suggestions';
+import { rowName, saveMatch, unmatch, type MatchChoice } from './naming';
+import { Popover } from './Popover';
+import { MorePanel, PanelHead, PlatformPanel, ReadPanel, RowsPanel, type MatchListActions, type MoreActions, type RowPanel } from './RowPanels';
 
 const PREVIEW_ROWS = 25;
 const PREVIEW_DELAY_MS = 300;
@@ -77,14 +74,13 @@ const ROW_EXAMPLES = 2;
 import { ChartBuilder } from './ChartBuilder';
 import { Preview } from './Preview';
 
-const samePair = (a: CombineSuggestion, b: CombineSuggestion) => pathKey(a.from) === pathKey(b.from) && pathKey(a.into) === pathKey(b.into);
+/** The studio shows rows in the order of the structure, so they stay put when matched. */
+const ORDER = { structureOrder: true } as const;
 
 /** The tabs of the tree editor. */
 const STUDIO_SECTIONS = ['packages', 'decisions', 'preview', 'chart', 'files'] as const;
 type StudioSection = (typeof STUDIO_SECTIONS)[number];
 
-/** Ancestors of a path, to open them in the tree. */
-const ancestorsOf = (path: NodePath) => path.slice(0, -1).map((_, i) => pathKey(path.slice(0, i + 1)));
 
 /** Suggestions without repeats: a pair counts once, whichever way round. */
 function uniquePairs(suggestions: CombineSuggestion[]): CombineSuggestion[] {
@@ -138,13 +134,14 @@ export function Studio({
   const [config, setConfig] = useState<ProjectConfig | undefined>(initial?.config);
   /** The structures seen so far, as one union: it only grows. */
   const [seen, setSeen] = useState<Shape | undefined>(initial?.seen);
-  const built = useMemo(() => (config ? buildTree(config, seen) : undefined), [config, seen]);
+  const built = useMemo(() => (config ? buildTree(config, seen, ORDER) : undefined), [config, seen]);
   const tree = built?.tree;
   const names = useMemo(() => config?.names ?? [], [config]);
   const [exports, setExports] = useState<StudioExport[]>([]);
   /** The shapes of the loaded exports: what each one has, to tell which nodes occur together. */
   const [shapes, setShapes] = useState<Map<number, Shape>>(new Map());
-  const [selected, setSelected] = useState<NodePath>();
+  /** The row panel that is open: a row's match dialog or one of its settings, or the platform's. */
+  const [panel, setPanel] = useState<{ path: NodePath; kind: RowPanel }>();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [onlyUndecided, setOnlyUndecided] = useState(false);
   const [{ view, hideIgnored }, setViewSettings] = useState(loadView);
@@ -157,10 +154,6 @@ export function Studio({
   const [fieldValues, setFieldValues] = useState<FieldValuesSummary>();
   const fileInput = useRef<HTMLInputElement>(null);
   const platformButton = useRef<HTMLButtonElement>(null);
-  const [section, setSection] = useState<DetailSection>('values');
-  /** Rows picked to join: their paths, while selecting is on. */
-  const [selecting, setSelecting] = useState(false);
-  const [checked, setChecked] = useState<NodePath[]>([]);
   /** Test packages kept with the platform, and the structures they have. */
   const [stored, setStored] = useState<StoredPackage[]>([]);
   const [storedShapes, setStoredShapes] = useState<Shape[]>([]);
@@ -305,6 +298,7 @@ export function Studio({
   // What the selected field holds in the loaded test packages.
   useEffect(() => {
     setFieldValues(undefined);
+    const selected = panel?.kind === 'name' ? panel.path : undefined;
     const node = tree && selected && getNode(tree, selected);
     if (!tree || !selected || !node || !isDecidable(node) || exports.length === 0) return;
     let cancelled = false;
@@ -317,12 +311,22 @@ export function Studio({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [tree, selected, exports]);
+  }, [tree, panel, exports]);
 
   const states = useMemo(() => (tree ? effectiveStates(tree) : new Map()), [tree]);
   const undecided = useMemo(() => (tree ? undecidedBelow(tree, states) : new Map()), [tree, states]);
   const counts = useMemo(() => (tree ? countDecisions(tree, states) : undefined), [tree, states]);
   const info = useMemo(() => (built && config ? rowInfo(built, config, structures) : new Map<ProjectNode, RowInfo>()), [built, config, structures]);
+  /** Rows that may be the same as another part, by `pathKey`: the other part's name. */
+  const hinted = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const s of suggestions) {
+      const from = tree && getNode(tree, s.from);
+      const into = tree && getNode(tree, s.into);
+      if (from?.virtual && into && !out.has(pathKey(s.from))) out.set(pathKey(s.from), rowName(into, names, t));
+    }
+    return out;
+  }, [suggestions, tree, names, t]);
 
   /**
    * Take the configuration back out of an edited tree. Rows that were open or selected stay so,
@@ -330,17 +334,14 @@ export function Studio({
    */
   function commit(next: ProjectNode, nextNames: Name[] = names): ProjectNode {
     const nextConfig: ProjectConfig = { root: toConfig(next), names: nextNames };
-    const after = buildTree(nextConfig, seen).tree;
+    const after = buildTree(nextConfig, seen, ORDER).tree;
     const before = tree;
     if (before) {
-      setSelected((path) => path && remapPath(before, after, path));
+      setPanel((open) => {
+        const path = open && remapPath(before, after, open.path);
+        return open && path ? { ...open, path } : undefined;
+      });
       setOpen((o) => remapOpen(o, before, after));
-      setChecked((paths) =>
-        paths.flatMap((p) => {
-          const moved = remapPath(before, after, p);
-          return moved ? [moved] : [];
-        }),
-      );
     }
     setConfig(nextConfig);
     return after;
@@ -387,13 +388,13 @@ export function Studio({
       const nextSeen = addSeen(seen, shape);
       setSeen(nextSeen);
       if (config) {
-        const next = buildTree(config, nextSeen).tree;
+        const next = buildTree(config, nextSeen, ORDER).tree;
         setSuggestions((s) => [...s, ...suggestCombines(next, shape)]);
         setMessage({ text: [t('studio.added', { count: added }), kept].filter(Boolean).join(' ') });
       } else {
         const first = emptyConfig(shape.kind);
         setConfig(first);
-        setOpen(new Set(buildTree(first, nextSeen).tree.children?.map((c) => pathKey([c.id])) ?? []));
+        setOpen(new Set(buildTree(first, nextSeen, ORDER).tree.children?.map((c) => pathKey([c.id])) ?? []));
         setMessage({ text: [t('studio.started'), kept].filter(Boolean).join(' ') });
       }
       return info.id;
@@ -468,12 +469,11 @@ export function Studio({
       const nextSeen = structure ? addSeen(seen, structure.root) : seen;
       const nextConfig = importer ? configOf(importer) : (config ?? emptyConfig(structure?.root.kind ?? 'dir'));
       if (structure && config && !importer) {
-        setSuggestions((s) => [...s, ...suggestCombines(buildTree(config, nextSeen).tree, structure.root)]);
+        setSuggestions((s) => [...s, ...suggestCombines(buildTree(config, nextSeen, ORDER).tree, structure.root)]);
       }
       setSeen(nextSeen);
       setConfig(nextConfig);
-      setSelected(undefined);
-      setChecked([]);
+      setPanel(undefined);
       setMessage({ text: t('studio.opened', { count: notSeen(buildTree(nextConfig, nextSeen).tree).length }) });
     } catch (error) {
       setMessage({ text: t('studio.openFailed', { reason: (error as Error).message }), error: true });
@@ -491,8 +491,7 @@ export function Studio({
     if (!window.confirm(t('studio.confirmStartOver'))) return;
     // What was seen stays: it is what the packages have, not a decision.
     setConfig(seen ? emptyConfig(seen.kind) : undefined);
-    setSelected(undefined);
-    setChecked([]);
+    setPanel(undefined);
     setOpen(new Set());
     setMessage(undefined);
     setSuggestions([]);
@@ -508,37 +507,29 @@ export function Studio({
     commit(setDecision(tree, path, decision));
   }
 
-  function select(path: NodePath, to?: DetailSection) {
-    if (to) setSection(to);
-    setSelected(path);
-  }
-
-  const actions = {
-    select,
-    close: () => setSelected(undefined),
+  const actions: TreeActions = {
+    open: (path, kind) => setPanel({ path, kind }),
+    close: () => setPanel(undefined),
     decide,
-    decideBelow: (path: NodePath, decision: 'show' | 'donate' | 'undecided', undecidedOnly: boolean) =>
-      tree && commit(decideBelow(tree, path, decision, undecidedOnly)),
-    toggleOpen: (key: string) =>
+    decideBelow: (path, decision, undecidedOnly) => tree && commit(decideBelow(tree, path, decision, undecidedOnly)),
+    toggleOpen: (key) =>
       setOpen((o) => {
         const next = new Set(o);
         if (next.has(key)) next.delete(key);
         else next.add(key);
         return next;
       }),
-    shortcut: (path: NodePath, key: Shortcut) => {
+    shortcut: (path, key) => {
       const node = tree && getNode(tree, path);
       if (!node) return;
       const decision = SHORTCUT_DECISIONS[key];
-      // On inner nodes, 2 switches ignore on and off.
+      // On inner nodes, 1 switches ignore on and off.
       if (!isDecidable(node)) {
         if (decision === 'ignore') decide(path, node.decision === 'ignore' ? 'undecided' : 'ignore');
         return;
       }
       decide(path, decision);
     },
-    check: (path: NodePath, on: boolean) =>
-      setChecked((paths) => (on ? [...paths.filter((p) => pathKey(p) !== pathKey(path)), path] : paths.filter((p) => pathKey(p) !== pathKey(path)))),
   };
 
   function patch(path: NodePath, change: NodePatch) {
@@ -550,87 +541,107 @@ export function Studio({
     attempt(() => commit(setKeysAreData(tree, path)));
   }
 
-  /** Combine sibling rows into one node with all their matches (ADR 0012). */
-  function combine(paths: NodePath[]) {
+  /** Why a part cannot be merged into a node next to it: one node cannot hold two keys side by side. */
+  function mergeProblem(path: NodePath, target: NodePath): string | undefined {
+    if (!tree) return undefined;
+    const problem = combineProblem(tree, [target, path]);
+    if (problem) return t('studio.combine.refused', { reason: problem });
+    const together = combineConflicts(tree, structures, [target, path]);
+    return together > 0 ? t('studio.combine.together', { count: together }) : undefined;
+  }
+
+  /** Match a part: its name and decision, in one step (the match dialog). */
+  function match(path: NodePath, choice: MatchChoice) {
     if (!tree) return;
-    const problem = combineProblem(tree, paths);
-    if (problem) return setMessage({ text: t('studio.combine.refused', { reason: problem }), error: true });
-    // One node cannot hold two keys that are side by side in one package.
-    const together = combineConflicts(tree, structures, paths);
-    if (together > 0) return setMessage({ text: t('studio.combine.together', { count: together }), error: true });
     attempt(() => {
-      const result = combineNodes(tree, paths);
-      const after = commit(result.tree);
-      setChecked([]);
-      // What was inside each now sits side by side: suggest pairs there next.
-      const below = (path: NodePath) => pathKey(path.slice(0, result.path.length)) === pathKey(result.path);
-      const inside = structures.flatMap((shape) => suggestCombines(after, shape)).filter((x) => below(x.into));
-      setSuggestions((s) => uniquePairs([...inside, ...s]).filter((x) => getNode(after, x.from) && getNode(after, x.into)));
-      setSelected(result.path);
-      setOpen((o) => new Set([...o, ...ancestorsOf(result.path)]));
-      setMessage({ text: t('studio.combine.done', { count: result.conflicts.length }) });
+      const result = saveMatch(tree, names, path, choice, t);
+      const after = commit(result.tree, result.names);
+      setPanel(undefined);
+      if (choice.join === 'merge') {
+        // What was inside each now sits side by side: suggest pairs there next.
+        const below = (p: NodePath) => pathKey(p.slice(0, result.path.length)) === pathKey(result.path);
+        const inside = structures.flatMap((shape) => suggestCombines(after, shape)).filter((x) => below(x.into));
+        setSuggestions((s) => uniquePairs([...inside, ...s]));
+      }
     });
   }
 
-  /** Give rows one name, so participants see them as one table or column (ADR 0012). */
-  function sameName(paths: NodePath[]) {
-    if (!tree || paths.length === 0) return;
-    const nodes = paths.map((p) => getNode(tree, p)!);
-    const existing = nodes.find((n) => n.nameId !== undefined)?.nameId;
-    const name = existing === undefined ? createName(nodes[0]!.name) : undefined;
+  function unmatchPart(path: NodePath) {
+    if (!tree || !window.confirm(t('studio.matchDialog.confirmUnmatch'))) return;
     attempt(() => {
-      const after = commit(setName(tree, paths, existing ?? name!.id), name ? [...names, name] : names);
-      setChecked([]);
-      const first = remapPath(tree, after, paths[0]!);
-      if (first) select(first, 'name');
+      const result = unmatch(tree, names, path);
+      commit(result.tree, result.names);
+      setPanel(undefined);
     });
   }
 
-  const nameActions = {
-    /** Give a row an existing name, or none. */
-    set: (path: NodePath, nameId: string | undefined) => tree && attempt(() => commit(setName(tree, [path], nameId))),
-    /** A new name for a row. */
-    create: (path: NodePath, text: string) => {
-      if (!tree || text.trim() === '') return;
-      const name = createName(text);
+  const moreActions: MoreActions = {
+    ownName: (path) => {
+      const node = tree && getNode(tree, path);
+      if (!tree || !node) return;
+      const name = createName(rowName(node, names, t));
       attempt(() => commit(setName(tree, [path], name.id), [...names, name]));
     },
-    /** Change a name: every row with it changes. */
-    edit: (nameId: string, change: (name: Name) => Name) =>
-      config && setConfig({ ...config, names: names.map((n) => (n.id === nameId ? change(n) : n)) }),
+    editName: (nameId, change) => config && setConfig({ ...config, names: names.map((n) => (n.id === nameId ? change(n) : n)) }),
+    keysAreData,
   };
 
-  const matchActions = {
-    add: (path: NodePath, match: Match) => tree && attempt(() => commit(addMatch(tree, path, match).tree)),
-    remove: (path: NodePath, match: Match) => {
-      if (!tree) return;
-      const node = getNode(tree, path);
-      if (node && node.match.length === 1 && !window.confirm(t('studio.match.confirmLast', { match: matchText(match) }))) return;
-      attempt(() => commit(removeMatch(tree, path, match)));
-    },
-    split: (path: NodePath) => tree && attempt(() => commit(splitByKey(tree, path))),
-    combine,
+  const matchListActions: MatchListActions = {
+    add: (path, m) => tree && attempt(() => commit(addMatch(tree, path, m).tree)),
+    remove: (path, m) => tree && attempt(() => commit(removeMatch(tree, path, m))),
+    split: (path) => tree && attempt(() => commit(splitByKey(tree, path))),
+  };
+
+  /** Parts that may be the same as this one, from the suggestions made when packages were added. */
+  const hintsFor = (path: NodePath): MatchHint[] =>
+    tree
+      ? suggestions.flatMap((s) => {
+          if (pathKey(s.from) !== pathKey(path)) return [];
+          const into = getNode(tree, s.into);
+          return into ? [{ path: s.into, name: rowName(into, names, t), score: s.score }] : [];
+        })
+      : [];
+
+  const renderPanel = (path: NodePath, kind: RowPanel) => {
+    const node = tree && getNode(tree, path);
+    if (!tree || !node) return null;
+    const close = () => setPanel(undefined);
+    const onPatch = (change: NodePatch) => patch(path, change);
+    if (kind === 'name') {
+      return (
+        <MatchDialog
+          key={pathKey(path)}
+          tree={tree}
+          path={path}
+          names={names}
+          info={info.get(node)}
+          values={fieldValues}
+          hasPackages={exports.length > 0}
+          hints={hintsFor(path)}
+          ignoredAbove={path.slice(0, -1).some((_, i) => getNode(tree, path.slice(0, i + 1))?.decision === 'ignore')}
+          mergeProblem={(target) => mergeProblem(path, target)}
+          onSave={(choice) => match(path, choice)}
+          onUnmatch={() => unmatchPart(path)}
+          match={matchListActions}
+          onClose={close}
+        />
+      );
+    }
+    const title = kind === 'platform' ? t('studio.platformSettings') : `${t(`studio.details.${kind}`)}: ${rowName(node, names, t)}`;
+    return (
+      <div className="node-details">
+        <PanelHead title={title} onClose={close} />
+        <div className="details-body">
+          {kind === 'read' && <ReadPanel node={node} onPatch={onPatch} />}
+          {kind === 'rows' && <RowsPanel tree={tree} path={path} node={node} onPatch={onPatch} />}
+          {kind === 'more' && <MorePanel tree={tree} path={path} node={node} names={names} onPatch={onPatch} actions={moreActions} />}
+          {kind === 'platform' && <PlatformPanel tree={tree} node={node} onPatch={onPatch} />}
+        </div>
+      </div>
+    );
   };
 
   const busy = progress !== undefined;
-  const details = (path: NodePath) =>
-    tree ? (
-      <NodeDetails
-        tree={tree}
-        path={path}
-        names={names}
-        info={info}
-        section={section}
-        onSection={setSection}
-        values={fieldValues}
-        hasPackages={exports.length > 0}
-        onPatch={patch}
-        onName={nameActions}
-        onMatch={matchActions}
-        onKeysAreData={keysAreData}
-        onClose={() => setSelected(undefined)}
-      />
-    ) : null;
   const needsPackage = (
     <p className="meta">
       {t('studio.tabs.needsPackage')}{' '}
@@ -710,7 +721,7 @@ export function Studio({
                   <input type="checkbox" checked={keepValues} onChange={(e) => setKeepValues(e.target.checked)} />
                   {t('studio.kept.keepValues')}
                 </label>
-                <Help topic={t('studio.kept.keepValues')}>{t('studio.kept.keepValuesHelp')}</Help>
+                <HelpButton topic="keep-values" />
               </div>
               {examples.length > 0 && (
                 <div className="examples">
@@ -780,21 +791,6 @@ export function Studio({
         {tab === 'decisions' &&
           (tree && counts ? (
             <>
-              <Suggestions
-                tree={tree}
-                suggestions={suggestions.filter((s) => getNode(tree, s.from) && getNode(tree, s.into))}
-                onCombine={(s) => combine([s.into, s.from])}
-                onSameName={(s) => {
-                  setSuggestions((all) => all.filter((x) => !samePair(x, s)));
-                  sameName([s.into, s.from]);
-                }}
-                onDismiss={(s) => setSuggestions((all) => all.filter((x) => !samePair(x, s)))}
-                onShow={(path) => {
-                  setViewSettings({ view: 'tree', hideIgnored });
-                  setOpen((o) => new Set([...o, ...ancestorsOf(path)]));
-                  setSelected(path);
-                }}
-              />
               <section className="studio-section">
                 <TemporaryUpload busy={busy} onFiles={async (files) => void (await addFiles(files))} />
                 <p className="meta">
@@ -809,6 +805,7 @@ export function Studio({
                         type="button"
                         className="seg"
                         aria-pressed={view === v}
+                        title={t(`studio.viewHelp.${v}`)}
                         onClick={() => setViewSettings({ view: v, hideIgnored })}
                       >
                         {t(`studio.view.${v}`)}
@@ -827,56 +824,34 @@ export function Studio({
                     />
                     {t('studio.hideIgnored')}
                   </label>
-                  <button
-                    type="button"
-                    className="button quiet"
-                    aria-pressed={selecting}
-                    onClick={() => {
-                      setSelecting((on) => !on);
-                      setChecked([]);
-                    }}
-                  >
-                    {t('studio.select.toggle')}
-                  </button>
                   <span className="decision-menu-anchor">
                     <button
                       ref={platformButton}
                       type="button"
                       className="button quiet"
-                      aria-expanded={selected?.length === 0}
+                      aria-expanded={panel?.kind === 'platform'}
                       aria-haspopup="dialog"
-                      onClick={() => setSelected(selected?.length === 0 ? undefined : [])}
+                      onClick={() => setPanel(panel?.kind === 'platform' ? undefined : { path: [], kind: 'platform' })}
                     >
                       {t('studio.platformSettings')}
                     </button>
-                    {selected?.length === 0 && (
+                    {panel?.kind === 'platform' && (
                       <Popover
                         label={t('studio.platformSettings')}
                         anchor={platformButton}
-                        onClose={() => setSelected(undefined)}
+                        onClose={() => setPanel(undefined)}
                         className="row-popover platform-popover"
                       >
-                        {details([])}
+                        {renderPanel([], 'platform')}
                       </Popover>
                     )}
                   </span>
+                  <HelpLink />
                 </div>
-                <p className="meta">{t(`studio.viewHelp.${view}`)}</p>
-                {selecting && (
-                  <SelectionBar
-                    tree={tree}
-                    paths={checked}
-                    onCombine={() => combine(checked)}
-                    onSameName={() => sameName(checked)}
-                    onClear={() => setChecked([])}
-                  />
-                )}
                 <DecisionTree
                   tree={tree}
-                  hasPackages={exports.length > 0}
                   names={names}
                   info={info}
-                  {...(selecting ? { checked } : {})}
                   states={states}
                   undecided={undecided}
                   onlyUndecided={onlyUndecided}
@@ -884,9 +859,10 @@ export function Studio({
                   view={view}
                   open={open}
                   actions={actions}
-                  details={details}
+                  renderPanel={renderPanel}
+                  hints={hinted}
                   examples={rowValues}
-                  {...(selected && selected.length > 0 ? { selected } : {})}
+                  {...(panel && panel.kind !== 'platform' ? { panel } : {})}
                 />
               </section>
             </>
@@ -1007,7 +983,7 @@ function TemporaryUpload({ busy, onFiles }: { busy: boolean; onFiles: (files: Up
       <button type="button" className="button quiet" disabled={busy} onClick={() => input.current?.click()}>
         {t('studio.kept.temporaryButton')}
       </button>
-      <Help topic={t('studio.kept.temporaryButton')}>{t('studio.kept.temporaryHelp')}</Help>
+      <HelpButton topic="test-packages" />
       <input
         ref={input}
         type="file"

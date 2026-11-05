@@ -229,6 +229,12 @@ export interface BuildOptions {
    * config node matches them. The studio passes no seen structure: everything it has is seen.
    */
   seen?: Shape;
+  /**
+   * Siblings in the order of the structure (the first position each matched; shapes sort keys),
+   * instead of the configuration's order, with config nodes that match nothing after the sibling
+   * before them. For the studio: rows stay where they are when they are matched.
+   */
+  structureOrder?: boolean;
 }
 
 /** A shape position a node matched, with the shape position it sits in. */
@@ -318,10 +324,13 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
     );
     const used = new Map<Shape, ProjectNode[]>();
     const children: ProjectNode[] = [];
+    /** The first real position each child matched, for `structureOrder`. */
+    const firstAt = new Map<ProjectNode, number>();
+    const at = (child: ProjectNode, index: number) => firstAt.set(child, Math.min(firstAt.get(child) ?? index, index));
     for (const config of configChildren) {
       const child = fromConfig(config, names);
       const matched: Source[] = [];
-      for (const r of real) {
+      for (const [index, r] of real.entries()) {
         if (matchesPosition(node, child, r.shape.kind, r.shape.name)) matched.push(r);
         // A single element where the config has a list of them: the list's only item.
         else if (child.kind === 'list' && r.shape.kind === 'element' && matchesKey(child.match, r.shape.name) && hasConfigElementItems(config)) {
@@ -333,6 +342,7 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
             if (item.kind === 'element') matched.push({ shape: { ...item, name: r.shape.name }, parent: r.parent });
           }
         } else continue;
+        at(child, index);
         used.set(r.shape, [...(used.get(r.shape) ?? []), child]);
       }
       // Two different keys side by side in one position, both matched by this node.
@@ -353,6 +363,7 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
     {
       const rest = real.filter((r) => !used.has(r.shape) && !(closed && tracking && !r.seen));
       const groups = new Map<string, Source[]>();
+      const groupAt = new Map<string, number>();
       for (const r of rest) {
         const name = node.collapsed ? COLLAPSED_NAME : r.shape.name;
         // `"subtitles": null` next to a list of subtitles is the same position, empty.
@@ -361,17 +372,20 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
         }
         const key = `${r.shape.kind}\u0000${name}`;
         groups.set(key, [...(groups.get(key) ?? []), { ...r, shape: { ...r.shape, name } }]);
+        if (!groupAt.has(key)) groupAt.set(key, real.indexOf(r));
       }
-      for (const group of groups.values()) {
+      for (const [key, group] of groups) {
         const { kind, name } = group[0]!.shape;
         let id = virtualId(kind, name);
         while (children.some((c) => c.id === id)) id += "'";
         const child: ProjectNode = { id, kind, name, match: [name], virtual: true };
+        at(child, groupAt.get(key)!);
         children.push(child);
         if (!insideVirtual) unmatched.push([...path, id]);
         visit(child, [], group, [...path, id], closed, true);
       }
     }
+    if (options.structureOrder) inStructureOrder(children, firstAt);
     if (children.length > 0) node.children = children;
     else delete node.children;
   };
@@ -382,6 +396,22 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
   visit(root, config.root.children ?? [], start, [], false, false);
   root.name = '';
   return { tree: root, sources, conflicts, shared, unmatched, fresh };
+}
+
+/**
+ * Sort siblings by the first real position each matched; a node that matched nothing stays right
+ * after the sibling before it. Sorts in place.
+ */
+function inStructureOrder(children: ProjectNode[], firstAt: Map<ProjectNode, number>): void {
+  let previous = -1;
+  const keys = children.map((child, i) => {
+    const own = firstAt.get(child);
+    if (own !== undefined) previous = own;
+    // Ties keep the configuration's order; unmatched nodes follow the one before them.
+    return { child, at: own ?? previous, own: own === undefined ? 1 : 0, i };
+  });
+  keys.sort((a, b) => a.at - b.at || a.own - b.own || a.i - b.i);
+  children.splice(0, children.length, ...keys.map((k) => k.child));
 }
 
 const hasConfigElementItems = (config: ConfigNode) =>

@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+
+import { HelpButton, type HelpTopic } from './Help';
 
 /**
  * A small panel that opens below what it belongs to and scrolls with it. Escape or a click
@@ -57,37 +58,12 @@ export function Popover({
   );
 }
 
-/** A small "?" that shows an explanation underneath when pressed. */
-export function Help({ topic, children }: { topic: string; children: ReactNode }) {
-  const { t } = useTranslation(undefined, { lng: 'en' });
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <>
-      <button
-        type="button"
-        className="help-button"
-        aria-expanded={open}
-        aria-controls={id}
-        title={t('studio.help', { topic })}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span aria-hidden="true">?</span>
-        <span className="visually-hidden">{t('studio.help', { topic })}</span>
-      </button>
-      <span id={id} className="help-text" hidden={!open}>
-        {children}
-      </span>
-    </>
-  );
-}
-
-/** A title with its explanation behind a "?". */
-export function SectionHead({ title, help }: { title: string; help?: ReactNode }) {
+/** A title with a "?" to its explanation in the help dialog. */
+export function SectionHead({ title, topic }: { title: string; topic?: HelpTopic }) {
   return (
     <div className="section-head">
       <strong>{title}</strong>
-      {help && <Help topic={title}>{help}</Help>}
+      {topic && <HelpButton topic={topic} />}
     </div>
   );
 }

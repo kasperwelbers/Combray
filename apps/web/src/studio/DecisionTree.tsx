@@ -2,9 +2,7 @@ import {
   getNode,
   isDecidable,
   isLeaf,
-  isRegex,
   localize,
-  matchText,
   outline,
   type EffectiveState,
   type LeafDecision,
@@ -13,43 +11,30 @@ import {
   type OutlineGroup,
   type ProjectNode,
 } from '@combray/core';
-import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import {
-  displayName,
-  foldChain,
-  isUndecided,
-  nameHue,
-  nameText,
-  nodeIcon,
-  pathKey,
-  shortNames,
-  withSameNamesTogether,
-  type RowInfo,
-  type ShortName,
-  type Shortcut,
-} from './model';
-import type { DetailSection } from './NodeDetails';
+import { useHelp } from './Help';
+import { displayName, foldChain, isUndecided, nodeIcon, pathKey, shortNames, withSameNamesTogether, type RowInfo, type ShortName, type Shortcut } from './model';
+import { isPositional, keysBehind, rowName } from './naming';
 import { Popover } from './Popover';
+import { isTableRows, type RowPanel } from './RowPanels';
 
-const LEAF_DECISIONS: LeafDecision[] = ['undecided', 'ignore', 'show', 'donate'];
+/** The decisions a field can be given here; undecided is what nothing matched yet is. */
+const LEAF_DECISIONS: Exclude<LeafDecision, 'undecided'>[] = ['ignore', 'show', 'donate'];
 
 export type TreeView = 'tree' | 'fields';
 
 export interface TreeActions {
-  /** Open a row's settings, at one section of them. */
-  select: (path: NodePath, section?: DetailSection) => void;
-  /** Close them. */
+  /** Open one of a row's panels next to its button. */
+  open: (path: NodePath, panel: RowPanel) => void;
   close: () => void;
   decide: (path: NodePath, decision: LeafDecision) => void;
   /** On a table or group: set every field below at once. */
-  decideBelow: (path: NodePath, decision: 'show' | 'donate' | 'undecided', undecidedOnly: boolean) => void;
-  /** Keys 1 to 4 on a row: undecided, ignore, show, donate. */
+  decideBelow: (path: NodePath, decision: 'show' | 'donate', undecidedOnly: boolean) => void;
+  /** Keys 1 to 3 on a row: ignore, show, donate. */
   shortcut: (path: NodePath, key: Shortcut) => void;
   toggleOpen: (key: string) => void;
-  /** In select mode: pick a row to join, or put it back. */
-  check: (path: NodePath, on: boolean) => void;
 }
 
 interface Props {
@@ -57,10 +42,6 @@ interface Props {
   names: Name[];
   /** Notes per row: not seen, conflicts, shared data, names with different decisions. */
   info: Map<ProjectNode, RowInfo>;
-  /** In select mode: the rows picked. */
-  checked?: NodePath[];
-  /** Whether test packages with values are loaded (rows then offer their values). */
-  hasPackages?: boolean;
   states: Map<ProjectNode, EffectiveState>;
   undecided: Map<ProjectNode, number>;
   onlyUndecided: boolean;
@@ -68,20 +49,25 @@ interface Props {
   view: TreeView;
   /** Open rows in the tree view; closed tables in the fields view. */
   open: Set<string>;
-  selected?: NodePath;
+  /** The panel that is open, and the row it belongs to. */
+  panel?: { path: NodePath; kind: RowPanel };
   actions: TreeActions;
-  /** The settings of the selected row, shown in a popover below it. */
-  details: (path: NodePath) => ReactNode;
+  /** The content of a row's panel. */
+  renderPanel: (path: NodePath, kind: RowPanel) => ReactNode;
   /** Common values of fields in the loaded test packages, by `pathKey`. */
   examples: Record<string, string[]>;
+  /** Parts that may be the same as another, by `pathKey`: the other's name. */
+  hints: Map<string, string>;
 }
 
-const SHORTCUTS = new Set<string>(['1', '2', '3', '4']);
+const SHORTCUTS = new Set<string>(['1', '2', '3']);
 
 /**
- * The project tree for decisions. Rows are coloured by their state. The pill on a row opens a
- * menu to change its decision (or keys 1 to 4 on the row); the row's name opens its settings. The fields view shows only tables and fields, named
- * as their columns, which is all most researchers need to pick data.
+ * The extractor over the seen data, for matching and deciding. Rows are coloured by their
+ * decision; parts nothing matches are "not matched", in a quiet style. A row's name opens the
+ * match dialog; its other buttons open their own panels next to them; the pill sets its decision
+ * (or keys 1 to 3 on the row). The fields view shows only tables and fields, named as their
+ * columns, which is all most researchers need to pick data.
  */
 export function DecisionTree(props: Props) {
   const { t } = useTranslation(undefined, { lng: 'en' });
@@ -106,6 +92,9 @@ function stateClass(node: ProjectNode, states: Map<ProjectNode, EffectiveState>)
   return `state-${state}${isDecidable(node) ? '' : ' inner'}`;
 }
 
+const isOpenPanel = (props: Props, path: NodePath, kind: RowPanel) =>
+  props.panel !== undefined && props.panel.kind === kind && pathKey(props.panel.path) === pathKey(path);
+
 /** The decision of a row, as a pill that opens a menu to change it. */
 function DecisionButton({ node, path, name, states, actions }: { node: ProjectNode; path: NodePath; name: string; states: Map<ProjectNode, EffectiveState>; actions: TreeActions }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
@@ -113,7 +102,15 @@ function DecisionButton({ node, path, name, states, actions }: { node: ProjectNo
   const button = useRef<HTMLButtonElement>(null);
   const state = states.get(node) ?? 'show';
   const decidable = isDecidable(node);
-  const shown = decidable ? (isUndecided(node, states) ? 'undecided' : state) : node.decision === 'ignore' ? 'ignore' : 'below';
+  const shown = decidable
+    ? isUndecided(node, states)
+      ? node.virtual
+        ? 'notMatched'
+        : 'undecided'
+      : state
+    : node.decision === 'ignore'
+      ? 'ignore'
+      : 'below';
   const choose = (action: () => void) => {
     action();
     setOpen(false);
@@ -139,7 +136,7 @@ function DecisionButton({ node, path, name, states, actions }: { node: ProjectNo
                   key={d}
                   type="button"
                   className={`menu-item item-${d}`}
-                  aria-pressed={(node.decision ?? 'undecided') === d}
+                  aria-pressed={node.decision === d}
                   aria-keyshortcuts={String(i + 1)}
                   onClick={() => choose(() => actions.decide(path, d))}
                 >
@@ -148,6 +145,7 @@ function DecisionButton({ node, path, name, states, actions }: { node: ProjectNo
                   <kbd aria-hidden="true">{i + 1}</kbd>
                 </button>
               ))}
+              {node.virtual && <p className="meta">{t('studio.matchesByKey')}</p>}
               {state === 'ignore' && node.decision !== 'ignore' && <p className="meta">{t('studio.ignoredAbove')}</p>}
             </>
           ) : node.decision === 'ignore' ? (
@@ -169,10 +167,6 @@ function DecisionButton({ node, path, name, states, actions }: { node: ProjectNo
                 <span className="dot dot-donate" aria-hidden="true" />
                 {t('studio.donateAll')}
               </button>
-              <button type="button" className="menu-item" onClick={() => choose(() => actions.decideBelow(path, 'undecided', false))}>
-                <span className="dot dot-undecided" aria-hidden="true" />
-                {t('studio.clearAll')}
-              </button>
             </>
           )}
         </Popover>
@@ -181,7 +175,54 @@ function DecisionButton({ node, path, name, states, actions }: { node: ProjectNo
   );
 }
 
-/** One line of the tree: open or close, the name (opens the settings), tags and the decision. */
+/** A button on a row that opens one of its panels, right below it. */
+function PanelButton({
+  props,
+  path,
+  kind,
+  label,
+  className,
+  anchorClass,
+  title,
+  children,
+  onKeyDown,
+}: {
+  props: Props;
+  path: NodePath;
+  kind: RowPanel;
+  label: string;
+  className: string;
+  anchorClass?: string;
+  title?: string;
+  children: ReactNode;
+  onKeyDown?: (event: KeyboardEvent) => void;
+}) {
+  const button = useRef<HTMLButtonElement>(null);
+  const open = isOpenPanel(props, path, kind);
+  return (
+    <span className={`decision-menu-anchor${anchorClass ? ` ${anchorClass}` : ''}`}>
+      <button
+        ref={button}
+        type="button"
+        className={className}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        {...(title ? { title } : {})}
+        onClick={() => (open ? props.actions.close() : props.actions.open(path, kind))}
+        {...(onKeyDown ? { onKeyDown } : {})}
+      >
+        {children}
+      </button>
+      {open && (
+        <Popover label={label} anchor={button} onClose={props.actions.close} className="row-popover">
+          {props.renderPanel(path, kind)}
+        </Popover>
+      )}
+    </span>
+  );
+}
+
+/** One line of the tree: open or close, the name (opens the match dialog), notes, settings and the decision. */
 function Line({
   props,
   node,
@@ -205,135 +246,119 @@ function Line({
   children: ReactNode;
 }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const nameButton = useRef<HTMLButtonElement>(null);
-  const { selected, actions, states, checked } = props;
-  const isSelected = selected !== undefined && pathKey(selected) === pathKey(path);
-  const isChecked = checked?.some((p) => pathKey(p) === pathKey(path)) ?? false;
+  const { actions, states } = props;
+  const selected = props.panel !== undefined && pathKey(props.panel.path) === pathKey(path);
   return (
     // A click on the row itself (not on a button in it) folds it; the toggle button does the
     // same for the keyboard.
     <div
-      className={`decision-line${isSelected ? ' selected' : ''}${onToggle ? ' foldable' : ''}`}
+      className={`decision-line${selected ? ' selected' : ''}${onToggle ? ' foldable' : ''}`}
       onClick={(e) => {
         if (!onToggle || (e.target as HTMLElement).closest('button, input, select, a, .popover')) return;
         onToggle();
       }}
     >
       {toggle ?? <span className="toggle" aria-hidden="true" />}
-      {checked && path.length > 0 && (
-        <input
-          type="checkbox"
-          className="row-check"
-          checked={isChecked}
-          aria-label={t('studio.select.row', { name })}
-          onChange={(e) => actions.check(path, e.target.checked)}
-        />
+      {path.length > 0 && !isPositional(node) ? (
+        <PanelButton
+          props={props}
+          path={path}
+          kind="name"
+          label={t('studio.matchDialog.title')}
+          className="decision-name"
+          anchorClass="name-anchor"
+          {...(title ? { title } : {})}
+          onKeyDown={rowKeys(path, actions)}
+        >
+          {children}
+        </PanelButton>
+      ) : (
+        <span className="decision-name static" tabIndex={0} onKeyDown={rowKeys(path, actions)} {...(title ? { title } : {})}>
+          {children}
+        </span>
       )}
-      <button
-        ref={nameButton}
-        type="button"
-        className="decision-name"
-        aria-expanded={isSelected}
-        aria-haspopup="dialog"
-        {...(title ? { title } : {})}
-        onClick={() => (isSelected ? actions.close() : actions.select(path))}
-        onKeyDown={rowKeys(path, actions)}
-      >
-        {children}
-      </button>
       {props.examples[pathKey(path)] && (
         <span className="row-examples" title={props.examples[pathKey(path)]!.join('\n')}>
           {props.examples[pathKey(path)]!.join(' · ')}
         </span>
       )}
-      {path.length > 0 && <RowExtras props={props} node={node} path={path} />}
+      {path.length > 0 && <RowNotes props={props} node={node} path={path} />}
       <span className="decision-tags">{tags}</span>
-      {path.length > 0 && <RowButtons props={props} node={node} path={path} name={name} />}
+      {path.length > 0 && !node.virtual && <RowButtons props={props} node={node} path={path} name={name} />}
       <DecisionButton node={node} path={path} name={name} states={states} actions={actions} />
-      {isSelected && (
-        <Popover label={name} anchor={nameButton} onClose={actions.close} className="row-popover">
-          {props.details(path)}
-        </Popover>
-      )}
     </div>
   );
 }
 
-/** A name's badge: its text in a colour of its own, so rows with the same name stand out. */
-function NameBadge({ name, onClick }: { name: Name; onClick: () => void }) {
-  const { t } = useTranslation(undefined, { lng: 'en' });
+/** The keys behind a row's name, quietly, when they say more than the name. */
+function KeysBehind({ node, shown }: { node: ProjectNode; shown: string }) {
+  const keys = keysBehind(node, shown);
+  if (keys.length === 0) return null;
   return (
-    <button
-      type="button"
-      className="name-badge"
-      style={{ '--name-hue': nameHue(name.id) } as CSSProperties}
-      title={t('studio.name.badgeHelp')}
-      onClick={onClick}
-    >
-      {nameText(name)}
-    </button>
+    <span className="row-keys">
+      <span aria-hidden="true"> ← </span>
+      {keys.join(', ')}
+    </span>
   );
 }
 
-/**
- * What a row says about its configuration: its name (or a button to give it one), its matches
- * when they are more than its key, and notes from the seen structures.
- */
-function RowExtras({ props, node, path }: { props: Props; node: ProjectNode; path: NodePath }) {
+/** What a row's configuration meets in the seen data: not matched, not seen, conflicts. */
+function RowNotes({ props, node, path }: { props: Props; node: ProjectNode; path: NodePath }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const name = node.nameId === undefined ? undefined : props.names.find((n) => n.id === node.nameId);
+  const help = useHelp();
   const info = props.info.get(node);
-  const matches = node.match.length > 1 || node.match.some(isRegex);
+  const hint = props.hints.get(pathKey(path));
   return (
     <span className="row-extras">
-      {name ? (
-        <NameBadge name={name} onClick={() => props.actions.select(path, 'name')} />
-      ) : (
-        <button type="button" className="add-name link-button" onClick={() => props.actions.select(path, 'name')}>
-          {t('studio.name.add')}
+      {node.virtual && !isPositional(node) && <span className="tag not-matched-tag">{t('studio.notMatched')}</span>}
+      {hint && (
+        <button type="button" className="tag hint-tag" onClick={() => props.actions.open(path, 'name')}>
+          {t('studio.matchDialog.maybe', { name: hint })}
         </button>
       )}
-      {matches && (
-        <button type="button" className="row-match" title={t('studio.match.title')} onClick={() => props.actions.select(path, 'match')}>
-          {node.match.map(matchText).join(' | ')}
-        </button>
-      )}
-      {node.virtual && <span className="visually-hidden">{t('studio.notConfigured')}</span>}
       {info?.notSeen && <span className="tag warn-tag">{t('studio.notSeen')}</span>}
-      {node.match.some(isRegex) && (node.keys?.length ?? 0) > 1 && (
-        <span className="tag">{t('studio.matchesKeys', { count: node.keys!.length })}</span>
-      )}
       {info?.conflicts && (
-        <span className="tag warn-tag" title={t('studio.conflictHelp')}>
+        <button type="button" className="tag warn-tag" onClick={() => help('conflict')}>
           {t('studio.conflict', { count: info.conflicts })}
-        </span>
+        </button>
       )}
       {info?.alsoMatchedBy && <span className="tag">{t('studio.alsoMatchedBy', { names: info.alsoMatchedBy.join(', ') })}</span>}
       {info?.nameMismatch && (
-        <span className="tag warn-tag" title={t('studio.nameMismatchHelp')}>
+        <button type="button" className="tag warn-tag" onClick={() => help('name-mismatch')}>
           {t('studio.nameMismatch')}
-        </span>
+        </button>
       )}
     </span>
   );
 }
 
-/** Buttons to the settings a row has: its matches, how it is read, its rows, its values. */
+/**
+ * Buttons to a row's settings, each with what is set: how it is read ("Read as date"), which rows
+ * a table keeps ("2 filters"), and the rest under "More".
+ */
 function RowButtons({ props, node, path, name }: { props: Props; node: ProjectNode; path: NodePath; name: string }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const buttons: DetailSection[] = [];
-  if (isDecidable(node) && props.hasPackages) buttons.push('values');
-  if (isDecidable(node) && node.kind !== 'blob') buttons.push('read');
-  if ((node.name === '[*]' || node.name === '{*}') && !isLeaf(node)) buttons.push('rows');
-  buttons.push('match');
+  const read = isDecidable(node) && node.kind !== 'blob';
+  const conversion = node.as !== undefined || (node.transform?.length ?? 0) > 0;
+  const filters = node.filter?.length ?? 0;
   return (
     <span className="row-buttons">
-      {buttons.map((section) => (
-        <button key={section} type="button" className="link-button" onClick={() => props.actions.select(path, section)}>
-          {t(`studio.details.${section}`)}
+      {read && (
+        <PanelButton props={props} path={path} kind="read" label={t('studio.details.read')} className={`row-setting${conversion ? ' set' : ''}`}>
+          {node.as ? t('studio.readAsType', { type: t(`studio.as.${node.as}`).toLowerCase() }) : conversion ? t('studio.cleaned') : t('studio.details.read')}
           <span className="visually-hidden"> {name}</span>
-        </button>
-      ))}
+        </PanelButton>
+      )}
+      {isTableRows(node) && (
+        <PanelButton props={props} path={path} kind="rows" label={t('studio.details.rows')} className={`row-setting${filters > 0 ? ' set' : ''}`}>
+          {filters > 0 ? t('studio.filterCount', { count: filters }) : t('studio.details.rows')}
+          <span className="visually-hidden"> {name}</span>
+        </PanelButton>
+      )}
+      <PanelButton props={props} path={path} kind="more" label={t('studio.details.more')} className="row-setting">
+        {t('studio.details.more')}
+        <span className="visually-hidden"> {name}</span>
+      </PanelButton>
     </span>
   );
 }
@@ -360,7 +385,7 @@ function rowKeys(path: NodePath, actions: TreeActions) {
 }
 
 function Row(props: Props & { node: ProjectNode; path: NodePath }) {
-  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const { states, undecided, onlyUndecided, hideIgnored, open, actions } = props;
   const chain = foldChain(props.node, props.path);
   const top = chain[0]!;
@@ -374,6 +399,7 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
   const name = chain.map((c) => displayName(c.node.name, t)).join(' / ');
   const children = leaf ? [] : (node.children ?? []);
   const shown = chainName(props.tree, chain, t);
+  const own = rowName(node, props.names, t);
 
   return (
     <li className={`decision-row ${stateClass(node, states)}${node.virtual ? ' virtual' : ''}`}>
@@ -407,10 +433,10 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
         }
       >
         <Icon node={node} />
-        {node.label ? (
+        {node.nameId !== undefined ? (
           <>
-            <strong>{localize(node.label, i18n.language)}</strong>
-            <span className="tag">{shown.text}</span>
+            <strong>{own}</strong>
+            <KeysBehind node={node} shown={own} />
           </>
         ) : (
           <>
@@ -594,7 +620,7 @@ function FieldRow(props: FieldsProps & { group: OutlineGroup; field: OutlineGrou
   const name = short?.short ?? (localize(field.name, i18n.language) || t('studio.valueColumn'));
   const where = fullPath(props.tree, field.path, t);
   return (
-    <li className={`decision-row ${stateClass(node, states)}`}>
+    <li className={`decision-row ${stateClass(node, states)}${node.virtual ? ' virtual' : ''}`}>
       <Line props={props} node={node} path={field.path} name={name} title={where}>
         {/* A list of plain values below the row is one field: a list cell. */}
         <Icon
@@ -602,7 +628,14 @@ function FieldRow(props: FieldsProps & { group: OutlineGroup; field: OutlineGrou
           list={field.path.slice(group.path.length).some((_, i) => getNode(props.tree, field.path.slice(0, group.path.length + i + 1))?.name === '[*]')}
         />
         {short?.shortened && <PathMore />}
-        {name}
+        {node.nameId !== undefined ? (
+          <>
+            <strong>{name}</strong>
+            <KeysBehind node={node} shown={name} />
+          </>
+        ) : (
+          name
+        )}
         <span className="visually-hidden"> ({where})</span>
       </Line>
     </li>

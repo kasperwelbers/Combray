@@ -14,6 +14,7 @@ Suggested reading order:
    - [tree-decisions.md](tree-decisions.md): importers as decisions on the tree, derived tables, HTML, names and matches (design)
    - [structure-versions.md](structure-versions.md): sharing structure after upload, which nodes occur together, and why that keeps joins safe (design)
    - [plans/2026-11-04-names-and-matches.md](plans/2026-11-04-names-and-matches.md): names and matches instead of aliases, seen structures kept apart from the researcher's tree, repetition instead of count ranges (plan, built)
+   - [plans/2026-11-05-researcher-experience.md](plans/2026-11-05-researcher-experience.md): example projects without an account, names always with one match dialog, one panel per setting in the tree editor, a central help dialog (plan, built)
    - [plans/2026-11-05-stories-and-exploration.md](plans/2026-11-05-stories-and-exploration.md): **next up** — stories (slides that walk participants through their data), free exploration, removing data, what researchers get, AI support; the donate step first (plan, for discussion)
    - [exploration.md](exploration.md): value formats, the researcher's view of the tree, queries over nested tables, charts
 5. [enrichment.md](enrichment.md): URL metadata with consent

@@ -73,6 +73,18 @@ describe('buildTree', () => {
     expect(built.unmatched).toEqual([['~value:other']]);
   });
 
+  it('puts siblings in the order of the structure on request, unmatched config nodes after the one before them', () => {
+    const cfg = config('map', [
+      { id: 't', kind: 'value', match: ['title'] },
+      { id: 'gone', kind: 'value', match: ['gone'] },
+      { id: 'c', kind: 'value', match: ['channel'] },
+    ]);
+    const data = extractShape(jsonToTree('a.json', { title: 'x', url: 'u', channel: 'c', about: 'a' }));
+    const ids = (structureOrder: boolean) => buildTree(cfg, data, { structureOrder }).tree.children!.map((c) => c.id);
+    expect(ids(false)).toEqual(['t', 'gone', 'c', '~value:about', '~value:url']);
+    expect(ids(true)).toEqual(['~value:about', 'c', 't', 'gone', '~value:url']);
+  });
+
   it('keeps config nodes the shape does not have, without structure', () => {
     const tree = buildTree(config('map', [{ id: 'a', kind: 'value', match: ['gone'], decision: 'show' }]), extractShape(jsonToTree('a.json', {}))).tree;
     expect(tree.children).toEqual([{ id: 'a', kind: 'value', name: 'gone', match: ['gone'], decision: 'show' }]);

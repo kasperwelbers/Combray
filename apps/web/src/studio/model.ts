@@ -20,7 +20,6 @@ import {
   type ColumnDef,
   type EffectiveState,
   type ImporterFile,
-  type Name,
   type NodePath,
   type ProjectConfig,
   type ProjectNode,
@@ -47,9 +46,9 @@ export function filterColumns(tree: ProjectNode, path: NodePath): ColumnDef[] {
 
 export const isRepeatedName = (name: string) => name === '[*]' || name === '{*}';
 
-/** Keys on a selected row: 1 undecided, 2 ignore, 3 show, 4 donate. */
-export type Shortcut = '1' | '2' | '3' | '4';
-export const SHORTCUT_DECISIONS = { '1': 'undecided', '2': 'ignore', '3': 'show', '4': 'donate' } as const;
+/** Keys on a row: 1 ignore, 2 show, 3 donate. */
+export type Shortcut = '1' | '2' | '3';
+export const SHORTCUT_DECISIONS = { '1': 'ignore', '2': 'show', '3': 'donate' } as const;
 
 /** A node name for people: list items and keys that are data get words instead of `[*]`. */
 export function displayName(name: string, t: (key: string) => string): string {
@@ -187,7 +186,7 @@ export function isUndecided(node: ProjectNode, states: Map<ProjectNode, Effectiv
 }
 
 /** A list of objects or a map whose keys are data: its entries are the rows of a table. */
-export function formsTable(node: ProjectNode): boolean {
+function formsTable(node: ProjectNode): boolean {
   return (node.children ?? []).some((c) => (c.name === '[*]' && !isLeaf(c)) || c.name === '{*}');
 }
 
@@ -283,18 +282,6 @@ export function fromFiles(structure: StructureFile, importer: ImporterFile): Stu
 /** The seen structures with one more added (they only grow). */
 export function addSeen(seen: Shape | undefined, ...shapes: Shape[]): Shape | undefined {
   return unionShape(seen ? [seen, ...shapes] : shapes);
-}
-
-/** A name's text for people, in a language: its label there, else its text. */
-export function nameText(name: Name, language = 'en'): string {
-  return (language !== 'en' && name.label?.[language]) || name.text;
-}
-
-/** A stable colour per name, as a hue, so rows with the same name can be told at a glance. */
-export function nameHue(id: string): number {
-  let hash = 0;
-  for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
-  return hash % 360;
 }
 
 /**

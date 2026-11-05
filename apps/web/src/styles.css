@@ -1303,21 +1303,6 @@ main.wide {
   fill: var(--ink-soft);
 }
 
-.suggestions ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.suggestions li {
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--line);
-}
-
-.suggestions li p {
-  margin: 0 0 0.5rem;
-}
-
 .other-data {
   margin-top: 1rem;
 }
@@ -1651,7 +1636,8 @@ main.wide {
 }
 
 /* Ignored rows are faded, but their menu and settings are not. */
-.state-ignore > .decision-line > :not(.decision-menu-anchor, .popover) {
+.state-ignore > .decision-line > :not(.decision-menu-anchor, .popover),
+.state-ignore > .decision-line > .name-anchor > .decision-name {
   opacity: 0.55;
 }
 
@@ -1747,11 +1733,6 @@ main.wide {
   padding: 0 0.2rem;
 }
 
-.details-tabs {
-  margin: 0.6rem 0 0.2rem;
-  flex-wrap: wrap;
-}
-
 .details-body {
   margin-top: 0.5rem;
 }
@@ -1806,25 +1787,6 @@ main.wide {
   padding: 0;
   cursor: pointer;
   flex: none;
-}
-
-.help-button[aria-expanded='true'] {
-  background: var(--dusk);
-  border-color: var(--dusk);
-  color: var(--paper);
-}
-
-.help-text {
-  flex-basis: 100%;
-  font-size: 0.85rem;
-  color: var(--ink-soft);
-  background: var(--paper-deep);
-  border-radius: 6px;
-  padding: 0.4rem 0.6rem;
-}
-
-.help-text[hidden] {
-  display: none;
 }
 
 /* The name is the end of a longer path; hovering or opening the row shows all of it. */
@@ -1891,10 +1853,6 @@ main.wide {
   gap: 0.4rem;
 }
 
-.temporary-upload .help-text {
-  flex-basis: 100%;
-}
-
 /* Rows light up under the pointer; a foldable row folds when clicked outside its buttons. */
 .decision-line:hover {
   background-image: linear-gradient(rgb(59 47 42 / 6%), rgb(59 47 42 / 6%));
@@ -1912,8 +1870,8 @@ main.wide {
   word-break: break-all;
 }
 
-/* Names and matches (ADR 0012): a row's name as a badge in a colour of its own, its matches,
-   and notes from the seen structures. */
+/* Names and matches: a row's name first, the keys behind it quietly, and notes from the seen
+   data. Parts not matched are quiet until someone matches them. */
 .row-extras {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1921,34 +1879,11 @@ main.wide {
   gap: 0.25rem;
 }
 
-.name-badge {
-  font: inherit;
-  font-size: 0.75rem;
-  padding: 0 0.6em;
-  border-radius: 999px;
-  border: 1px solid hsl(var(--name-hue) 45% 45%);
-  background: hsl(var(--name-hue) 60% 92%);
-  color: hsl(var(--name-hue) 50% 25%);
-  cursor: pointer;
-}
-
-@media (prefers-color-scheme: dark) {
-  .name-badge {
-    background: hsl(var(--name-hue) 30% 22%);
-    color: hsl(var(--name-hue) 60% 85%);
-  }
-}
-
-.row-match {
-  font: inherit;
+.row-keys {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  padding: 0 0.4em;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-  background: transparent;
   color: var(--ink-soft);
-  cursor: pointer;
+  font-weight: 400;
 }
 
 .tag.warn-tag {
@@ -1956,48 +1891,80 @@ main.wide {
   color: var(--terracotta);
 }
 
-.tag.quiet-tag {
-  border-style: dashed;
+button.tag {
+  font: inherit;
+  font-size: 0.75rem;
+  background: transparent;
+  cursor: pointer;
 }
 
-/* Giving a name and the buttons to a row's settings appear on the row in use, to keep the tree calm. */
-.add-name,
+.tag.not-matched-tag {
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+
+.tag.hint-tag {
+  border-color: var(--dusk);
+  color: var(--dusk);
+}
+
+.virtual > .decision-line .decision-name {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* The name opens the match dialog; it stays at the start of the row. */
+.decision-menu-anchor.name-anchor {
+  margin-left: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Buttons to a row's settings show on the row in use, to keep the tree calm; a setting that is
+   set ("Read as date", "2 filters") always shows. */
 .row-buttons {
+  display: inline-flex;
+  gap: 0.35rem;
   font-size: 0.8rem;
+}
+
+.row-buttons .decision-menu-anchor {
+  margin-left: 0;
   visibility: hidden;
 }
 
-.row-buttons {
-  display: inline-flex;
-  gap: 0.5rem;
-}
-
-.decision-line:hover .add-name,
-.decision-line:focus-within .add-name,
-.decision-line.selected .add-name,
-.decision-line:hover .row-buttons,
-.decision-line:focus-within .row-buttons,
-.decision-line.selected .row-buttons {
+.row-buttons .decision-menu-anchor:has(.set),
+.decision-line:hover .row-buttons .decision-menu-anchor,
+.decision-line:focus-within .row-buttons .decision-menu-anchor,
+.decision-line.selected .row-buttons .decision-menu-anchor {
   visibility: visible;
 }
 
-.row-check {
-  margin: 0;
-}
-
-.selection-bar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 0.5rem 0.75rem;
-  margin: 0.5rem 0;
+.row-setting {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.05em 0.6em;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--paper-deep);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
 }
 
-.selection-bar .actions {
-  margin: 0.25rem 0 0;
+.row-setting.set {
+  border-color: var(--dusk);
+  background: var(--paper-deep);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.row-setting:hover {
+  border-color: var(--ink-soft);
+}
+
+.row-buttons .row-popover {
+  left: auto;
+  right: 0;
 }
 
 .decision-name.static {
@@ -2008,9 +1975,169 @@ main.wide {
   text-decoration: none;
 }
 
-/* Parts nobody has configured yet: like undecided rows, with their name a little quieter. */
-.virtual > .decision-line .decision-name {
-  font-style: italic;
+/* The match dialog. */
+.match-dialog {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.match-dialog input:not([type='checkbox'], [type='radio']) {
+  font: inherit;
+  padding: 0.35em 0.5em;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.match-dialog fieldset {
+  border: none;
+  padding: 0;
+  margin: 0.4rem 0 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.match-dialog legend {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+
+.match-dialog .check {
+  align-items: flex-start;
+}
+
+.match-hints {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.match-advanced summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.match-dialog .actions {
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.seg.seg-donate[aria-pressed='true'] {
+  background: var(--madeleine);
+  border-color: var(--madeleine);
+}
+
+.seg.seg-ignore[aria-pressed='true'] {
+  background: var(--ink-soft);
+  border-color: var(--ink-soft);
+}
+
+/* The help dialog: every explanation in one place, opened at the one asked for. */
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(30 24 21 / 45%);
+}
+
+.help-dialog {
+  width: min(56rem, 100%);
+  max-height: min(44rem, calc(100vh - 2rem));
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 25%);
+  padding: 1rem 1.25rem;
+}
+
+.help-dialog:focus {
+  outline: none;
+}
+
+.help-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.help-head h2 {
+  margin: 0;
+}
+
+.help-columns {
+  display: grid;
+  grid-template-columns: 14rem 1fr;
+  gap: 1.25rem;
+  min-height: 0;
+  margin-top: 0.75rem;
+}
+
+.help-contents {
+  overflow-y: auto;
+  font-size: 0.9rem;
+}
+
+.help-contents ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+
+.help-contents [aria-current='true'] {
+  font-weight: 700;
+}
+
+.help-body {
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.help-group {
+  margin: 0.25rem 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.help-body article {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.help-body article.current {
+  background: var(--paper-deep);
+}
+
+.help-body h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.help-body p {
+  margin: 0 0 0.5rem;
+}
+
+@media (max-width: 40rem) {
+  .help-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .help-contents {
+    display: none;
+  }
 }
 
 /* Donating: the review of what is shared, and the receipt. */
@@ -2674,4 +2801,18 @@ main.wide {
 .story-play-note {
   max-width: 44rem;
   margin: 0 auto 0.5rem;
+}
+
+.match-where summary {
+  cursor: pointer;
+}
+
+.match-where .path {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.help-contents .link-button {
+  text-align: left;
+  padding-left: 0;
 }

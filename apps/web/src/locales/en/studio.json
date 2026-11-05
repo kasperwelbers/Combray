@@ -14,10 +14,10 @@
   "openFailed": "These files could not be opened: {{reason}}",
   "pending_one": "{{count}} configured part is not in any structure seen so far. It is kept and saved, and applies once a package has it.",
   "pending_other": "{{count}} configured parts are not in any structure seen so far. They are kept and saved, and apply once a package has them.",
-  "counts": "{{leaves}} fields: {{donate}} requested, {{show}} shown, {{ignore}} ignored.",
-  "undecidedLeft_one": "{{count}} is still undecided.",
-  "undecidedLeft_other": "{{count}} are still undecided.",
-  "onlyUndecided": "Only show what is still undecided",
+  "counts": "{{leaves}} fields: {{donate}} to donate, {{show}} shown, {{ignore}} ignored.",
+  "undecidedLeft_one": "{{count}} is not decided yet.",
+  "undecidedLeft_other": "{{count}} are not decided yet.",
+  "onlyUndecided": "Only what is not decided yet",
   "tree": "Structure and decisions",
   "root": "(upload)",
   "expand": "Open {{name}}",
@@ -29,18 +29,15 @@
     "show": "Show",
     "donate": "Donate"
   },
-  "ignoredAbove": "ignored above",
+  "ignoredAbove": "Something this is in is ignored, so this is left out too, whatever its own decision.",
   "lifter": "lifter",
   "language": {
     "en": "English",
     "nl": "Dutch"
   },
-  "description": "Description for participants",
-  "descriptionHelp": "One sentence, used when we ask for this field, for example “the time you watched each video”.",
   "raw": "Donate the value as it is in the file, not converted",
   "regex": "regular expression",
   "add": "Add",
-  "chooseNode": "Choose…",
   "previewIntro": "Exactly what one participant would see with your current decisions. A participant uploads one package, so this shows one at a time: by default the structure, with a placeholder for each value.",
   "previewEmpty": "Add a test package to see the preview.",
   "noTables": "With these decisions, participants would see nothing yet. Set fields to Show or Donate under Decisions, or let participants see undecided parts in Platform settings.",
@@ -52,10 +49,8 @@
   "rowsShown_other": "showing {{shown}} of {{count}} rows",
   "keysTag": "keys",
   "keysTitle": "Keys",
-  "keysHelp": "Are the keys here data rather than names of fields, such as the people who replied or the days of a diary? Then each key becomes a row, with the key and its value as columns.",
   "makeKeysData": "The keys are data",
   "keysAreData": "The keys here are data: each key is a row of a table with a key and a value column.",
-  "keysDecisionHelp": "The decision here is about the keys themselves, such as the names of the people who replied.",
   "confirmKeys": "All keys here become one position, and their names are not kept, because they are data. Decisions that differ between them are listed afterwards. Continue?",
   "keyColumn": "key",
   "valueColumn": "value",
@@ -68,7 +63,8 @@
     "ignore": "Ignored",
     "show": "Shown",
     "donate": "Donate",
-    "below": "Set fields inside"
+    "below": "Set fields inside",
+    "notMatched": "Not matched"
   },
   "icon": {
     "table": "table",
@@ -92,7 +88,6 @@
   "fieldsBelow": "All fields inside",
   "showAll": "Show",
   "donateAll": "Ask to donate",
-  "clearAll": "Reset to undecided",
   "viewLabel": "How to show the structure",
   "view": {
     "fields": "Tables and fields",
@@ -105,7 +100,6 @@
   },
   "chartIntro": "Count rows over time or per value, from the packages you loaded. This runs in your browser; it is a first step towards views participants can make themselves.",
   "readAs": "Read as",
-  "readAsHelp": "How the value is read. Participants see, and donate, the value as read here.",
   "type": "Type",
   "as": {
     "text": "Text, as it is",
@@ -127,7 +121,6 @@
     "url": "The link of the row",
     "group": "Something to count by"
   },
-  "cleanHelp": "Cleaning steps, applied in order before the value is read.",
   "cleanStep": "Cleaning step",
   "cleanKind": {
     "trim": "Remove spaces around it",
@@ -147,7 +140,6 @@
     "split": "Split at {{by}}"
   },
   "filterTitle": "Which rows to import",
-  "filterHelp": "Rows must meet every condition here. Use it to leave out rows that are not the participant's own activity, such as ads.",
   "filterColumn": "Column",
   "filterTest": "Condition",
   "filterKind": {
@@ -166,15 +158,7 @@
     "other": "a condition on {{name}}",
     "not": "not: {{what}}"
   },
-  "suggestTitle": "Possibly the same",
-  "suggestIntro": "These parts are new, and sit where a part you already have is missing. They may be the same thing, renamed or translated. Combine them into one row to give them the same settings, or give them the same name to keep their own settings and show them to participants as one.",
-  "suggestQuestion": "Is “{{from}}” the same as “{{into}}”?",
-  "suggestWhere": "in {{where}}",
-  "suggestScore": "{{score}}% alike",
-  "suggestDismiss": "No",
-  "suggestShow": "Show {{name}}",
   "required": "Required: an upload only fits when this is there",
-  "requiredHelp": "Any of its matches counts. Use it for parts every package has; a participant without them cannot add their data.",
   "requiredTag": "required",
   "newChildren": "New parts below this",
   "newChildrenInherit": "As above ({{state}})",
@@ -184,10 +168,8 @@
     "ask": "ask",
     "skip": "skip"
   },
-  "newChildrenHelp": "Skipped parts are never opened, shown or offered for structure sharing. That keeps uploads small and the questions short, but you will not hear about renamed or new parts here.",
   "skipTag": "skips new",
   "findTitle": "Finding the package in a bigger upload",
-  "findHelp": "Participants pick their package as a zip, a folder or a file, and that is tried first, without looking at its name. If it does not fit, Combray looks inside it for files or folders with one of these names, such as Takeout or watch-history*.json. Use * as a wildcard; letters can be upper or lower case.",
   "newPattern": "A file or folder name",
   "badPattern": "That pattern {{problem}}.",
   "problem": {
@@ -330,24 +312,16 @@
     "needsPackage": "This needs a tree to work on. Load a test package first, your own or one of the examples.",
     "toPackages": "Go to test packages"
   },
-  "help": "What is \"{{topic}}\"?",
   "platformSettings": "Platform settings",
   "cleanTitle": "Clean up",
   "undecidedShown": "Participants see parts you have not decided on",
-  "undecidedShownHelp": "Off: participants see only what you set to show or donate. On: they also see what is still undecided, including parts that are new since you last looked. Either way, participants can switch to \"Raw data\" to see their whole package as it is.",
   "details": {
-    "label": "Settings",
     "close": "Close",
-    "values": "Values",
-    "name": "Name",
     "read": "Read as",
-    "rows": "Rows",
-    "match": "Matches",
-    "platform": "Platform",
-    "showPath": "Where in the file",
-    "hidePath": "Hide where in the file"
+    "rows": "Filter rows",
+    "more": "More",
+    "where": "Where in the file"
   },
-  "tableHelp": "The entries of this become the rows of a table, and this label is the table's name.",
   "dataStatus": {
     "structureOnly": "Structure only",
     "structureOnlyHelp": "No test package is loaded in this tab, so you are working with the tree alone: names and types, no values. Values of fields and charts need a test package.",
@@ -376,13 +350,11 @@
   "sameAgain": "{{name}} is already loaded: nothing changed.",
   "sameStructure": "This package has the same structure as {{name}}, so it adds nothing to the tree. Its values are available too.",
   "headerRow": "The first row holds the column names",
-  "headerRowHelp": "For a table whose header is written as an ordinary row, so its columns only have names like #cell[0]. Participants then see the first row's text as the column names, and not as a row. Only how the table is shown changes: the data, and what participants donate, keep the row as it is. Columns you gave a label keep your label.",
   "headerRowTag": "names from first row",
   "kept": {
     "addTitle": "Add a test package",
     "addIntro": "A data download package of your own (the zip or folder you got from the platform) or a synthetic example. Its structure is kept with this platform, so the tree knows it and everyone in the project sees it. Its values stay in this tab, unless you keep them too.",
     "keepValues": "Keep its values with the project",
-    "keepValuesHelp": "Tick this only for a package that is synthetic or holds nothing sensitive, such as one from a test account you made. Its values are then stored on the server with this project, readable by everyone in the project after signing in, so you can see them without uploading the package again. You confirm that this is fine by ticking the box.",
     "title": "Kept with this platform",
     "none": "No test packages kept yet. Packages you add keep their structure here.",
     "loading": "Loading the kept values…",
@@ -394,7 +366,6 @@
     "temporaryTitle": "Loaded in this tab only",
     "temporaryIntro": "Their values are shown here until you close or reload this tab.",
     "temporaryButton": "Add a temporary file",
-    "temporaryHelp": "Load a package to see its values here, in this tab only: nothing of its values is stored. Its structure is kept with the platform, like that of every test package, so new parts show up in the tree.",
     "savedWithValues": "It is kept with this platform, values included.",
     "savedStructure": "Its structure is kept with this platform.",
     "knownStructure": "Its structure was already known.",
@@ -406,33 +377,13 @@
     "once": "one entry seen",
     "many": "repeats"
   },
-  "notConfigured": "not configured",
   "notSeen": "not seen",
-  "matchesKeys_one": "matches {{count}} key",
-  "matchesKeys_other": "matches {{count}} keys",
   "conflict_one": "two keys side by side in {{count}} package",
   "conflict_other": "two keys side by side in {{count}} packages",
-  "conflictHelp": "This row matches two different keys that are next to each other in one package, so it is not clear which value is meant. Make its matches narrower, or split it into one row per key.",
   "alsoMatchedBy": "also in {{names}}",
   "nameMismatch": "same name, other decision",
-  "nameMismatchHelp": "Rows with this name have different decisions. Each row keeps its own decision for its own data, which is allowed but unusual: participants see one column with a mix.",
-  "name": {
-    "title": "Name",
-    "help": "The name participants see for this part, instead of its key in the file. Rows with the same name are one table or column for participants; each row keeps its own settings.",
-    "add": "+ name",
-    "badgeHelp": "This row’s name. Rows with the same name are one table or column for participants.",
-    "new": "A name for participants",
-    "give": "Give this name",
-    "useExisting": "Or use a name you already have",
-    "useOther": "Use another name instead",
-    "shared_one": "{{count}} other row has this name: changing it changes it there too.",
-    "shared_other": "{{count}} other rows have this name: changing it changes it there too.",
-    "remove": "Take the name off this row"
-  },
   "match": {
     "title": "Matches",
-    "help": "The keys in the files this row stands for: exact keys, or regular expressions. A row with several matches takes the data of each, with the same settings, for example a file and its translation.",
-    "virtual": "This part is not configured yet: it matches its own key. Adding a match makes it a configured row.",
     "covers": "matches {{keys}}",
     "coversNothing": "matches nothing seen so far",
     "new": "Another key, or a regular expression",
@@ -440,35 +391,12 @@
     "keys_one": "Matches {{count}} key seen: {{keys}}.",
     "keys_other": "Matches {{count}} different keys seen: {{keys}}.",
     "split": "One row per key",
-    "shared": "The same data is also in {{names}}: every row that matches a key gets its data.",
-    "confirmLast": "{{match}} is this row’s last match: removing it removes the row and its settings. Continue?"
+    "shared": "The same data is also in {{names}}: every row that matches a key gets its data."
   },
   "combine": {
-    "title": "Combine with another row",
-    "help": "Combine rows that are the same thing under different keys, such as a file and its translation, into one row with all their matches and one set of settings. To keep their own settings, give them the same name instead.",
-    "with": "Row to combine with",
-    "action": "Combine into one row",
-    "refused": "Not combined: {{reason}}.",
-    "together_one": "Not combined: both are in {{count}} package, side by side, so they hold different data. Give them the same name instead if participants should see them as one.",
-    "together_other": "Not combined: both are in {{count}} packages, side by side, so they hold different data. Give them the same name instead if participants should see them as one.",
-    "done_zero": "Combined.",
-    "done_one": "Combined. {{count}} setting differed: the first row’s is kept.",
-    "done_other": "Combined. {{count}} settings differed: the first row’s are kept."
-  },
-  "sameName": {
-    "action": "Give the same name",
-    "help": "Keep the rows and their settings, and show them to participants as one table or column.",
-    "variants_one": "{{count}} variant",
-    "variants_other": "{{count}} variants"
-  },
-  "select": {
-    "toggle": "Select rows",
-    "label": "Selected rows",
-    "help": "Tick rows to combine them into one, or to give them the same name.",
-    "count_one": "{{count}} selected: {{names}}",
-    "count_other": "{{count}} selected: {{names}}",
-    "row": "Select {{name}}",
-    "clear": "Clear selection"
+    "refused": "Cannot be merged: {{reason}}.",
+    "together_one": "Cannot be merged: both are in {{count}} package, side by side, so they hold different data.",
+    "together_other": "Cannot be merged: both are in {{count}} packages, side by side, so they hold different data."
   },
   "badRegex": "That is not a valid regular expression.",
   "story": {
@@ -579,5 +507,143 @@
       "researchers": "Example projects have no researchers. In your own projects, colleagues you add can work on the project with you, and get access to its donations on the key page.",
       "donations": "Example projects get no donations. In your own projects, this page counts the donations that came in; the key page opens them."
     }
+  },
+  "helpTopics": {
+    "title": "Help with the tree editor",
+    "open": "Help",
+    "about": "Help: {{topic}}",
+    "close": "Close help",
+    "contents": "Contents",
+    "groups": {
+      "basics": "The basics",
+      "matching": "Matching",
+      "reading": "Reading the values",
+      "packages": "Test packages",
+      "platform": "The whole platform",
+      "notes": "Notes on rows"
+    },
+    "topics": {
+      "seen-data": {
+        "title": "Seen data",
+        "body": "**Seen data** is the structure of the data packages seen so far: the names of folders, files and fields, never their contents. Every test package you load adds to it, and so do the structures participants share."
+      },
+      "extractor": {
+        "title": "The extractor",
+        "body": "The **extractor** says what to take from the seen data. Each of its **nodes** matches one or more paths in the seen data, and has a **name** and a **decision**: show it to participants, ask them to donate it, or ignore it.\n\nPaths no node matches are **not matched**: nobody has looked at them yet, and they are left out. Click a part that is not matched to match it: give it a name and a decision. Matching a field also matches the folders, files and objects it is in, named by their keys."
+      },
+      "names": {
+        "title": "Names",
+        "body": "**Names** tell participants and researchers how to read the data. Every matched part has one: its key, until you give it a clearer name (\"Video title\" for titleText). The name decides how data is presented: participants see it, and donations are exported under it, so the data is organised for your analysis.\n\nTables and columns are named after their nodes: the entries of a list become the rows of a table named after the list. Nodes with the same name form one table or one column.\n\nNames can have a label per language and a description (under More), such as \"the time you watched each video\", which participants read when they are asked to donate it."
+      },
+      "decisions": {
+        "title": "Decisions",
+        "body": "**Show**: participants see it in their own view of their data. Nothing is sent.\n\n**Donate**: participants see it, and are asked to donate it. Only what they agree to is sent, encrypted for your project.\n\n**Ignore**: left out, with everything inside it. Ignored is not the same as not matched: it says someone looked and did not want it.\n\nOn a folder, file or object, the decision menu sets the fields inside at once."
+      },
+      "same-name": {
+        "title": "Merge, or the same name",
+        "body": "When you give a part a name another part has, Combray asks what you mean.\n\n**Merge into that node**: they are the same data under different keys, such as a field and its translation. They become one node with both keys and one set of settings. This is refused when both keys are in one package side by side: then they hold different data.\n\n**A new node with the same name**: each keeps its own node and settings (its own decision, how it is read), and participants see them as one table or column."
+      },
+      "matches": {
+        "title": "Matches and regular expressions",
+        "body": "A node matches keys in the files: exact keys, or regular expressions for keys that change, such as a date in a file name. A node with several matches takes the data of each, with the same settings.\n\nIf a regular expression matches several keys in one package, the node is split: one node per key, each with a copy of the settings. Find these under Advanced, in the dialog of a matched part."
+      },
+      "required": {
+        "title": "Required",
+        "body": "An upload only fits this platform when it has this part, by any of its matches. Use it for parts every package has; a participant without them cannot add their data."
+      },
+      "skip-new": {
+        "title": "Skip new parts",
+        "body": "Parts that are new below this node (not in the seen data) are skipped: never opened, shown or offered for structure sharing. That keeps uploads small and the questions short, but you will not hear about renamed or new parts here. The setting passes down to everything inside."
+      },
+      "keys-are-data": {
+        "title": "Keys that are data",
+        "body": "Sometimes the keys of an object are data rather than names of fields, such as the people who replied or the days of a diary. Then each key becomes a row, with the key and its value as columns. The decision on \"each key\" is about the keys themselves, such as the names of the people who replied."
+      },
+      "read-as": {
+        "title": "Read as",
+        "body": "How a value is read: as a date, a number, a link's domain, and so on. Participants see, and donate, the value as read here.\n\nWith a conversion, you can also ask to donate the value as it is in the file, next to the converted one."
+      },
+      "clean": {
+        "title": "Cleaning steps",
+        "body": "Steps applied to a value in order, before it is read, such as trimming spaces or taking a part of a text."
+      },
+      "filter-rows": {
+        "title": "Filter rows",
+        "body": "Conditions the rows of a table must meet, all of them, to be imported. Use them to leave out rows that are not the participant's own activity, such as ads. The button on the row says how many filters it has."
+      },
+      "header-row": {
+        "title": "First row holds the column names",
+        "body": "For a table whose header is written as an ordinary row, so its columns only have names like #cell[0]. Participants then see the first row's text as the column names, and not as a row. Only how the table is shown changes: the data, and what participants donate, keep the row as it is. Columns you gave a name keep your name."
+      },
+      "test-packages": {
+        "title": "Test packages",
+        "body": "A data download package of your own (the zip or folder you got from the platform) or a synthetic example. Its structure is kept with this platform, so the extractor knows it and everyone in the project sees it. Its values stay in this browser tab, unless you keep them too.\n\nA package loaded for this tab only (\"Look at a package\") shows its values here and is gone on reload; its structure is kept like any other."
+      },
+      "keep-values": {
+        "title": "Keeping the values",
+        "body": "Tick this only for a package that is synthetic or holds nothing sensitive, such as one from a test account you made. Its values are then stored on the server with this project, readable by everyone in the project after signing in, so you can see them without uploading the package again, and preview the story with it. You confirm that this is fine by ticking the box."
+      },
+      "undecided-shown": {
+        "title": "Show what is not decided",
+        "body": "Off: participants see only what you set to show or donate. On: they also see what is still not matched or undecided, including parts that are new since you last looked. Either way, participants can switch to \"Raw data\" to see their whole package as it is."
+      },
+      "find": {
+        "title": "Finding the package",
+        "body": "Participants pick their package as a zip, a folder or a file, and that is tried first, without looking at its name. If it does not fit, Combray looks inside it for files or folders with one of these names, such as Takeout or watch-history*.json. Use * as a wildcard; letters can be upper or lower case."
+      },
+      "conflict": {
+        "title": "Two keys side by side",
+        "body": "This node matches two different keys that are next to each other in one package, so it is not clear which value is meant. Make its matches narrower, or split it into one node per key (under Advanced)."
+      },
+      "name-mismatch": {
+        "title": "Different decisions under one name",
+        "body": "Nodes with this name have different decisions. Each keeps its own decision for its own data, which is allowed but unusual: participants see one column with a mix."
+      }
+    }
+  },
+  "confirmIgnore_one": "Ignore this? {{count}} part inside it has a decision of its own, which no longer counts.",
+  "confirmIgnore_other": "Ignore this? {{count}} parts inside it have a decision of their own, which no longer count.",
+  "notMatched": "not matched",
+  "matchesByKey": "Choosing matches this part by its key.",
+  "readAsType": "Read as {{type}}",
+  "cleaned": "Cleaned",
+  "filterCount_one": "{{count}} filter",
+  "filterCount_other": "{{count}} filters",
+  "more": {
+    "labels": "Labels and description",
+    "addLabels": "Add labels per language",
+    "addLabelsAndDescription": "Add labels per language and a description",
+    "description": "Description ({{language}})"
+  },
+  "matchDialog": {
+    "title": "Name and decision",
+    "titleNew": "Match this part",
+    "name": "Name",
+    "hint": "Possibly the same as “{{name}}” ({{score}}% alike).",
+    "useHint": "Use that name",
+    "maybe": "same as “{{name}}”?",
+    "renameAll_one": "Rename it for the {{count}} other part with this name too",
+    "renameAll_other": "Rename it for the {{count}} other parts with this name too",
+    "taken_one": "Another part has this name.",
+    "taken_other": "{{count}} other parts have this name.",
+    "merge": "Merge into that node",
+    "mergeHelp": "The same data under another key: one node, one set of settings.",
+    "mergeElsewhere": "Only a part next to this one can be merged into.",
+    "sameName": "A new node with the same name",
+    "sameNameHelp": "Its own settings; participants see the two as one column or table.",
+    "decision": "Decision",
+    "perPart": "Decide per part inside",
+    "ignoreAll": "Ignore all of it",
+    "chooseDecision": "Choose a decision to match this part.",
+    "advanced": "Advanced: matches and regular expressions",
+    "match": "Match",
+    "save": "Save",
+    "cancel": "Cancel",
+    "unmatch": "Unmatch",
+    "confirmUnmatch": "Unmatch this part? Its name and settings go, and it is not matched again until you match it."
+  },
+  "sameName": {
+    "variants_one": "{{count}} variant",
+    "variants_other": "{{count}} variants"
   }
 }

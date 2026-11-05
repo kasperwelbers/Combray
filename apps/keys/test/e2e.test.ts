@@ -409,6 +409,19 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByText('Saved to the draft.').waitFor();
     await page.reload();
     expect(await description.inputValue()).toBe('Tried in the e2e test.');
+    // The tree editor: a part that is not matched gets a name and a decision in one step.
+    await page.getByRole('link', { name: 'Data explorer' }).click();
+    await page.getByRole('tab', { name: 'Decisions', selected: true }).waitFor();
+    await page.locator('.decision-row.virtual button.decision-name').first().click();
+    await page.getByRole('combobox', { name: 'Name' }).fill('Archive title');
+    await page.locator('.match-dialog').getByRole('button', { name: 'Show', exact: true }).click();
+    await page.locator('.match-dialog').getByRole('button', { name: 'Match', exact: true }).click();
+    await page.locator('.decision-row strong', { hasText: 'Archive title' }).waitFor();
+    // Help is in one dialog, opened at the topic asked for.
+    await page.getByRole('button', { name: 'Help', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Help with the tree editor' }).waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Help with the tree editor' }).waitFor({ state: 'detached' });
     // The story plays on the bundled synthetic packages.
     await page.getByRole('link', { name: 'Story' }).click();
     await page.getByRole('combobox', { name: 'Google Takeout' }).filter({ hasText: 'Google Takeout, in English (JSON)' }).waitFor();

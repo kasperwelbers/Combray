@@ -6,17 +6,9 @@ import { useTranslation } from 'react-i18next';
 import { STUDIO_TABS, studioPath, type StudioTab } from '../route';
 import { fromFiles, toFiles } from './model';
 import { both, textIn } from './text';
-import {
-  ApiFailure,
-  useProjectApi,
-  type Donations,
-  type Draft,
-  type Member,
-  type PlatformDraft,
-  type ProjectDetails,
-  type ProjectInfo,
-} from './projectApi';
+import { ApiFailure, useProjectApi, type Donations, type Draft, type Member, type PlatformDraft, type ProjectDetails, type ProjectInfo } from './projectApi';
 import { resetExample } from './exampleApi';
+import { HelpProvider } from './Help';
 import { StoryEditor } from './StoryEditor';
 import { Studio, type DraftStore } from './Studio';
 
@@ -71,40 +63,44 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
   if (!draft) return null;
 
   return (
-    <div className="studio">
-      <p className="meta">
-        <a href={studioPath()}>{projectApi.example ? t('studio.examples.back') : t('studio.allProjects')}</a>
-      </p>
-      <h1>{english(draft.details.name) || draft.id}</h1>
-      {account}
-      {projectApi.example && <ExampleBanner projectId={projectId} />}
-      {info?.key && !info.has_access && <p className="message">{t('studio.project.noAccess')}</p>}
-      {info && !projectApi.example && <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} onConsent={() => open('consent')} />}
-      <nav className="tabs" aria-label={t('studio.project.tabsLabel')}>
-        {STUDIO_TABS.map((key) => (
-          <a
-            key={key}
-            href={studioPath(projectId, key, projectApi.example)}
-            className="tab"
-            aria-current={key === tab ? 'page' : undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              open(key);
-            }}
-          >
-            {t(`studio.project.tab.${key}`)}
-          </a>
-        ))}
-      </nav>
-      <div className="tab-panel">
-        {tab === 'details' && <DetailsTab draft={draft} onSaved={refresh} />}
-        {tab === 'consent' && <ConsentTab draft={draft} onSaved={refresh} />}
-        {tab === 'data' && <DataExplorer draft={draft} onChanged={refresh} />}
-        {tab === 'story' && <StoryEditor draft={draft} />}
-        {tab === 'researchers' && (projectApi.example ? <NotInExamples tab={tab} /> : <ResearchersTab projectId={projectId} keysUrl={keysUrl} />)}
-        {tab === 'donations' && (projectApi.example ? <NotInExamples tab={tab} /> : <DonationsTab projectId={projectId} />)}
+    <HelpProvider>
+      <div className="studio">
+        <p className="meta">
+          <a href={studioPath()}>{projectApi.example ? t('studio.examples.back') : t('studio.allProjects')}</a>
+        </p>
+        <h1>{english(draft.details.name) || draft.id}</h1>
+        {account}
+        {projectApi.example && <ExampleBanner projectId={projectId} />}
+        {info?.key && !info.has_access && <p className="message">{t('studio.project.noAccess')}</p>}
+        {info && !projectApi.example && (
+          <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} onConsent={() => open('consent')} />
+        )}
+        <nav className="tabs" aria-label={t('studio.project.tabsLabel')}>
+          {STUDIO_TABS.map((key) => (
+            <a
+              key={key}
+              href={studioPath(projectId, key, projectApi.example)}
+              className="tab"
+              aria-current={key === tab ? 'page' : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                open(key);
+              }}
+            >
+              {t(`studio.project.tab.${key}`)}
+            </a>
+          ))}
+        </nav>
+        <div className="tab-panel">
+          {tab === 'details' && <DetailsTab draft={draft} onSaved={refresh} />}
+          {tab === 'consent' && <ConsentTab draft={draft} onSaved={refresh} />}
+          {tab === 'data' && <DataExplorer draft={draft} onChanged={refresh} />}
+          {tab === 'story' && <StoryEditor draft={draft} />}
+          {tab === 'researchers' && (projectApi.example ? <NotInExamples tab={tab} /> : <ResearchersTab projectId={projectId} keysUrl={keysUrl} />)}
+          {tab === 'donations' && (projectApi.example ? <NotInExamples tab={tab} /> : <DonationsTab projectId={projectId} />)}
+        </div>
       </div>
-    </div>
+    </HelpProvider>
   );
 }
 
@@ -220,8 +216,7 @@ function PublishBar({ draft, keysUrl }: { draft: Draft; keysUrl?: string }) {
       {!draft.published && keysUrl && <a href={keysUrl}>{t('studio.project.publishOnKeyPage')}</a>}
       {draft.published && draft.unpublished_changes && (
         <>
-          {t('studio.project.unpublished')}{' '}
-          {keysUrl && <a href={keysUrl}>{t('studio.project.publishOnKeyPage')}</a>}
+          {t('studio.project.unpublished')} {keysUrl && <a href={keysUrl}>{t('studio.project.publishOnKeyPage')}</a>}
         </>
       )}
     </p>
@@ -259,7 +254,10 @@ function DetailsTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
       setStatus({ text: t('studio.project.saved') });
       onSaved();
     } catch (error) {
-      setStatus({ text: error instanceof ApiFailure && error.status === 400 ? t('studio.project.detailsInvalid') : t('studio.project.saveFailed'), error: true });
+      setStatus({
+        text: error instanceof ApiFailure && error.status === 400 ? t('studio.project.detailsInvalid') : t('studio.project.saveFailed'),
+        error: true,
+      });
     }
   }
 
@@ -333,8 +331,7 @@ function ConsentTab({ draft, onSaved }: { draft: Draft; onSaved: () => void }) {
   const [statements, setStatements] = useState(() => (consent?.statements ?? []).map((s) => ({ en: textIn(s, 'en'), nl: textIn(s, 'nl') })));
   const [status, setStatus] = useState<{ text: string; error?: boolean }>();
 
-  const change = (i: number, language: 'en' | 'nl', value: string) =>
-    setStatements((list) => list.map((s, j) => (j === i ? { ...s, [language]: value } : s)));
+  const change = (i: number, language: 'en' | 'nl', value: string) => setStatements((list) => list.map((s, j) => (j === i ? { ...s, [language]: value } : s)));
 
   async function save(e: FormEvent) {
     e.preventDefault();

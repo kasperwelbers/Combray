@@ -152,7 +152,15 @@ function packageStore(example: ExampleProject, platformId: string): PackageStore
       }
       for (const pkg of kept().added) {
         const values = addedValues.get(pkg.id);
-        packages.push({ id: pkg.id, name: pkg.name, structure_hash: pkg.id, has_data: values !== undefined, data_bytes: values ? size(values) : 0, added: pkg.added, added_by: null });
+        packages.push({
+          id: pkg.id,
+          name: pkg.name,
+          structure_hash: pkg.id,
+          has_data: values !== undefined,
+          data_bytes: values ? size(values) : 0,
+          added: pkg.added,
+          added_by: null,
+        });
         shapes.push({ hash: pkg.id, shape: pkg.shape });
       }
       return { packages, shapes };
@@ -208,7 +216,14 @@ export function exampleApi(example: ExampleProject): ProjectApi {
       const position = s.platforms.findIndex((p) => p.id === platformId);
       const p = s.platforms[position];
       if (!p) throw notFound();
-      const draft: PlatformDraft = { id: p.id, name: p.name, ...(p.pack ? { pack: p.pack } : {}), position, structure: p.structure ?? null, importer: p.importer ?? null };
+      const draft: PlatformDraft = {
+        id: p.id,
+        name: p.name,
+        ...(p.pack ? { pack: p.pack } : {}),
+        position,
+        structure: p.structure ?? null,
+        importer: p.importer ?? null,
+      };
       return structuredClone(draft);
     },
     async savePlatform(_id, platformId, value) {

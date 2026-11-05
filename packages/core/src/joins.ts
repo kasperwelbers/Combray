@@ -6,6 +6,8 @@
  * - **Give the same name:** nodes keep their own settings and subtrees, and share a name, so
  *   participants see one table or column.
  *
+ * The studio offers both from a part's name, in its match dialog (`apps/web/src/studio/naming.ts`).
+ *
  * Splitting is the reverse: take a match off a node (the real node it matched is unmatched again),
  * or give a node its own name. Every function returns a new tree; the input is not changed.
  */

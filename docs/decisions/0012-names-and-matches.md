@@ -15,6 +15,7 @@ Until now one tree did two jobs. The project tree was both the record of what re
 3. **Two explicit ways to join real nodes.**
    - **Combine into one node:** one config node with several matches, for variants that need the same settings (a Dutch and an English file). Their children are one subtree. Only siblings of the same kind can be combined.
    - **Give the same name:** separate config nodes that share a name, for things that mean the same but need their own settings or have different structures. Participants see one table or one column.
+   - In the studio both start from a name (2026-11-05, [plan](../plans/2026-11-05-researcher-experience.md#names-always)): giving a part a name another part has asks whether to merge into that node or make a new node with the same name.
    - Settings belong to the node, never to one match. Splitting is the reverse: take a match off (the real node becomes unmatched again), or give a node its own name.
 4. **Every config node that matches a real node gets its data.** Overlapping matches duplicate the data. This allows the same value read in two ways, or the same table twice with different filters, and it removes all priority rules. The studio shows "also matched by" on such rows.
 5. **One node never matches two keys that sit side by side in one structure** (which value would go in the column?). The studio refuses such a match and flags a regular expression that does this.

@@ -77,7 +77,7 @@ export function RowFilters({
   if (usable.length === 0) return null;
   return (
     <div className="panel-group">
-      <SectionHead title={t('studio.filterTitle')} help={t('studio.filterHelp')} />
+      <SectionHead title={t('studio.filterTitle')} topic="filter-rows" />
       {filters.length > 0 && (
         <ul className="item-list">
           {filters.map((f, i) => (

@@ -62,7 +62,7 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
 
   return (
     <div className="panel-group">
-      <SectionHead title={t('studio.readAs')} help={t('studio.readAsHelp')} />
+      <SectionHead title={t('studio.readAs')} topic="read-as" />
       <label className="field">
         <span>{t('studio.type')}</span>
         <select
@@ -105,7 +105,7 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
         </select>
       </label>
 
-      <SectionHead title={t('studio.cleanTitle')} help={t('studio.cleanHelp')} />
+      <SectionHead title={t('studio.cleanTitle')} topic="clean" />
       {transforms.length > 0 && (
         <ol className="item-list">
           {transforms.map((transform, i) => (
