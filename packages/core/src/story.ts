@@ -12,7 +12,8 @@
  * - **rhythm**: "When do I …?" Columns per hour of the day or day of the week.
  *
  * Everything is computed on the participant's device. A story holds no data, only references
- * to tables and columns by their ids (names' ids, ADR 0012), which stay when names change.
+ * to tables and columns by their names (ADR 0013). Renaming a table or field in the studio
+ * renames them here too (`renameInStory`).
  *
  * Answers to questions are kept on the device and go into the donation, shown in its review.
  */
@@ -36,12 +37,12 @@ export interface DataBlock {
   id: string;
   /** The upload point (platform) the table is from. */
   platform: string;
-  /** The table's id: its name's id, or the path of its rows. */
+  /** The table's name. */
   table: string;
   view: DataViewKind;
-  /** For `top`: the column to rank the values of. */
+  /** For `top`: the column to rank the values of, by name (`comments/author` in a nested table). */
   column?: string;
-  /** For `over-time` and `rhythm`: the date column; else the table's date. */
+  /** For `over-time` and `rhythm`: the date column, by name; else the table's date. */
   date?: string;
   /** For `top`: how many to show (3 to 10, default 5). */
   top?: number;
@@ -265,4 +266,64 @@ export function slideFromTemplate(template: SlideTemplate, data?: { platform: st
     };
   }
   return { id: nextId('s'), blocks: [question({ en: 'What would you like to tell us?', nl: 'Wat wil je ons vertellen?' })] };
+}
+
+/** A data block, with the slide it is on. */
+export interface StoryReference {
+  slide: number;
+  block: DataBlock;
+}
+
+/** The data blocks that use a table of a platform (and, with `field`, that field of it). */
+export function storyReferences(story: Story, platform: string, table?: string, field?: string): StoryReference[] {
+  const out: StoryReference[] = [];
+  story.slides.forEach((slide, i) => {
+    for (const block of slide.blocks) {
+      if (block.type !== 'data' || block.platform !== platform) continue;
+      const columns = [block.column, block.date].filter((c): c is string => c !== undefined);
+      const usesTable = table === undefined || block.table === table || columns.some((c) => c.split('/').slice(0, -1).includes(table));
+      if (!usesTable) continue;
+      if (field !== undefined && !columns.some((c) => endsIn(c, table, field) || (block.table === table && c === field))) continue;
+      out.push({ slide: i, block });
+    }
+  });
+  return out;
+}
+
+/** Whether a column reference (`comments/author`) is a field of a nested table. */
+const endsIn = (column: string, table: string | undefined, field: string) => {
+  const parts = column.split('/');
+  return parts.length > 1 && parts.at(-1) === field && parts.at(-2) === table;
+};
+
+/**
+ * The story with a table or field of a platform renamed: data blocks on the table, and columns
+ * of nested tables (`comments/author`) follow. A field is given with the name of its table.
+ */
+export function renameInStory(
+  story: Story,
+  platform: string,
+  change: { kind: 'table'; from: string; to: string } | { kind: 'field'; table: string; from: string; to: string },
+): Story {
+  const column = (c: string | undefined, block: DataBlock): string | undefined => {
+    if (c === undefined) return c;
+    const parts = c.split('/');
+    if (change.kind === 'table') return parts.map((p, i) => (i < parts.length - 1 && p === change.from ? change.to : p)).join('/');
+    if (parts.length === 1) return block.table === change.table && c === change.from ? change.to : c;
+    return endsIn(c, change.table, change.from) ? [...parts.slice(0, -1), change.to].join('/') : c;
+  };
+  return {
+    ...story,
+    slides: story.slides.map((slide) => ({
+      ...slide,
+      blocks: slide.blocks.map((block) => {
+        if (block.type !== 'data' || block.platform !== platform) return block;
+        const out: DataBlock = { ...block };
+        if (change.kind === 'table' && block.table === change.from) out.table = change.to;
+        if (block.column !== undefined) out.column = column(block.column, block)!;
+        if (block.date !== undefined) out.date = column(block.date, block)!;
+        return out;
+      }),
+    })),
+  };
 }

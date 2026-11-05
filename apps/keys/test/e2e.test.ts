@@ -146,26 +146,26 @@ const STORY = {
       id: 'amount',
       title: { en: 'Your YouTube' },
       blocks: [
-        { type: 'data', id: 'count', platform: 'takeout', table: 'youtube-watch-history', view: 'amount', text: { en: 'You watched {count} videos.' } },
+        { type: 'data', id: 'count', platform: 'takeout', table: 'youtube_watch_history', view: 'amount', text: { en: 'You watched {count} videos.' } },
         { type: 'question', id: 'expected', kind: 'choice', prompt: { en: 'Is that more or less than you expected?' }, options: [{ en: 'Less' }, { en: 'More' }] },
       ],
     },
     {
       id: 'top',
       blocks: [
-        { type: 'data', id: 'channels', platform: 'takeout', table: 'youtube-watch-history', view: 'top', column: 'channels/channel', text: { en: 'Your number one: {top}.' } },
+        { type: 'data', id: 'channels', platform: 'takeout', table: 'youtube_watch_history', view: 'top', column: 'channels/channel', text: { en: 'Your number one: {top}.' } },
         { type: 'question', id: 'why', kind: 'open', prompt: { en: 'Why this one?' } },
       ],
     },
     {
       id: 'hours',
       blocks: [
-        { type: 'data', id: 'rhythm', platform: 'takeout', table: 'youtube-watch-history', view: 'rhythm', text: { en: 'You watch most around {peak}.' } },
+        { type: 'data', id: 'rhythm', platform: 'takeout', table: 'youtube_watch_history', view: 'rhythm', text: { en: 'You watch most around {peak}.' } },
         { type: 'question', id: 'hours', kind: 'number', prompt: { en: 'How many hours a day?' }, min: 0, max: 24, required: true },
       ],
     },
     // Skipped: nobody has TikTok data here.
-    { id: 'tiktok', blocks: [{ type: 'data', id: 'tiktok', platform: 'tiktok', table: 'tiktok-likes', view: 'amount' }] },
+    { id: 'tiktok', blocks: [{ type: 'data', id: 'tiktok', platform: 'tiktok', table: 'tiktok_likes', view: 'amount' }] },
   ],
 };
 
@@ -252,8 +252,8 @@ describe.skipIf(!enabled)('key page', () => {
     await ada.page.getByText('Opened 1 donation(s).').waitFor();
     await expect
       .poll(() => Object.keys(downloads).sort())
-      .toEqual(['willow-Watch-history.csv', 'willow-answers.csv', 'willow-donations.json', 'willow-values.csv']);
-    const csv = downloads['willow-Watch-history.csv']!;
+      .toEqual(['willow-answers.csv', 'willow-donations.json', 'willow-values.csv', 'willow-watch.csv']);
+    const csv = downloads['willow-watch.csv']!;
     expect(csv).toContain('donation,day,row,title,day');
     expect(csv).toContain(`'=HYPERLINK`);
     expect(csv).toContain('A video,2026-10-02');
@@ -321,14 +321,14 @@ describe.skipIf(!enabled)('key page', () => {
     });
     await ada.page.getByRole('button', { name: 'Open and download' }).click();
     await ada.page.getByText('Opened 2 donation(s).').waitFor();
-    await expect.poll(() => Object.keys(downloads)).toContain('willow-YouTube-watch-history.csv');
+    await expect.poll(() => Object.keys(downloads)).toContain('willow-youtube_watch_history.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-values.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-consent.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-questions.csv');
     expect(downloads['willow-consent.csv']).toContain('en,I am 16 or older.');
     expect(downloads['willow-answers.csv']).toMatch(/,More,2(,|\r\n)/);
     expect(downloads['willow-questions.csv']).toContain('en,hours,How many hours a day?,');
-    expect(downloads['willow-YouTube-watch-history.csv']).toContain('Lime blossom tea');
+    expect(downloads['willow-youtube_watch_history.csv']).toContain('Lime blossom tea');
     expect(downloads['willow-values.csv']!.toLowerCase()).not.toContain('madeleines');
 
     // Withdrawn from the participant's own page.
@@ -416,7 +416,8 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByRole('combobox', { name: 'Name' }).fill('Archive title');
     await page.locator('.match-dialog').getByRole('button', { name: 'Show', exact: true }).click();
     await page.locator('.match-dialog').getByRole('button', { name: 'Match', exact: true }).click();
-    await page.locator('.decision-row strong', { hasText: 'Archive title' }).waitFor();
+    // Names are lowercase words joined by underscores: what is typed becomes one.
+    await page.locator('.decision-row strong', { hasText: 'archive_title' }).waitFor();
     // Help is in one dialog, opened at the topic asked for.
     await page.getByRole('button', { name: 'Help', exact: true }).click();
     await page.getByRole('dialog', { name: 'Help with the tree editor' }).waitFor();

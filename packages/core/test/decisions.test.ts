@@ -39,7 +39,7 @@ const decide = (tree: ProjectNode, names: string[], decision: Parameters<typeof 
   setDecision(tree, at(tree, ...names), decision);
 
 /** A configuration with one root and these children. */
-const config = (kind: ConfigNode['kind'], children: ConfigNode[]) => ({ root: { id: 'root', kind, match: [], children }, names: [] });
+const config = (kind: ConfigNode['kind'], children: ConfigNode[]) => ({ root: { id: 'root', kind, match: [], children } });
 
 describe('buildTree', () => {
   it('lays an empty configuration over a shape: every position virtual, with its structure', () => {
@@ -122,15 +122,11 @@ describe('buildTree', () => {
     expect([...files.conflicts][0]!.id).toBe('f');
   });
 
-  it('names labels and descriptions after the node\'s name', () => {
-    const tree = buildTree(
-      {
-        root: { id: 'root', kind: 'map', match: [], children: [{ id: 'a', kind: 'value', match: ['time'], nameId: 'n' }] },
-        names: [{ id: 'n', text: 'Time', label: { nl: 'Tijd' }, description: { en: 'When.' } }],
-      },
-      extractShape(jsonToTree('a.json', { time: 'x' })),
-    ).tree;
-    expect(tree.children![0]).toMatchObject({ nameId: 'n', label: { en: 'Time', nl: 'Tijd' }, description: { en: 'When.' } });
+  it('keeps a node\'s name, and gives it back in the configuration', () => {
+    const config = { root: { id: 'root', kind: 'map' as const, match: [], children: [{ id: 'a', kind: 'value' as const, match: ['time'], name: 'watched_at' }] } };
+    const tree = buildTree(config, extractShape(jsonToTree('a.json', { time: 'x' }))).tree;
+    expect(tree.children![0]).toMatchObject({ name: 'time', named: 'watched_at' });
+    expect(toConfig(tree).children![0]).toMatchObject({ name: 'watched_at' });
   });
 
   it('marks positions the seen structures lack as fresh, and skips them below closed nodes', () => {
@@ -139,7 +135,7 @@ describe('buildTree', () => {
     const open = buildTree(emptyConfig('list'), withExtra, { seen: seenShape });
     expect([...open.fresh].map((n) => n.name)).toEqual(['extra']);
     expect(at(open.tree, '[*]', 'title')).toBeDefined();
-    const closed = { root: { id: 'root', kind: 'list' as const, match: [], newChildren: 'skip' as const }, names: [] };
+    const closed = { root: { id: 'root', kind: 'list' as const, match: [], newChildren: 'skip' as const } };
     const skipped = buildTree(closed, withExtra, { seen: seenShape });
     // Seen but unmatched positions stay; only the new one is left out.
     expect(skipped.tree.children!.map((c) => c.name)).toEqual(['[*]']);
@@ -258,7 +254,7 @@ describe('knownKeys', () => {
 describe('new children', () => {
   it('are passed down until a node sets its own', () => {
     const tree = buildTree(
-      { root: { id: 'root', kind: 'map', match: [], newChildren: 'skip', children: [{ id: 'a', kind: 'map', match: ['a'], children: [{ id: 'b', kind: 'map', match: ['b'], newChildren: 'ask' }] }] }, names: [] },
+      { root: { id: 'root', kind: 'map', match: [], newChildren: 'skip', children: [{ id: 'a', kind: 'map', match: ['a'], children: [{ id: 'b', kind: 'map', match: ['b'], newChildren: 'ask' }] }] } },
     ).tree;
     const closed = closedNodes(tree);
     expect([tree, getNode(tree, ['a'])!].every((n) => closed.has(n))).toBe(true);
@@ -307,11 +303,11 @@ describe('single and repeated elements', () => {
 
   it('match a configured list when a participant has a single element, and the other way round', () => {
     const repeated = decide(treeOf(shapeOf(list(3))), ['div.row', 'a', '[*]', '@href'], 'donate');
-    const single = buildTree({ root: toConfig(repeated), names: [] }, shapeOf(list(1)));
+    const single = buildTree({ root: toConfig(repeated) }, shapeOf(list(1)));
     expect(nodeAt(single.tree, 'div.row').children!.map((c) => [c.kind, c.virtual])).toEqual([['list', undefined]]);
     expect(nodeAt(single.tree, 'div.row', 'a', '[*]', '@href').keys).toEqual(['@href']);
     const one = decide(treeOf(shapeOf(list(1))), ['div.row', 'a', '@href'], 'donate');
-    const many = buildTree({ root: toConfig(one), names: [] }, shapeOf(list(3)));
+    const many = buildTree({ root: toConfig(one) }, shapeOf(list(3)));
     expect(nodeAt(many.tree, 'div.row').children!.map((c) => [c.kind, c.virtual])).toEqual([['element', undefined]]);
     expect(nodeAt(many.tree, 'div.row', 'a', '@href').keys).toEqual(['@href']);
   });
@@ -340,7 +336,7 @@ describe('keys that are data', () => {
     expect(nodeAt(keyed, '[*]', 'comments').children!.map((c) => c.name)).toEqual(['{*}']);
     expect(JSON.stringify(toConfig(keyed))).not.toMatch(/anna|bob/);
     // New keys in later shapes map to the same position, and are never added by name.
-    const later = buildTree({ root: toConfig(keyed), names: [] }, extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }])));
+    const later = buildTree({ root: toConfig(keyed) }, extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }])));
     expect(later.unmatched).toEqual([]);
     expect(JSON.stringify(toConfig(later.tree))).not.toContain('carl');
   });

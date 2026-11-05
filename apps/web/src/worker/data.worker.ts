@@ -233,7 +233,7 @@ async function storeDerived(
 ): Promise<TableSummary[]> {
   const summaries: TableSummary[] = [];
   for (const { table, rows } of derived.tables) {
-    const { name, display, ...rest } = table;
+    const { name, display, description, ...rest } = table;
     const manifest: TableManifest = {
       type: 'table',
       sourceId,
@@ -249,6 +249,7 @@ async function storeDerived(
       filtered: 0,
       errorCount: 0,
       derived: rest,
+      ...(description !== undefined ? { description } : {}),
     };
     const id = await s.putDataset(manifest, rows);
     tableCache.set(id, { manifest, rows });

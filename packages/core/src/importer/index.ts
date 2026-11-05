@@ -3,7 +3,7 @@ export type { ImporterSpec, FieldSpec, FieldType, Transform, DisplayHints, Local
 export { runImporter, matchingImporters, usesScripts, MAX_ERRORS } from './run';
 export type { ImporterResult, Row, RowError } from './run';
 export { compileWhere, parseWhere } from './where';
-export { applyTransform, convert, parseDate, parseDuration, toDomain, tokenize } from './convert';
+export { applyTransform, convert, parseDate, parseDateAs, parseDuration, toDomain, tokenize } from './convert';
 export type { FieldValue } from './convert';
 export { createSandbox, ScriptError } from './sandbox';
 export type { ScriptSandbox, SandboxLimits, CompiledScript } from './sandbox';

@@ -42,41 +42,39 @@ const tweetTree = () => treeOf(extractShape(tweets));
 
 /** A row's values by column name, for reading tests. */
 function named(table: TableDef, row: DerivedRow): Record<string, unknown> {
-  return Object.fromEntries(table.columns.filter((c) => c.id in row.values).map((c) => [localize(c.name, 'en') || c.id, row.values[c.id]]));
+  return Object.fromEntries(table.columns.filter((c) => c.id in row.values).map((c) => [c.id, row.values[c.id]]));
 }
 
-const columnId = (table: TableDef, name: string) => table.columns.find((c) => localize(c.name, 'en') === name)!.id;
+const columnId = (table: TableDef, name: string) => table.columns.find((c) => c.id === name)!.id;
 
 describe('deriveTables', () => {
   it('makes every list of objects a table, nested where it sits in another', () => {
     const tree = base();
     const tables = deriveTables(tree);
-    expect(tables.map((t) => [t.name, t.where, t.parent])).toEqual([
-      ['', ['[*]'], undefined],
-      ['subtitles', ['[*]', 'subtitles', '[*]'], 0],
+    expect(tables.map((t) => [t.id, t.name, t.where, t.parent])).toEqual([
+      ['table', 'Table', ['[*]'], undefined],
+      ['subtitles', 'Subtitles', ['[*]', 'subtitles', '[*]'], 0],
     ]);
-    expect(tables[0]!.columns.map((c) => [c.name, c.type])).toEqual([
-      ['time', 'value'],
-      ['title', 'value'],
-      ['titleUrl', 'value'],
-      ['subtitles', 'table'],
+    // Without names of their own, tables and columns are called by the names their keys give.
+    expect(tables[0]!.columns.map((c) => [c.id, c.name, c.type])).toEqual([
+      ['time', 'Time', 'value'],
+      ['title', 'Title', 'value'],
+      ['title_url', 'Title url', 'value'],
+      ['subtitles', 'Subtitles', 'table'],
     ]);
-    // Without names, columns are named by the path of ids from the row, and tables by their rows.
-    expect(tables[0]!.id).toBe(at(tree, '[*]').join('/'));
-    expect(columnId(tables[0]!, 'time')).toBe(at(tree, '[*]', 'time').slice(1).join('/'));
-    expect(tables[0]!.columns.find((c) => c.type === 'table')).toMatchObject({ table: 1, id: at(tree, '[*]', 'subtitles', '[*]').slice(1).join('/') });
-    expect(tables[1]!.columns.map((c) => c.name)).toEqual(['name', 'url']);
+    expect(tables[0]!.columns.find((c) => c.type === 'table')).toMatchObject({ table: 1 });
+    expect(tables[1]!.columns.map((c) => c.id)).toEqual(['name', 'url']);
   });
 
   it('turns objects into more columns, lists of values into list cells, and loose fields into a record', () => {
     const tables = deriveTables(tweetTree());
-    expect(tables.map((t) => [t.name, t.where, t.parent])).toEqual([
+    expect(tables.map((t) => [t.id, t.where, t.parent])).toEqual([
       ['', [], undefined],
       ['tweets', ['tweets', '[*]'], undefined],
       ['comments', ['tweets', '[*]', 'comments', '[*]'], 1],
     ]);
-    expect(tables[0]!.columns.map((c) => c.name)).toEqual(['joined', 'name']);
-    expect(tables[1]!.columns.map((c) => [c.name, c.type])).toEqual([
+    expect(tables[0]!.columns.map((c) => c.id)).toEqual(['joined', 'name']);
+    expect(tables[1]!.columns.map((c) => [c.id, c.type])).toEqual([
       ['likes', 'value'],
       ['tags', 'list'],
       ['text', 'value'],
@@ -86,17 +84,46 @@ describe('deriveTables', () => {
 
   it('names columns by their shortest unique suffix only when they collide', () => {
     const tree = treeOf(extractShape(jsonToTree('a.json', [{ url: 'x', video: { url: 'y', title: 't' }, author: { url: 'z' } }])));
-    expect(deriveTables(tree)[0]!.columns.map((c) => c.name)).toEqual(['author/url', 'url', 'title', 'video/url']);
+    expect(deriveTables(tree)[0]!.columns.map((c) => c.id)).toEqual(['author_url', 'url', 'title', 'video_url']);
   });
 
-  it('uses names for tables and columns, and their ids as the ids', () => {
+  it('uses the names of tables and columns as their ids, and labels to show them', () => {
     const tree = base();
-    Object.assign(nodeAt(tree, '[*]'), { nameId: 'videos', label: { en: 'Videos' } });
-    Object.assign(nodeAt(tree, '[*]', 'time'), { nameId: 'when', label: { en: 'Watched at' } });
+    Object.assign(nodeAt(tree, '[*]'), { named: 'videos' });
+    Object.assign(nodeAt(tree, '[*]', 'time'), { named: 'watched_at' });
     const [videos] = deriveTables(tree);
-    expect(videos!.name).toEqual({ en: 'Videos' });
     expect(videos!.id).toBe('videos');
-    expect(videos!.columns.find((c) => c.id === 'when')!.name).toEqual({ en: 'Watched at' });
+    expect(videos!.name).toBe('Videos');
+    expect(videos!.columns.find((c) => c.id === 'watched_at')!.name).toBe('Watched at');
+    const labels = { label: (table: string, field?: string) => (table === 'videos' && field === 'watched_at' ? { en: 'Seen', nl: 'Gezien' } : undefined) };
+    expect(deriveTables(tree, labels)[0]!.columns.find((c) => c.id === 'watched_at')!.name).toEqual({ en: 'Seen', nl: 'Gezien' });
+  });
+
+  it('keeps names given by keys clear of names of their own', () => {
+    const tree = treeOf(extractShape(jsonToTree('a.json', [{ title: 'x', video: { title: 'y' } }])));
+    Object.assign(nodeAt(tree, '[*]', 'video', 'title'), { named: 'title' });
+    expect(deriveTables(tree)[0]!.columns.map((c) => c.id)).toEqual(['title_2', 'title']);
+  });
+
+  it('makes fields with the same name in one row one column, the first with a value winning', () => {
+    const data = jsonToTree('a.json', [
+      { created: '2024-01-02', createdAt: 'x' },
+      { createdAt: '03/01/2024' },
+    ]);
+    const tree = treeOf(extractShape(data));
+    Object.assign(nodeAt(tree, '[*]', 'created'), { named: 'created', as: 'datetime', format: 'YYYY-MM-DD' });
+    Object.assign(nodeAt(tree, '[*]', 'createdAt'), { named: 'created', as: 'datetime', format: 'DD/MM/YYYY' });
+    const tables = deriveTables(tree);
+    expect(tables[0]!.columns.map((c) => [c.id, c.alternatives?.length])).toEqual([['created', 1]]);
+    expect(deriveRows(data, tree, tables)[0]!.map((r) => r.values.created)).toEqual(['2024-01-02T00:00:00', '2024-01-03T00:00:00']);
+  });
+
+  it('reads a date with the first of several formats that fits', () => {
+    const data = jsonToTree('a.json', [{ at: '2024-01-02' }, { at: '03/01/2024' }]);
+    const tree = treeOf(extractShape(data));
+    Object.assign(nodeAt(tree, '[*]', 'at'), { as: 'datetime', format: ['YYYY-MM-DD', 'DD/MM/YYYY'] });
+    const tables = deriveTables(tree);
+    expect(deriveRows(data, tree, tables)[0]!.map((r) => r.values.at)).toEqual(['2024-01-02T00:00:00', '2024-01-03T00:00:00']);
   });
 
   it('leaves out ignored leaves and tables, and passes donate up to the table', () => {
@@ -107,7 +134,7 @@ describe('deriveTables', () => {
     const tables = deriveTables(tree);
     expect(tables).toHaveLength(1);
     expect(tables[0]!.state).toBe('donate');
-    expect(tables[0]!.columns.map((c) => [c.name, c.state])).toEqual([
+    expect(tables[0]!.columns.map((c) => [c.id, c.state])).toEqual([
       ['time', 'donate'],
       ['title', 'show'],
     ]);
@@ -123,8 +150,8 @@ describe('deriveTables', () => {
       ),
     );
     const tables = deriveTables(tree);
-    expect(tables.map((t) => [t.name, t.keyed, t.parent])).toEqual([
-      ['', undefined, undefined],
+    expect(tables.map((t) => [t.id, t.keyed, t.parent])).toEqual([
+      ['table', undefined, undefined],
       ['comments', true, 0],
     ]);
     expect(tables[1]!.columns.map((c) => [c.id, c.type])).toEqual([
@@ -162,7 +189,7 @@ describe('deriveRows', () => {
     Object.assign(nodeAt(tree, 'tweets', '[*]', 'text'), { transform: ['lowercase'], role: 'title' });
     Object.assign(nodeAt(tree, 'user', 'joined'), { as: 'datetime', format: 'YYYY-MM-DD', role: 'date' });
     const tables = deriveTables(tree);
-    expect(tables[1]!.columns.find((c) => c.name === 'text')).toMatchObject({ transform: ['lowercase'], role: 'title' });
+    expect(tables[1]!.columns.find((c) => c.id === 'text')).toMatchObject({ transform: ['lowercase'], role: 'title' });
     const [record, rows] = deriveRows(tweets, tree, tables);
     expect(named(tables[0]!, record![0]!).joined).toBe('2020-01-01T00:00:00');
     expect(rows!.map((r) => [named(tables[1]!, r).text, named(tables[1]!, r).likes])).toEqual([
@@ -230,13 +257,13 @@ describe('deriveRows', () => {
           kind: 'map',
           match: ['[*]'],
           children: [
-            { id: 'date', kind: 'value', match: ['time'], as: 'datetime', decision: 'show' },
-            { id: 'hour', kind: 'value', match: ['time'], transform: [{ match: { pattern: 'T(\\d\\d)', group: 1 } }], decision: 'show' },
+            { id: 'date', kind: 'value', match: ['time'], name: 'date', as: 'datetime', decision: 'show' },
+            { id: 'hour', kind: 'value', match: ['time'], name: 'hour', transform: [{ match: { pattern: 'T(\\d\\d)', group: 1 } }], decision: 'show' },
           ],
         },
       ],
     };
-    const tree = buildTree({ root: config, names: [] }, extractShape(watchHistory)).tree;
+    const tree = buildTree({ root: config }, extractShape(watchHistory)).tree;
     const tables = deriveTables(tree);
     const rows = deriveRows(watchHistory, tree, tables)[0]!;
     expect(rows[0]!.values).toMatchObject({ date: '2024-03-01T09:15:00.000Z', hour: '09' });
@@ -257,9 +284,9 @@ describe('names that join tables and columns', () => {
         id: 'en',
         kind: 'list',
         match: ['watch-history.json'],
-        nameId: 'history',
+        name: 'watch_history',
         children: [{ id: 'en-rows', kind: 'map', match: ['[*]'], children: [
-          { id: 'en-title', kind: 'value', match: ['title'], nameId: 'title', decision: 'show' },
+          { id: 'en-title', kind: 'value', match: ['title'], name: 'title', decision: 'show' },
           { id: 'en-time', kind: 'value', match: ['time'], decision: 'donate' },
         ] }],
       },
@@ -267,35 +294,31 @@ describe('names that join tables and columns', () => {
         id: 'nl',
         kind: 'list',
         match: ['kijkgeschiedenis.json'],
-        nameId: 'history',
+        name: 'watch_history',
         children: [{ id: 'nl-rows', kind: 'map', match: ['[*]'], children: [
-          { id: 'nl-title', kind: 'value', match: ['titel'], nameId: 'title', decision: 'show' },
+          { id: 'nl-title', kind: 'value', match: ['titel'], name: 'title', decision: 'show' },
           { id: 'nl-time', kind: 'value', match: ['tijdstip'], decision: 'show' },
         ] }],
       },
     ],
   };
-  const names = [
-    { id: 'history', text: 'Watch history', label: { nl: 'Kijkgeschiedenis' } },
-    { id: 'title', text: 'Title' },
-  ];
 
   it('are one table for participants, with one column per name and the rest side by side', () => {
-    const tree: ProjectNode = buildTree({ root: config, names }, extractShape(folder)).tree;
+    const tree: ProjectNode = buildTree({ root: config }, extractShape(folder)).tree;
     const tables = deriveTables(tree);
-    expect(tables.map((t) => t.id)).toEqual(['history', 'history']);
+    expect(tables.map((t) => t.id)).toEqual(['watch_history', 'watch_history']);
     const grouped = groupTables(tables, deriveRows(folder, tree, tables));
     expect(grouped.tables).toHaveLength(1);
     const [table] = grouped.tables;
-    expect(table!.name).toEqual({ en: 'Watch history', nl: 'Kijkgeschiedenis' });
+    expect(table!.name).toBe('Watch history');
     expect(table!.columns.map((c) => [c.id, c.state])).toEqual([
       ['title', 'show'],
-      ['en-time', 'donate'],
-      ['nl-time', 'show'],
+      ['time', 'donate'],
+      ['tijdstip', 'show'],
     ]);
     expect(grouped.rows[0]!.map((r) => r.values)).toEqual([
-      { title: 'Madeleines', 'en-time': '2024-03-01' },
-      { title: 'Thee', 'nl-time': '1 maart 2024' },
+      { title: 'Madeleines', time: '2024-03-01' },
+      { title: 'Thee', tijdstip: '1 maart 2024' },
     ]);
     expect(table!.state).toBe('donate');
   });
@@ -308,11 +331,11 @@ describe('names that join tables and columns', () => {
       id: file,
       kind: 'list',
       match: [file],
-      nameId: 'n',
-      children: [{ id: `${file}-rows`, kind: 'map', match: ['[*]'], children: [{ id: `${file}-x`, kind: 'value', match: ['x'], nameId: 'x' }, { id: `${file}-tags`, kind: 'list', match: ['tags'], nameId: 'tags' }] }],
+      name: 'n',
+      children: [{ id: `${file}-rows`, kind: 'map', match: ['[*]'], children: [{ id: `${file}-x`, kind: 'value', match: ['x'], name: 'x' }, { id: `${file}-tags`, kind: 'list', match: ['tags'], name: 'tags' }] }],
     });
     const tree = buildTree(
-      { root: { id: 'root', kind: 'dir', match: [], children: [nested('a.json'), nested('b.json')] }, names: [{ id: 'n', text: 'N' }, { id: 'x', text: 'X' }, { id: 'tags', text: 'Tags' }] },
+      { root: { id: 'root', kind: 'dir', match: [], children: [nested('a.json'), nested('b.json')] } },
       extractShape(data),
     ).tree;
     const tables = deriveTables(tree);
@@ -333,7 +356,7 @@ describe('names that join tables and columns', () => {
 
 describe('column names for HTML', () => {
   const html = (cells: ConfigNode[]): ProjectNode =>
-    buildTree({ root: { id: 'root', kind: 'list', match: [], children: [{ id: 'row', kind: 'element', match: ['[*]'], children: cells }] }, names: [] }).tree;
+    buildTree({ root: { id: 'root', kind: 'list', match: [], children: [{ id: 'row', kind: 'element', match: ['[*]'], children: cells }] } }).tree;
   const cell = (name: string): ConfigNode => ({ id: name, kind: 'element', match: [name], children: [{ id: `${name}-t`, kind: 'value', match: ['#text[0]'] }] });
 
   it('shorten element names to tag and first class when that keeps them unique', () => {
@@ -352,15 +375,15 @@ describe('outline', () => {
     const tree = tweetTree();
     nodeAt(tree, 'user').decision = 'ignore';
     const o = outline(tree);
-    expect(o.fields.map((f) => f.name)).toEqual(['joined', 'name']);
-    expect(o.groups.map((g) => g.name)).toEqual(['tweets']);
+    expect(o.fields.map((f) => f.id)).toEqual(['joined', 'name']);
+    expect(o.groups.map((g) => g.id)).toEqual(['tweets']);
     const tweetsGroup = o.groups[0]!;
-    expect(tweetsGroup.fields.map((f) => [f.name, f.path])).toEqual([
+    expect(tweetsGroup.fields.map((f) => [f.id, f.path])).toEqual([
       ['likes', at(tree, 'tweets', '[*]', 'stats', 'likes')],
       ['tags', at(tree, 'tweets', '[*]', 'tags', '[*]')],
       ['text', at(tree, 'tweets', '[*]', 'text')],
     ]);
-    expect(tweetsGroup.groups[0]!.fields.map((f) => f.name)).toEqual(['by', 'text']);
+    expect(tweetsGroup.groups[0]!.fields.map((f) => f.id)).toEqual(['by', 'text']);
   });
 });
 

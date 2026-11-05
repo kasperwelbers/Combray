@@ -1,0 +1,49 @@
+{
+  "format": "combray-texts@1",
+  "tables": {
+    "tiktok_likes": {
+      "label": {
+        "en": "TikTok likes",
+        "nl": "TikTok-likes"
+      },
+      "fields": {
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        }
+      }
+    },
+    "tiktok_searches": {
+      "label": {
+        "en": "TikTok searches",
+        "nl": "TikTok-zoekopdrachten"
+      },
+      "fields": {
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        },
+        "search": {
+          "label": {
+            "nl": "Zoekopdracht"
+          }
+        }
+      }
+    },
+    "tiktok_watch_history": {
+      "label": {
+        "en": "TikTok watch history",
+        "nl": "TikTok-kijkgeschiedenis"
+      },
+      "fields": {
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        }
+      }
+    }
+  }
+}

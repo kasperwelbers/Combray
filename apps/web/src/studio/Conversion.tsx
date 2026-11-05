@@ -80,19 +80,7 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
           ))}
         </select>
       </label>
-      {node.as === 'datetime' && (
-        <label className="field">
-          <span>{t('studio.writtenAs')}</span>
-          <select value={node.format ?? ''} onChange={(e) => onPatch({ format: e.target.value || undefined })}>
-            <option value="">{t('studio.formatAuto')}</option>
-            {[...new Set([...(node.formats ?? []), ...(node.format ? [node.format] : [])])].map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      {node.as === 'datetime' && <DateFormats node={node} onPatch={onPatch} />}
       <label className="field">
         <span>{t('studio.role')}</span>
         <select value={node.role ?? ''} onChange={(e) => onPatch({ role: (e.target.value || undefined) as Role | undefined })}>
@@ -157,5 +145,65 @@ export function Conversion({ node, onPatch }: { node: ProjectNode; onPatch: (pat
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * How dates are written: automatic, or one or more formats, tried in order (the first that reads
+ * a value wins), for a field whose format changed between versions of a package.
+ */
+function DateFormats({ node, onPatch }: { node: ProjectNode; onPatch: (patch: NodePatch) => void }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const chosen = node.format === undefined ? [] : Array.isArray(node.format) ? node.format : [node.format];
+  const known = [...new Set([...(node.formats ?? []), ...chosen])];
+  const set = (list: string[]) => onPatch({ format: list.length === 0 ? undefined : list.length === 1 ? list[0] : list });
+  const rest = known.filter((f) => !chosen.includes(f));
+  if (chosen.length === 0) {
+    return (
+      <label className="field">
+        <span>{t('studio.writtenAs')}</span>
+        <select value="" onChange={(e) => e.target.value && set([e.target.value])}>
+          <option value="">{t('studio.formatAuto')}</option>
+          {known.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  return (
+    <fieldset className="field date-formats">
+      <legend>{t('studio.writtenAs')}</legend>
+      <ol>
+        {chosen.map((f, i) => (
+          <li key={f}>
+            <select value={f} onChange={(e) => set(chosen.map((c, j) => (j === i ? e.target.value : c)))}>
+              {[f, ...rest].map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="link-button" onClick={() => set(chosen.filter((_, j) => j !== i))}>
+              {t('studio.formatRemove')}
+              <span className="visually-hidden"> {f}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      {rest.length > 0 && (
+        <select value="" aria-label={t('studio.formatAnother')} onChange={(e) => e.target.value && set([...chosen, e.target.value])}>
+          <option value="">{t('studio.formatAnother')}</option>
+          {rest.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      )}
+      {chosen.length > 1 && <p className="meta">{t('studio.formatsInOrder')}</p>}
+    </fieldset>
   );
 }

@@ -1,8 +1,9 @@
 /**
  * Project files: `structure.json` (the seen tree: the union of the structures seen so far) and
- * `importer.json` (the researcher's configuration: config nodes and names).
+ * `importer.json` (the researcher's configuration: config nodes with their matches, names and
+ * settings).
  *
- * See docs/decisions/0012-names-and-matches.md. The two are independent: the configuration never
+ * See docs/decisions/0012-names-and-matches.md and 0013-names-labels-versions.md. The two are independent: the configuration never
  * records what the data looked like, and the seen structures are never changed by it. In the
  * browser they are laid over each other (`buildTree`).
  */
@@ -11,17 +12,17 @@ import {
   regexProblem,
   ROLES,
   type ConfigNode,
-  type Name,
   type ProjectConfig,
   type Role,
 } from './config';
 import { checkTransform, FIELD_TYPES, SpecError, type FieldType, type Localized } from './importer/spec';
 import { findPatternProblem } from './locate';
+import { isName } from './names';
 import { COLLAPSED_NAME, ITEM_NAME, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
 export const STRUCTURE_FORMAT = 'combray-structure@1';
-export const IMPORTER_FORMAT = 'combray-importer@1';
+export const IMPORTER_FORMAT = 'combray-importer@2';
 
 /** The seen tree: the union of the structures (shapes) seen so far. Structure only. */
 export interface StructureFile {
@@ -33,7 +34,6 @@ export interface StructureFile {
 export interface ImporterFile {
   format: typeof IMPORTER_FORMAT;
   name?: Localized;
-  names: Name[];
   root: ConfigNode;
 }
 
@@ -48,23 +48,12 @@ export function structureFile(root: Shape): StructureFile {
   return { format: STRUCTURE_FORMAT, root };
 }
 
-/** The importer file of a configuration, with only the names its nodes use. */
+/** The importer file of a configuration. */
 export function importerFile(config: ProjectConfig, name?: Localized): ImporterFile {
-  const used = new Set<string>();
-  const visit = (node: ConfigNode) => {
-    if (node.nameId !== undefined) used.add(node.nameId);
-    node.children?.forEach(visit);
-  };
-  visit(config.root);
-  return {
-    format: IMPORTER_FORMAT,
-    ...(name !== undefined ? { name } : {}),
-    names: config.names.filter((n) => used.has(n.id)),
-    root: config.root,
-  };
+  return { format: IMPORTER_FORMAT, ...(name !== undefined ? { name } : {}), root: config.root };
 }
 
-export const configOf = (file: ImporterFile): ProjectConfig => ({ root: file.root, names: file.names });
+export const configOf = (file: ImporterFile): ProjectConfig => ({ root: file.root });
 
 // Validation of files from disk, from the server or from another project. Errors name the first problem.
 
@@ -88,13 +77,6 @@ function checkLocalized(v: unknown, what: string): void {
   check(
     typeof v === 'string' || (isObject(v) && Object.values(v).every((s) => typeof s === 'string')),
     `${what} must be a string or a map of languages to strings`,
-  );
-}
-
-function checkLanguages(v: unknown, what: string): void {
-  check(
-    isObject(v) && Object.entries(v).every(([k, s]) => /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(k) && typeof s === 'string'),
-    `${what} must be a map of languages to strings`,
   );
 }
 
@@ -170,7 +152,7 @@ function checkMatch(m: unknown, at: string): void {
   check(problem === undefined, `${at}: regular expression ${problem}`);
 }
 
-function checkNode(e: unknown, at: string, names: Set<string>, count: { nodes: number }, depth: number, root: boolean, parentKind?: string): void {
+function checkNode(e: unknown, at: string, count: { nodes: number }, depth: number, root: boolean, parentKind?: string): void {
   check(depth < 200, 'configuration is nested too deeply');
   check(++count.nodes <= MAX_NODES, 'configuration has too many nodes');
   check(isObject(e), `${at}: expected an object`);
@@ -183,7 +165,7 @@ function checkNode(e: unknown, at: string, names: Set<string>, count: { nodes: n
   const special = e.match.filter((m) => m === ITEM_NAME || m === COLLAPSED_NAME);
   check(special.length === 0 || e.match.length === 1, `${at}: [*] and {*} are matches of their own`);
   if (e.match[0] === ITEM_NAME) check(parentKind === 'list', `${at}: [*] is only below a list`);
-  if (e.nameId !== undefined) check(typeof e.nameId === 'string' && names.has(e.nameId), `${at}: unknown name`);
+  if (e.name !== undefined) check(typeof e.name === 'string' && isName(e.name), `${at}: a name has lowercase letters, digits and underscores`);
   if (e.decision !== undefined) check(['ignore', 'show', 'donate'].includes(e.decision as string), `${at}: unknown decision`);
   if (e.raw !== undefined) check(e.raw === true, `${at}: raw must be true`);
   if (e.required !== undefined) check(e.required === true, `${at}: required must be true`);
@@ -212,7 +194,13 @@ function checkNode(e: unknown, at: string, names: Set<string>, count: { nodes: n
   }
   if (e.lifter !== undefined) check(typeof e.lifter === 'string', `${at}: lifter must be a string`);
   if (e.as !== undefined) check(FIELD_TYPES.has(e.as as FieldType), `${at}: unknown type in as`);
-  if (e.format !== undefined) check(typeof e.format === 'string' && isFormat(e.format), `${at}: format must be like YYYY-MM-DD`);
+  if (e.format !== undefined) {
+    const formats = Array.isArray(e.format) ? e.format : [e.format];
+    check(
+      formats.length > 0 && formats.length <= MAX_FORMATS && formats.every((f) => typeof f === 'string' && isFormat(f)),
+      `${at}: format must be like YYYY-MM-DD, or a list of such formats`,
+    );
+  }
   if (e.role !== undefined) check(ROLES.includes(e.role as Role), `${at}: unknown role`);
   if (e.transform !== undefined) {
     check(Array.isArray(e.transform), `${at}: transform must be a list`);
@@ -233,7 +221,7 @@ function checkNode(e: unknown, at: string, names: Set<string>, count: { nodes: n
     const ids = new Set<string>();
     e.children.forEach((c, i) => {
       const where = `${at}/${i}`;
-      checkNode(c, where, names, count, depth + 1, false, e.kind as string);
+      checkNode(c, where, count, depth + 1, false, e.kind as string);
       const id = (c as { id: string }).id;
       check(!ids.has(id), `${where}: id ${id} is used twice among siblings`);
       ids.add(id);
@@ -244,18 +232,6 @@ function checkNode(e: unknown, at: string, names: Set<string>, count: { nodes: n
 export function parseImporterFile(json: unknown): ImporterFile {
   check(isObject(json) && json.format === IMPORTER_FORMAT, `not a ${IMPORTER_FORMAT} file`);
   if (json.name !== undefined) checkLocalized(json.name, 'name');
-  check(Array.isArray(json.names), 'names must be a list');
-  const names = new Set<string>();
-  json.names.forEach((n, i) => {
-    const at = `name ${i}`;
-    check(isObject(n), `${at}: expected an object`);
-    check(typeof n.id === 'string' && n.id.length > 0 && n.id.length <= MAX_ID, `${at}: id must be text`);
-    check(!names.has(n.id), `${at}: id ${n.id} is used twice`);
-    check(typeof n.text === 'string' && n.text.trim() !== '' && n.text.length <= MAX_KEY, `${at}: text must be 1 to ${MAX_KEY} characters`);
-    if (n.label !== undefined) checkLanguages(n.label, `${at}: label`);
-    if (n.description !== undefined) checkLanguages(n.description, `${at}: description`);
-    names.add(n.id);
-  });
-  checkNode(json.root, 'root', names, { nodes: 0 }, 0, true);
+  checkNode(json.root, 'root', { nodes: 0 }, 0, true);
   return json as unknown as ImporterFile;
 }

@@ -4,11 +4,12 @@ import {
   combineConflicts,
   combineProblem,
   configOf,
-  createName,
+  currentName,
   effectiveStates,
   emptyConfig,
   getNode,
   ignoreOverrides,
+  keepNames,
   isDecidable,
   newPositions,
   parseImporterFile,
@@ -17,14 +18,12 @@ import {
   removeMatch,
   setDecision,
   setKeysAreData,
-  setName,
   splitByKey,
   suggestCombines,
   toConfig,
   type CombineSuggestion,
   type ImporterFile,
   type LeafDecision,
-  type Name,
   type NodePath,
   type ProjectConfig,
   type ProjectNode,
@@ -60,7 +59,7 @@ import {
   type StudioDraft,
 } from './model';
 import { download, loadView, VIEW_KEY } from './prefs';
-import { rowName, saveMatch, unmatch, type MatchChoice } from './naming';
+import { rowName, saveMatch, sharedNames, unmatch, type MatchChoice, type Renamed, type SharedName } from './naming';
 import { Popover } from './Popover';
 import { MorePanel, PanelHead, PlatformPanel, ReadPanel, RowsPanel, type MatchListActions, type MoreActions, type RowPanel } from './RowPanels';
 
@@ -122,21 +121,23 @@ export function Studio({
   draft,
   pack,
   packages,
+  onRename,
 }: {
   draft: DraftStore;
   pack?: string;
   /** Where the platform's test packages are kept. */
   packages: PackageStore;
+  /** Move the story's references to a renamed table or field; resolves to how many blocks changed. */
+  onRename?: (renamed: Renamed) => Promise<number>;
 }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const [initial] = useState(() => draft.initial);
-  /** The researcher's configuration: config nodes and names (ADR 0012). */
+  /** The researcher's configuration: config nodes, with their names (ADR 0012, ADR 0013). */
   const [config, setConfig] = useState<ProjectConfig | undefined>(initial?.config);
   /** The structures seen so far, as one union: it only grows. */
   const [seen, setSeen] = useState<Shape | undefined>(initial?.seen);
   const built = useMemo(() => (config ? buildTree(config, seen, ORDER) : undefined), [config, seen]);
   const tree = built?.tree;
-  const names = useMemo(() => config?.names ?? [], [config]);
   const [exports, setExports] = useState<StudioExport[]>([]);
   /** The shapes of the loaded exports: what each one has, to tell which nodes occur together. */
   const [shapes, setShapes] = useState<Map<number, Shape>>(new Map());
@@ -316,6 +317,7 @@ export function Studio({
   const states = useMemo(() => (tree ? effectiveStates(tree) : new Map()), [tree]);
   const undecided = useMemo(() => (tree ? undecidedBelow(tree, states) : new Map()), [tree, states]);
   const counts = useMemo(() => (tree ? countDecisions(tree, states) : undefined), [tree, states]);
+  const shared = useMemo(() => (tree ? sharedNames(tree) : new Map<string, SharedName>()), [tree]);
   const info = useMemo(() => (built && config ? rowInfo(built, config, structures) : new Map<ProjectNode, RowInfo>()), [built, config, structures]);
   /** Rows that may be the same as another part, by `pathKey`: the other part's name. */
   const hinted = useMemo(() => {
@@ -323,17 +325,19 @@ export function Studio({
     for (const s of suggestions) {
       const from = tree && getNode(tree, s.from);
       const into = tree && getNode(tree, s.into);
-      if (from?.virtual && into && !out.has(pathKey(s.from))) out.set(pathKey(s.from), rowName(into, names, t));
+      if (from?.virtual && into && !out.has(pathKey(s.from))) out.set(pathKey(s.from), currentName(tree, s.into) ?? rowName(into, t));
     }
     return out;
-  }, [suggestions, tree, names, t]);
+  }, [suggestions, tree, t]);
 
   /**
    * Take the configuration back out of an edited tree. Rows that were open or selected stay so,
    * also where the edit made a virtual row a config node.
    */
-  function commit(next: ProjectNode, nextNames: Name[] = names): ProjectNode {
-    const nextConfig: ProjectConfig = { root: toConfig(next), names: nextNames };
+  function commit(next: ProjectNode): ProjectNode {
+    // Names keys give to what is shown, donated or filtered are kept, so they do not move when
+    // the structure does (ADR 0013).
+    const nextConfig: ProjectConfig = { root: toConfig(keepNames(next)) };
     const after = buildTree(nextConfig, seen, ORDER).tree;
     const before = tree;
     if (before) {
@@ -554,10 +558,11 @@ export function Studio({
   function match(path: NodePath, choice: MatchChoice) {
     if (!tree) return;
     attempt(() => {
-      const result = saveMatch(tree, names, path, choice, t);
-      const after = commit(result.tree, result.names);
+      const result = saveMatch(tree, path, choice);
+      const after = commit(result.tree);
       setPanel(undefined);
-      if (choice.join === 'merge') {
+      if (result.renamed) void followRename(result.renamed);
+      if (choice.join === 'combine') {
         // What was inside each now sits side by side: suggest pairs there next.
         const below = (p: NodePath) => pathKey(p.slice(0, result.path.length)) === pathKey(result.path);
         const inside = structures.flatMap((shape) => suggestCombines(after, shape)).filter((x) => below(x.into));
@@ -569,22 +574,23 @@ export function Studio({
   function unmatchPart(path: NodePath) {
     if (!tree || !window.confirm(t('studio.matchDialog.confirmUnmatch'))) return;
     attempt(() => {
-      const result = unmatch(tree, names, path);
-      commit(result.tree, result.names);
+      commit(unmatch(tree, path));
       setPanel(undefined);
     });
   }
 
-  const moreActions: MoreActions = {
-    ownName: (path) => {
-      const node = tree && getNode(tree, path);
-      if (!tree || !node) return;
-      const name = createName(rowName(node, names, t));
-      attempt(() => commit(setName(tree, [path], name.id), [...names, name]));
-    },
-    editName: (nameId, change) => config && setConfig({ ...config, names: names.map((n) => (n.id === nameId ? change(n) : n)) }),
-    keysAreData,
-  };
+  const moreActions: MoreActions = { keysAreData };
+
+  /** After a rename: the story follows (when it should), and the researcher hears what changed. */
+  async function followRename(renamed: Renamed) {
+    if (!renamed.references || !onRename) return;
+    try {
+      const count = await onRename(renamed);
+      if (count > 0) setMessage({ text: t('studio.renamedInStory', { count, name: renamed.to }) });
+    } catch {
+      setMessage({ text: t('studio.renameStoryFailed', { name: renamed.from }), error: true });
+    }
+  }
 
   const matchListActions: MatchListActions = {
     add: (path, m) => tree && attempt(() => commit(addMatch(tree, path, m).tree)),
@@ -598,7 +604,7 @@ export function Studio({
       ? suggestions.flatMap((s) => {
           if (pathKey(s.from) !== pathKey(path)) return [];
           const into = getNode(tree, s.into);
-          return into ? [{ path: s.into, name: rowName(into, names, t), score: s.score }] : [];
+          return into ? [{ path: s.into, name: currentName(tree, s.into) ?? rowName(into, t), score: s.score }] : [];
         })
       : [];
 
@@ -613,7 +619,6 @@ export function Studio({
           key={pathKey(path)}
           tree={tree}
           path={path}
-          names={names}
           info={info.get(node)}
           values={fieldValues}
           hasPackages={exports.length > 0}
@@ -627,14 +632,14 @@ export function Studio({
         />
       );
     }
-    const title = kind === 'platform' ? t('studio.platformSettings') : `${t(`studio.details.${kind}`)}: ${rowName(node, names, t)}`;
+    const title = kind === 'platform' ? t('studio.platformSettings') : `${t(`studio.details.${kind}`)}: ${rowName(node, t)}`;
     return (
       <div className="node-details">
         <PanelHead title={title} onClose={close} />
         <div className="details-body">
           {kind === 'read' && <ReadPanel node={node} onPatch={onPatch} />}
           {kind === 'rows' && <RowsPanel tree={tree} path={path} node={node} onPatch={onPatch} />}
-          {kind === 'more' && <MorePanel tree={tree} path={path} node={node} names={names} onPatch={onPatch} actions={moreActions} />}
+          {kind === 'more' && <MorePanel tree={tree} path={path} node={node} onPatch={onPatch} actions={moreActions} />}
           {kind === 'platform' && <PlatformPanel tree={tree} node={node} onPatch={onPatch} />}
         </div>
       </div>
@@ -799,7 +804,7 @@ export function Studio({
                 </p>
                 <div className="tree-controls">
                   <span className="segmented" role="group" aria-label={t('studio.viewLabel')}>
-                    {(['fields', 'tree'] as const).map((v) => (
+                    {(['named', 'tree'] as const).map((v) => (
                       <button
                         key={v}
                         type="button"
@@ -850,7 +855,7 @@ export function Studio({
                 </div>
                 <DecisionTree
                   tree={tree}
-                  names={names}
+                  shared={shared}
                   info={info}
                   states={states}
                   undecided={undecided}

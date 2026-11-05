@@ -668,12 +668,8 @@ async function donationsBlock(project: Project, seed: Uint8Array): Promise<HTMLE
         const result = await openAll(project.id, seed, (done, total) => (status.textContent = `Opening ${done} of ${total}…`));
         const base = safeFileName(project.id);
         const tables = toCsv(result.opened);
-        const names = [...tables.values()].map((t) => safeFileName(t.name));
-        for (const [id, t] of tables) {
-          // Named after the table; two tables with one name keep apart by their ids.
-          const name = safeFileName(t.name);
-          download(`${base}-${names.filter((n) => n === name).length > 1 ? `${name}-${safeFileName(id)}` : name}.csv`, t.csv, 'text/csv');
-        }
+        // Named after the table's name, which is how stories and analyses refer to it (ADR 0013).
+        for (const [id, t] of tables) download(`${base}-${safeFileName(id)}.csv`, t.csv, 'text/csv');
         download(`${base}-values.csv`, valuesCsv(result.opened), 'text/csv');
         const answers = answersCsv(result.opened);
         if (answers) download(`${base}-answers.csv`, answers, 'text/csv');

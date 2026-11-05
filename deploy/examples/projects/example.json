@@ -49,7 +49,7 @@
             "type": "data",
             "id": "watched-count",
             "platform": "takeout",
-            "table": "youtube-watch-history",
+            "table": "youtube_watch_history",
             "view": "amount",
             "text": {
               "en": "You watched {count} videos: about {per_day} a day.",
@@ -88,7 +88,7 @@
             "type": "data",
             "id": "top-channels",
             "platform": "takeout",
-            "table": "youtube-watch-history",
+            "table": "youtube_watch_history",
             "view": "top",
             "column": "channels/channel",
             "top": 5,
@@ -115,7 +115,7 @@
             "type": "data",
             "id": "watched-over-time",
             "platform": "takeout",
-            "table": "youtube-watch-history",
+            "table": "youtube_watch_history",
             "view": "over-time",
             "text": {
               "en": "Your busiest time was {peak}.",
@@ -140,7 +140,7 @@
             "type": "data",
             "id": "watched-hours",
             "platform": "takeout",
-            "table": "youtube-watch-history",
+            "table": "youtube_watch_history",
             "view": "rhythm",
             "by": "hour",
             "text": {
@@ -168,7 +168,7 @@
             "type": "data",
             "id": "searches-count",
             "platform": "takeout",
-            "table": "google-searches",
+            "table": "google_searches",
             "view": "amount",
             "text": {
               "en": "And you searched Google {count} times.",

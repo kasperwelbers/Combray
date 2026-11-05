@@ -1,12 +1,12 @@
 /**
- * The researcher's configuration of a platform: config nodes with matches, and names.
+ * The researcher's configuration of a platform: config nodes with matches, names and settings.
  *
- * See docs/decisions/0012-names-and-matches.md. The configuration is kept apart from the
+ * See docs/decisions/0012-names-and-matches.md and 0013-names-labels-versions.md. The configuration is kept apart from the
  * structures we have seen (shapes): it says how real nodes map onto the researcher's nodes and
  * what happens to them, and it never records what the data looked like. Real nodes that no config
  * node matches are unmatched; they come back from the seen structures (decisions.ts, `buildTree`).
  */
-import type { FieldType, Localized, Transform } from './importer/spec';
+import type { FieldType, Transform } from './importer/spec';
 import type { FilterTest } from './query';
 import { COLLAPSED_NAME, ITEM_NAME } from './shape';
 import type { NodeKind } from './tree';
@@ -35,19 +35,6 @@ export type NewChildren = 'ask' | 'skip';
  */
 export type Match = string | { regex: string; flags?: string };
 
-/**
- * A name nodes can share, to say they are the same thing for participants: one table, or one
- * column. Its text is the label in every language unless `label` says otherwise.
- */
-export interface Name {
-  id: string;
-  text: string;
-  /** Per-language labels for participants, overriding `text`. */
-  label?: Record<string, string>;
-  /** One participant-facing sentence per language. */
-  description?: Record<string, string>;
-}
-
 /** The settings a config node can have. Settings belong to the node, never to one of its matches. */
 export interface NodeSettings {
   /**
@@ -67,8 +54,11 @@ export interface NodeSettings {
   transform?: Transform[];
   /** Leaves: the type to read the value as (a date, a number, a link's domain). */
   as?: FieldType;
-  /** Leaves read `as: datetime`: how the date is written (`YYYY-MM-DD HH:mm:ss`, `epoch-ms`). */
-  format?: string;
+  /**
+   * Leaves read `as: datetime`: how the date is written (`YYYY-MM-DD HH:mm:ss`, `epoch-ms`), or
+   * several ways, tried in order: the first that reads a value wins.
+   */
+  format?: string | string[];
   /** Leaves: what the value is for in participant views. */
   role?: Role;
   /** Repeated nodes (`[*]`, `{*}`): conditions a row must meet, all of them, to be imported. */
@@ -99,15 +89,17 @@ export interface ConfigNode extends NodeSettings {
   kind: NodeKind;
   /** Exact keys and regular expressions; `[]` for the root, which is the upload itself. */
   match: Match[];
-  /** The id of the `Name` this node has. */
-  nameId?: string;
+  /**
+   * Tables and fields: the name stories, filters, exports and donations call it by (`names.ts`).
+   * Nodes with the same name are one table or one field. Other nodes have none.
+   */
+  name?: string;
   children?: ConfigNode[];
 }
 
 /** A platform's configuration: what an importer file holds. */
 export interface ProjectConfig {
   root: ConfigNode;
-  names: Name[];
 }
 
 /** The settings a config node can have, in the order they are written. */
@@ -197,14 +189,3 @@ export const sameMatch = (a: Match, b: Match) => matchText(a) === matchText(b);
 export const isItemNode = (node: { match: readonly Match[] }) => node.match.length === 1 && node.match[0] === ITEM_NAME;
 /** A node for the keys of a map whose keys are data (`{*}`). */
 export const isKeysNode = (node: { match: readonly Match[] }) => node.match.length === 1 && node.match[0] === COLLAPSED_NAME;
-
-/** What a name looks like to participants: its text, or its labels per language. */
-export function nameLabel(name: Name): Localized {
-  if (!name.label || Object.keys(name.label).length === 0) return name.text;
-  return { en: name.text, ...name.label };
-}
-
-export function nameDescription(name: Name): Localized | undefined {
-  if (!name.description || Object.keys(name.description).length === 0) return undefined;
-  return name.description;
-}

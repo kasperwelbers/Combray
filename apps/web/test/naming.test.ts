@@ -1,14 +1,14 @@
-import { buildTree, emptyConfig, extractShape, getNode, jsonToTree, toConfig, type Name, type ProjectNode } from '@combray/core';
+import { buildTree, emptyConfig, extractShape, getNode, jsonToTree, toConfig, type ProjectNode } from '@combray/core';
 import { describe, expect, it } from 'vitest';
 
-import { keysBehind, nameTaken, rowName, saveMatch, unmatch } from '../src/studio/naming';
+import { keysBehind, nameInfo, nameTaken, rowName, saveMatch, sharedNames, unmatch } from '../src/studio/naming';
 
 const t = (key: string) => key;
 
-const shape = extractShape(jsonToTree('a.json', [{ title: 'x', titleText: 'y', time: '2024-01-01' }]));
+const shape = extractShape(jsonToTree('a.json', [{ title: 'x', titleText: 'y', time: '2024-01-01', comments: [{ text: 'z' }] }]));
 
 /** The tree after an edit, as the studio rebuilds it. */
-const rebuild = (tree: ProjectNode, names: Name[]) => buildTree({ root: toConfig(tree), names }, shape, { structureOrder: true }).tree;
+const rebuild = (tree: ProjectNode) => buildTree({ root: toConfig(tree) }, shape, { structureOrder: true }).tree;
 
 const start = () => buildTree(emptyConfig('list'), shape, { structureOrder: true }).tree;
 const item = (tree: ProjectNode) => tree.children![0]!;
@@ -16,79 +16,86 @@ const child = (tree: ProjectNode, key: string) => item(tree).children!.find((c) 
 const pathTo = (tree: ProjectNode, key: string) => [item(tree).id, child(tree, key).id];
 
 describe('names in the tree editor', () => {
-  it('matches a part by its key: no name of its own, and a decision', () => {
+  it('matches a field by its key: the name its key gives, and a decision', () => {
     const tree = start();
     expect(child(tree, 'title').virtual).toBe(true);
-    const out = saveMatch(tree, [], pathTo(tree, 'title'), { text: 'title', decision: 'show' }, t);
-    const after = rebuild(out.tree, out.names);
-    expect(out.names).toEqual([]);
+    expect(nameInfo(tree, pathTo(tree, 'title'))).toMatchObject({ kind: 'field', name: 'title', own: false });
+    const out = saveMatch(tree, pathTo(tree, 'title'), { name: 'title', decision: 'show' });
+    const after = rebuild(out.tree);
+    expect(out.renamed).toBeUndefined();
     expect(child(after, 'title')).toMatchObject({ decision: 'show', match: ['title'] });
     expect(child(after, 'title').virtual).toBeUndefined();
-    expect(rowName(child(after, 'title'), out.names, t)).toBe('title');
+    expect(rowName(child(after, 'title'), t)).toBe('title');
     // Rows stay where they were.
-    expect(item(after).children!.map((c) => c.name)).toEqual(['time', 'title', 'titleText']);
+    expect(item(after).children!.map((c) => c.name)).toEqual(['comments', 'time', 'title', 'titleText']);
   });
 
-  it('gives a part a name of its own, and shows the key behind it', () => {
+  it('gives a field a name of its own, and shows the key behind it', () => {
     const tree = start();
-    const out = saveMatch(tree, [], pathTo(tree, 'title'), { text: 'Video title', decision: 'donate' }, t);
-    const after = rebuild(out.tree, out.names);
-    expect(out.names.map((n) => n.text)).toEqual(['Video title']);
-    const node = child(after, 'title');
-    expect(rowName(node, out.names, t)).toBe('Video title');
-    expect(keysBehind(node, 'Video title')).toEqual(['title']);
+    const out = saveMatch(tree, pathTo(tree, 'titleText'), { name: 'video_title', decision: 'donate' });
+    expect(out.renamed).toEqual({ kind: 'field', from: 'title_text', to: 'video_title', table: 'table', references: true });
+    const after = rebuild(out.tree);
+    const node = child(after, 'titleText');
+    expect(rowName(node, t)).toBe('video_title');
+    expect(keysBehind(node, 'video_title')).toEqual(['titleText']);
     expect(keysBehind(child(after, 'time'), 'time')).toEqual([]);
   });
 
-  it('merges a part into the node with that name: one node, both keys', () => {
-    let tree = start();
-    let out = saveMatch(tree, [], pathTo(tree, 'title'), { text: 'Video title', decision: 'donate' }, t);
-    tree = rebuild(out.tree, out.names);
-    const taken = nameTaken(tree, pathTo(tree, 'titleText'), out.names, 'video title', t);
-    expect(taken?.sibling).toEqual(pathTo(tree, 'title'));
-    out = saveMatch(tree, out.names, pathTo(tree, 'titleText'), { text: 'Video title', join: 'merge' }, t);
-    const after = rebuild(out.tree, out.names);
-    const merged = child(after, 'title');
-    expect(merged).toBe(child(after, 'titleText'));
-    expect(merged.match).toEqual(['title', 'titleText']);
-    expect(merged.decision).toBe('donate');
-    expect(item(after).children).toHaveLength(2);
+  it('has no name for parts that are not tables or fields', () => {
+    const tree = start();
+    expect(nameInfo(tree, [item(tree).id])).toBeUndefined();
+    expect(nameInfo(tree, pathTo(tree, 'comments'))).toMatchObject({ kind: 'table', name: 'comments' });
   });
 
-  it('or gives it the same name, as a node of its own with its own decision', () => {
+  it('combines a field with the one next to it that has the name: one node, both keys', () => {
     let tree = start();
-    let out = saveMatch(tree, [], pathTo(tree, 'title'), { text: 'title', decision: 'donate' }, t);
-    tree = rebuild(out.tree, out.names);
-    out = saveMatch(tree, out.names, pathTo(tree, 'titleText'), { text: 'title', join: 'same-name', decision: 'show' }, t);
-    const after = rebuild(out.tree, out.names);
-    expect(out.names).toHaveLength(1);
-    const [a, b] = [child(after, 'title'), child(after, 'titleText')];
+    tree = rebuild(saveMatch(tree, pathTo(tree, 'title'), { name: 'title', decision: 'donate' }).tree);
+    const taken = nameTaken(tree, pathTo(tree, 'titleText'), 'title');
+    expect(taken).toEqual({ sibling: pathTo(tree, 'title'), others: [pathTo(tree, 'title')], count: 1 });
+    const out = saveMatch(tree, pathTo(tree, 'titleText'), { name: 'title', join: 'combine' });
+    const after = rebuild(out.tree);
+    const combined = child(after, 'title');
+    expect(combined).toBe(child(after, 'titleText'));
+    expect(combined.match).toEqual(['title', 'titleText']);
+    expect(combined.decision).toBe('donate');
+    expect(item(after).children).toHaveLength(3);
+  });
+
+  it('or gives it the same name, as a node of its own with its own decision, numbered', () => {
+    let tree = start();
+    tree = rebuild(saveMatch(tree, pathTo(tree, 'title'), { name: 'title', decision: 'donate' }).tree);
+    tree = rebuild(saveMatch(tree, pathTo(tree, 'titleText'), { name: 'title', join: 'same-name', decision: 'show' }).tree);
+    const [a, b] = [child(tree, 'title'), child(tree, 'titleText')];
     expect(a).not.toBe(b);
-    expect(a.nameId).toBe(out.names[0]!.id);
-    expect(b.nameId).toBe(out.names[0]!.id);
+    expect([a.named, b.named]).toEqual(['title', 'title']);
     expect([a.decision, b.decision]).toEqual(['donate', 'show']);
+    const shared = sharedNames(tree);
+    expect(shared.get(pathTo(tree, 'title').join('/'))).toMatchObject({ number: 1, name: 'title' });
+    expect(shared.get(pathTo(tree, 'titleText').join('/'))).toMatchObject({ number: 2, name: 'title' });
   });
 
-  it('renames a shared name for all, or gives one part a name of its own', () => {
+  it('renames a shared name for all, or splits one part off', () => {
     let tree = start();
-    let out = saveMatch(tree, [], pathTo(tree, 'title'), { text: 'Title', decision: 'show' }, t);
-    tree = rebuild(out.tree, out.names);
-    out = saveMatch(tree, out.names, pathTo(tree, 'titleText'), { text: 'Title', join: 'same-name', decision: 'show' }, t);
-    tree = rebuild(out.tree, out.names);
-    const all = saveMatch(tree, out.names, pathTo(tree, 'title'), { text: 'Heading' }, t);
-    expect(all.names.map((n) => n.text)).toEqual(['Heading']);
-    const one = saveMatch(tree, out.names, pathTo(tree, 'title'), { text: 'Heading', renameAll: false }, t);
-    expect(one.names.map((n) => n.text).sort()).toEqual(['Heading', 'Title']);
+    tree = rebuild(saveMatch(tree, pathTo(tree, 'title'), { name: 'title', decision: 'show' }).tree);
+    tree = rebuild(saveMatch(tree, pathTo(tree, 'titleText'), { name: 'title', join: 'same-name', decision: 'show' }).tree);
+    const all = saveMatch(tree, pathTo(tree, 'title'), { name: 'heading' });
+    expect(all.renamed).toMatchObject({ from: 'title', to: 'heading', references: true });
+    const afterAll = rebuild(all.tree);
+    expect([child(afterAll, 'title').named, child(afterAll, 'titleText').named]).toEqual(['heading', 'heading']);
+
+    const one = saveMatch(tree, pathTo(tree, 'title'), { name: 'heading', renameAll: false });
+    expect(one.renamed).toMatchObject({ from: 'title', to: 'heading', references: false });
+    const afterOne = rebuild(one.tree);
+    expect([child(afterOne, 'title').named, child(afterOne, 'titleText').named]).toEqual(['heading', 'title']);
+    expect(saveMatch(tree, pathTo(tree, 'title'), { name: 'heading', renameAll: false, moveReferences: true }).renamed?.references).toBe(true);
   });
 
   it('unmatches a part: its settings and its name go', () => {
     let tree = start();
-    const out = saveMatch(tree, [], pathTo(tree, 'title'), { text: 'Video title', decision: 'show' }, t);
-    tree = rebuild(out.tree, out.names);
-    const gone = unmatch(tree, out.names, pathTo(tree, 'title'));
-    const after = rebuild(gone.tree, gone.names);
-    expect(gone.names).toEqual([]);
+    tree = rebuild(saveMatch(tree, pathTo(tree, 'title'), { name: 'video_title', decision: 'show' }).tree);
+    const after = rebuild(unmatch(tree, pathTo(tree, 'title')));
     expect(child(after, 'title').virtual).toBe(true);
+    expect(child(after, 'title').named).toBeUndefined();
     expect(getNode(after, pathTo(after, 'title'))?.decision).toBeUndefined();
   });
 });

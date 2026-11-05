@@ -90,12 +90,12 @@
   "donateAll": "Ask to donate",
   "viewLabel": "How to show the structure",
   "view": {
-    "fields": "Tables and fields",
+    "named": "Names",
     "tree": "Full tree"
   },
   "hideIgnored": "Hide what is ignored",
   "viewHelp": {
-    "fields": "Only tables and the fields in them, named as their columns. Hover a field to see where it is in the file.",
+    "named": "Only tables and their fields, by their names. A field belongs to the nearest table above it. Hover a name to see where it is in the files.",
     "tree": "Everything in the files, including the folders, objects and HTML in between."
   },
   "chartIntro": "Count rows over time or per value, from the packages you loaded. This runs in your browser; it is a first step towards views participants can make themselves.",
@@ -533,15 +533,15 @@
       },
       "names": {
         "title": "Names",
-        "body": "**Names** tell participants and researchers how to read the data. Every matched part has one: its key, until you give it a clearer name (\"Video title\" for titleText). The name decides how data is presented: participants see it, and donations are exported under it, so the data is organised for your analysis.\n\nTables and columns are named after their nodes: the entries of a list become the rows of a table named after the list. Nodes with the same name form one table or one column.\n\nNames can have a label per language and a description (under More), such as \"the time you watched each video\", which participants read when they are asked to donate it."
+        "body": "**Names** are how stories, filters and donations refer to tables and fields, and how your analysis will: lowercase letters, digits and underscores, such as watch_history or video_title. Spaces you type become underscores. Only tables and fields have names; folders and objects are matched for their settings.\n\nA table or field without a name of its own is called by the name its key gives, and keeps that name once you show or donate it. A table is named on the list or file its rows come from, a field on its value. Tables nested in a table are tables too, with a name of their own.\n\nFields with the same name in one table are one column; tables with the same name in the same table are one table. Elsewhere a name is used once.\n\nRenaming a table or field takes the story along. Participants do not see names: they see labels, which you write per language on the Texts page. Without a label, they see the name with spaces."
       },
       "decisions": {
         "title": "Decisions",
         "body": "**Show**: participants see it in their own view of their data. Nothing is sent.\n\n**Donate**: participants see it, and are asked to donate it. Only what they agree to is sent, encrypted for your project.\n\n**Ignore**: left out, with everything inside it. Ignored is not the same as not matched: it says someone looked and did not want it.\n\nOn a folder, file or object, the decision menu sets the fields inside at once."
       },
       "same-name": {
-        "title": "Merge, or the same name",
-        "body": "When you give a part a name another part has, Combray asks what you mean.\n\n**Merge into that node**: they are the same data under different keys, such as a field and its translation. They become one node with both keys and one set of settings. This is refused when both keys are in one package side by side: then they hold different data.\n\n**A new node with the same name**: each keeps its own node and settings (its own decision, how it is read), and participants see them as one table or column."
+        "title": "Combine, or the same name",
+        "body": "When you give a part a name another part has, Combray asks what you mean.\n\n**Combine into one node**: they are the same data under different keys, such as a field and its translation. They become one node with both keys and one set of settings. This is refused when both keys are in one package side by side: then they hold different data.\n\n**Give the same name**: each keeps its own node and settings (its own decision, how it is read), and participants see them as one column or one table. They are numbered #1, #2 and marked with a bar in one colour. When a row has a value for more than one of them, the first (#1) gives it: useful for a date that is written one way in older packages and another way in newer ones.\n\nWhen you rename a name others share, you rename it for all of them (the story follows), or give only this part the new name: the others, and the story, keep the old one."
       },
       "matches": {
         "title": "Matches and regular expressions",
@@ -597,7 +597,7 @@
       },
       "name-mismatch": {
         "title": "Different decisions under one name",
-        "body": "Nodes with this name have different decisions. Each keeps its own decision for its own data, which is allowed but unusual: participants see one column with a mix."
+        "body": "Fields with this name in this table have different decisions. Each keeps its own decision for its own data, which is allowed but unusual: participants see one column with a mix."
       }
     }
   },
@@ -609,12 +609,6 @@
   "cleaned": "Cleaned",
   "filterCount_one": "{{count}} filter",
   "filterCount_other": "{{count}} filters",
-  "more": {
-    "labels": "Labels and description",
-    "addLabels": "Add labels per language",
-    "addLabelsAndDescription": "Add labels per language and a description",
-    "description": "Description ({{language}})"
-  },
   "matchDialog": {
     "title": "Name and decision",
     "titleNew": "Match this part",
@@ -622,15 +616,15 @@
     "hint": "Possibly the same as “{{name}}” ({{score}}% alike).",
     "useHint": "Use that name",
     "maybe": "same as “{{name}}”?",
-    "renameAll_one": "Rename it for the {{count}} other part with this name too",
-    "renameAll_other": "Rename it for the {{count}} other parts with this name too",
+    "renameAll_one": "Rename it",
+    "renameAll_other": "Rename all {{count}}",
     "taken_one": "Another part has this name.",
     "taken_other": "{{count}} other parts have this name.",
-    "merge": "Merge into that node",
-    "mergeHelp": "The same data under another key: one node, one set of settings.",
-    "mergeElsewhere": "Only a part next to this one can be merged into.",
-    "sameName": "A new node with the same name",
-    "sameNameHelp": "Its own settings; participants see the two as one column or table.",
+    "sameName": "Give the same name",
+    "sameNameHelp": {
+      "field": "Its own node and settings, in the same column: in a row, the first with a value gives it.",
+      "table": "Its own node and settings; participants see one table with the rows of both."
+    },
     "decision": "Decision",
     "perPart": "Decide per part inside",
     "ignoreAll": "Ignore all of it",
@@ -640,10 +634,30 @@
     "save": "Save",
     "cancel": "Cancel",
     "unmatch": "Unmatch",
-    "confirmUnmatch": "Unmatch this part? Its name and settings go, and it is not matched again until you match it."
+    "confirmUnmatch": "Unmatch this part? Its name and settings go, and it is not matched again until you match it.",
+    "kind": {
+      "table": "Table",
+      "field": "Field"
+    },
+    "nameRules": "Lowercase letters, digits and underscores. Stories, filters and donations refer to it by this name.",
+    "fromKey": "The name its key gives. Change it to give it a name of its own.",
+    "noName": "Only tables and fields have names. This part is matched by its key, for its settings.",
+    "shared": "#{{number}} of {{count}} parts with this name. In a row, the first with a value gives it.",
+    "renameShared_one": "{{count}} part is called {{name}}.",
+    "renameShared_other": "{{count}} parts are called {{name}}.",
+    "renameAllHelp": "The story follows the new name.",
+    "renameOne": "Only this part",
+    "renameOneHelp": "The others keep {{name}}, and so does the story.",
+    "moveReferences": "Move the story to {{name}} as well",
+    "combine": "Combine into one node",
+    "combineHelp": "The same data under another key: one node, one set of settings.",
+    "combineElsewhere": "Only a part next to this one can be combined with."
   },
-  "sameName": {
-    "variants_one": "{{count}} variant",
-    "variants_other": "{{count}} variants"
-  }
+  "sharedName": "#{{number}} of the parts called {{name}}",
+  "renamedInStory_one": "Renamed. {{count}} block in the story now uses {{name}}.",
+  "renamedInStory_other": "Renamed. {{count}} blocks in the story now use {{name}}.",
+  "renameStoryFailed": "Renamed, but the story could not be updated: it still refers to {{name}}.",
+  "formatRemove": "Remove",
+  "formatAnother": "Also try another format…",
+  "formatsInOrder": "Tried in this order: the first format that reads a value is used."
 }

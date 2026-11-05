@@ -2,11 +2,10 @@ import {
   getNode,
   isDecidable,
   isLeaf,
-  localize,
   outline,
+  VALUE_COLUMN,
   type EffectiveState,
   type LeafDecision,
-  type Name,
   type NodePath,
   type OutlineGroup,
   type ProjectNode,
@@ -16,14 +15,14 @@ import { useTranslation } from 'react-i18next';
 
 import { useHelp } from './Help';
 import { displayName, foldChain, isUndecided, nodeIcon, pathKey, shortNames, withSameNamesTogether, type RowInfo, type ShortName, type Shortcut } from './model';
-import { isPositional, keysBehind, rowName } from './naming';
+import { isPositional, keysBehind, rowName, type SharedName } from './naming';
 import { Popover } from './Popover';
 import { isTableRows, type RowPanel } from './RowPanels';
 
 /** The decisions a field can be given here; undecided is what nothing matched yet is. */
 const LEAF_DECISIONS: Exclude<LeafDecision, 'undecided'>[] = ['ignore', 'show', 'donate'];
 
-export type TreeView = 'tree' | 'fields';
+export type TreeView = 'tree' | 'named';
 
 export interface TreeActions {
   /** Open one of a row's panels next to its button. */
@@ -39,7 +38,8 @@ export interface TreeActions {
 
 interface Props {
   tree: ProjectNode;
-  names: Name[];
+  /** Parts that share a name with others, by their path (`/`-joined): their number and colour. */
+  shared: Map<string, SharedName>;
   /** Notes per row: not seen, conflicts, shared data, names with different decisions. */
   info: Map<ProjectNode, RowInfo>;
   states: Map<ProjectNode, EffectiveState>;
@@ -47,7 +47,7 @@ interface Props {
   onlyUndecided: boolean;
   hideIgnored: boolean;
   view: TreeView;
-  /** Open rows in the tree view; closed tables in the fields view. */
+  /** Open rows in the tree view; closed tables in the named view. */
   open: Set<string>;
   /** The panel that is open, and the row it belongs to. */
   panel?: { path: NodePath; kind: RowPanel };
@@ -66,12 +66,13 @@ const SHORTCUTS = new Set<string>(['1', '2', '3']);
  * The extractor over the seen data, for matching and deciding. Rows are coloured by their
  * decision; parts nothing matches are "not matched", in a quiet style. A row's name opens the
  * match dialog; its other buttons open their own panels next to them; the pill sets its decision
- * (or keys 1 to 3 on the row). The fields view shows only tables and fields, named as their
- * columns, which is all most researchers need to pick data.
+ * (or keys 1 to 3 on the row). The named view shows only tables and fields, by their names,
+ * which is all most researchers need to pick data. Parts that share a name have a number
+ * (`#1`, `#2`: the first with a value gives it) and a bar in one colour.
  */
 export function DecisionTree(props: Props) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  if (props.view === 'fields') return <FieldsView {...props} />;
+  if (props.view === 'named') return <NamedView {...props} />;
   const children = props.tree.children ?? [];
   return (
     <ul className="decision-tree" aria-label={t('studio.tree')}>
@@ -227,6 +228,7 @@ function Line({
   props,
   node,
   path,
+  nameAt,
   name,
   toggle,
   title,
@@ -237,6 +239,8 @@ function Line({
   props: Props;
   node: ProjectNode;
   path: NodePath;
+  /** Where the name is, when not on this node: a table is named on its list (or file). */
+  nameAt?: NodePath;
   name: string;
   toggle?: ReactNode;
   title?: string;
@@ -247,7 +251,9 @@ function Line({
 }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const { actions, states } = props;
-  const selected = props.panel !== undefined && pathKey(props.panel.path) === pathKey(path);
+  const named = nameAt ?? path;
+  const nameNode = nameAt ? getNode(props.tree, nameAt) : node;
+  const selected = props.panel !== undefined && (pathKey(props.panel.path) === pathKey(path) || pathKey(props.panel.path) === pathKey(named));
   return (
     // A click on the row itself (not on a button in it) folds it; the toggle button does the
     // same for the keyboard.
@@ -259,10 +265,10 @@ function Line({
       }}
     >
       {toggle ?? <span className="toggle" aria-hidden="true" />}
-      {path.length > 0 && !isPositional(node) ? (
+      {named.length > 0 && nameNode && !isPositional(nameNode) ? (
         <PanelButton
           props={props}
-          path={path}
+          path={named}
           kind="name"
           label={t('studio.matchDialog.title')}
           className="decision-name"
@@ -298,6 +304,17 @@ function KeysBehind({ node, shown }: { node: ProjectNode; shown: string }) {
     <span className="row-keys">
       <span aria-hidden="true"> ← </span>
       {keys.join(', ')}
+    </span>
+  );
+}
+
+/** The keys from a field's row to it, quietly and shortened, when its name is not simply its key. */
+function FieldKeys({ keys, name }: { keys: ShortName | undefined; name: string }) {
+  if (!keys || keys.short === name) return null;
+  return (
+    <span className="row-keys" title={keys.full}>
+      <span aria-hidden="true"> ← </span>
+      {keys.short}
     </span>
   );
 }
@@ -399,10 +416,11 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
   const name = chain.map((c) => displayName(c.node.name, t)).join(' / ');
   const children = leaf ? [] : (node.children ?? []);
   const shown = chainName(props.tree, chain, t);
-  const own = rowName(node, props.names, t);
+  const own = rowName(node, t);
+  const mark = props.shared.get(path.join('/'));
 
   return (
-    <li className={`decision-row ${stateClass(node, states)}${node.virtual ? ' virtual' : ''}`}>
+    <li className={`decision-row ${stateClass(node, states)}${node.virtual ? ' virtual' : ''}${sharedClass(mark)}`}>
       <Line
         props={props}
         node={node}
@@ -433,7 +451,8 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
         }
       >
         <Icon node={node} />
-        {node.nameId !== undefined ? (
+        <NameMark mark={mark} />
+        {node.named !== undefined ? (
           <>
             <strong>{own}</strong>
             <KeysBehind node={node} shown={own} />
@@ -454,6 +473,20 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
         </ul>
       )}
     </li>
+  );
+}
+
+/** The colour bar of a part that shares its name (a class), with its number in the group. */
+const SHARED_COLOURS = 6;
+const sharedClass = (mark: SharedName | undefined) => (mark ? ` shared-name shared-${mark.colour % SHARED_COLOURS}` : '');
+
+function NameMark({ mark }: { mark: SharedName | undefined }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  if (!mark) return null;
+  return (
+    <span className="name-number" title={t('studio.sharedName', { number: mark.number, name: mark.name })}>
+      #{mark.number}
+    </span>
   );
 }
 
@@ -499,22 +532,28 @@ function fullPath(tree: ProjectNode, path: NodePath, t: (key: string) => string)
 /** The names along a path of ids. */
 const pathNames = (tree: ProjectNode, path: NodePath) => path.map((id, i) => getNode(tree, path.slice(0, i + 1))?.name ?? id);
 
-function FieldsView(props: Props) {
+/**
+ * The named view: only tables and fields, by their names, each table with its fields and the
+ * tables nested in it (a field's table is the nearest table above it). Parts that share a name
+ * are placed together, with their number.
+ */
+function NamedView(props: Props) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   const groups = useMemo(() => outline(props.tree), [props.tree]);
-  const short = useMemo(() => {
-    const names = new Map<string, ShortName>();
+  // The keys behind each field, as short as they can be while telling the fields of a table apart.
+  const keys = useMemo(() => {
+    const out = new Map<string, ShortName>();
     const visit = (group: OutlineGroup) => {
       const fields = group.fields.filter((f) => f.path.length > group.path.length);
-      shortNames(props.tree, fields.map((f) => f.path), group.path).forEach((n, i) => names.set(pathKey(fields[i]!.path), n));
+      shortNames(props.tree, fields.map((f) => f.path), group.path).forEach((n, i) => out.set(fields[i]!.path.join('/'), n));
       group.groups.forEach(visit);
     };
     visit(groups);
-    return names;
+    return out;
   }, [groups, props.tree]);
   return (
-    <ul className="decision-tree fields-view" aria-label={t('studio.tree')}>
-      <GroupBody {...props} short={short} group={groups} />
+    <ul className="decision-tree named-view" aria-label={t('studio.tree')}>
+      <GroupBody {...props} keys={keys} group={groups} />
     </ul>
   );
 }
@@ -537,126 +576,75 @@ function visibleGroup(props: Props, group: OutlineGroup): boolean {
   return hasVisible(props, group) || (!props.onlyUndecided && group.fields.length + group.groups.length === 0);
 }
 
-type FieldsProps = Props & { short: Map<string, ShortName> };
+/** Items in runs: those with the same name together, where the first of them is. */
+function sameNamesTogether<T extends { id: string }>(items: T[]): T[] {
+  const runs: T[][] = [];
+  for (const item of items) {
+    const run = runs.find((r) => r[0]!.id === item.id);
+    if (run) run.push(item);
+    else runs.push([item]);
+  }
+  return runs.flat();
+}
 
-function GroupBody(props: FieldsProps & { group: OutlineGroup }) {
+type NamedProps = Props & { keys: Map<string, ShortName> };
+
+function GroupBody(props: NamedProps & { group: OutlineGroup }) {
   const { group } = props;
   return (
     <>
-      {group.fields.map((field) => (
-        <FieldRow key={pathKey(field.path)} {...props} group={group} field={field} />
+      {sameNamesTogether(group.fields).map((field) => (
+        <FieldRow key={field.path.join('/')} {...props} group={group} field={field} />
       ))}
-      {sameNamesTogether(group.groups.filter((g) => visibleGroup(props, g))).map((same) =>
-        same.length === 1 ? (
-          <GroupRow key={pathKey(same[0]!.path)} {...props} group={same[0]!} />
-        ) : (
-          <SameNameGroup key={`name:${same[0]!.id}`} {...props} groups={same} />
-        ),
-      )}
+      {sameNamesTogether(group.groups.filter((g) => visibleGroup(props, g))).map((g) => (
+        <GroupRow key={g.path.join('/')} {...props} group={g} />
+      ))}
     </>
   );
 }
 
-/** Tables in runs: those with the same name together, in the order the first of each comes. */
-function sameNamesTogether(groups: OutlineGroup[]): OutlineGroup[][] {
-  const out: OutlineGroup[][] = [];
-  for (const g of groups) {
-    const run = g.id === '' ? undefined : out.find((r) => r[0]!.id === g.id);
-    if (run) run.push(g);
-    else out.push([g]);
-  }
-  return out;
-}
-
-/**
- * Tables that share a name: one table for participants, with the rows of each. Shown as one
- * group, with each variant (where it is in the files) below it.
- */
-function SameNameGroup(props: FieldsProps & { groups: OutlineGroup[] }) {
-  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
-  const { groups, open, actions } = props;
-  const key = `fields:name:${groups[0]!.id}`;
-  const isOpen = !open.has(key);
-  const name = localize(groups[0]!.name, i18n.language) || t('studio.unnamedTable');
-  return (
-    <li className="decision-row group same-name">
-      <div className="decision-line foldable" onClick={(e) => !(e.target as HTMLElement).closest('button') && actions.toggleOpen(key)}>
-        <button
-          type="button"
-          className="toggle"
-          aria-expanded={isOpen}
-          aria-label={isOpen ? t('studio.collapse', { name }) : t('studio.expand', { name })}
-          onClick={() => actions.toggleOpen(key)}
-        >
-          {isOpen ? '▾' : '▸'}
-        </button>
-        <span className="decision-name static">
-          <span className="node-icon icon-table" aria-hidden="true">
-            ▦
-          </span>
-          <strong>{name}</strong>
-        </span>
-        <span className="decision-tags">
-          <span className="tag">{t('studio.sameName.variants', { count: groups.length })}</span>
-        </span>
-      </div>
-      {isOpen && (
-        <ul>
-          {groups.map((g) => (
-            <GroupRow key={pathKey(g.path)} {...props} group={g} variant />
-          ))}
-        </ul>
-      )}
-    </li>
-  );
-}
-
-function FieldRow(props: FieldsProps & { group: OutlineGroup; field: OutlineGroup['fields'][number] }) {
-  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
+function FieldRow(props: NamedProps & { group: OutlineGroup; field: OutlineGroup['fields'][number] }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const { group, field, states } = props;
   const node = visibleField(props, field.path);
   if (!node) return null;
-  const short = node.label === undefined ? props.short.get(pathKey(field.path)) : undefined;
-  const name = short?.short ?? (localize(field.name, i18n.language) || t('studio.valueColumn'));
+  const name = field.id === VALUE_COLUMN ? t('studio.valueColumn') : field.id;
   const where = fullPath(props.tree, field.path, t);
+  const mark = props.shared.get(field.path.join('/'));
   return (
-    <li className={`decision-row ${stateClass(node, states)}${node.virtual ? ' virtual' : ''}`}>
+    <li className={`decision-row ${stateClass(node, states)}${node.virtual ? ' virtual' : ''}${sharedClass(mark)}`}>
       <Line props={props} node={node} path={field.path} name={name} title={where}>
         {/* A list of plain values below the row is one field: a list cell. */}
         <Icon
           node={node}
           list={field.path.slice(group.path.length).some((_, i) => getNode(props.tree, field.path.slice(0, group.path.length + i + 1))?.name === '[*]')}
         />
-        {short?.shortened && <PathMore />}
-        {node.nameId !== undefined ? (
-          <>
-            <strong>{name}</strong>
-            <KeysBehind node={node} shown={name} />
-          </>
-        ) : (
-          name
-        )}
+        <NameMark mark={mark} />
+        {field.own ? <strong>{name}</strong> : name}
+        <FieldKeys keys={props.keys.get(field.path.join('/'))} name={name} />
         <span className="visually-hidden"> ({where})</span>
       </Line>
     </li>
   );
 }
 
-function GroupRow(props: FieldsProps & { group: OutlineGroup; variant?: boolean }) {
-  const { t, i18n } = useTranslation(undefined, { lng: 'en' });
-  const { group, states, open, actions, variant } = props;
+function GroupRow(props: NamedProps & { group: OutlineGroup }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const { group, states, open, actions } = props;
   const node = getNode(props.tree, group.path)!;
   // The list a table's rows belong to says whether it repeats, and is what researchers think of.
   const list = getNode(props.tree, group.path.slice(0, -1));
   const key = `fields:${pathKey(group.path)}`;
   const isOpen = !open.has(key);
-  const name = localize(group.name, i18n.language) || t('studio.unnamedTable');
+  const name = group.id || t('studio.unnamedTable');
+  const mark = group.source ? props.shared.get(group.source.join('/')) : undefined;
   return (
-    <li className={`decision-row group ${stateClass(node, states)}`}>
+    <li className={`decision-row group ${stateClass(node, states)}${sharedClass(mark)}`}>
       <Line
         props={props}
         node={node}
         path={group.path}
+        {...(group.source ? { nameAt: group.source } : {})}
         name={name}
         title={fullPath(props.tree, group.path, t)}
         onToggle={() => actions.toggleOpen(key)}
@@ -683,14 +671,8 @@ function GroupRow(props: FieldsProps & { group: OutlineGroup; variant?: boolean 
           ▦
         </span>
         <span className="visually-hidden">{t('studio.icon.table')}: </span>
-        <strong>{name}</strong>
-        {variant && (
-          <span className="tag">
-            {pathNames(props.tree, group.path)
-              .filter((n) => n !== '[*]' && n !== '{*}')
-              .join(' / ')}
-          </span>
-        )}
+        <NameMark mark={mark} />
+        {group.own ? <strong>{name}</strong> : name}
       </Line>
       {isOpen && (
         <ul>

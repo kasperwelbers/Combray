@@ -15,18 +15,14 @@ import {
   isItemNode,
   isKeysNode,
   matchesKey,
-  nameDescription,
-  nameLabel,
   newId,
   SETTINGS,
   type ConfigNode,
   type LeafDecision,
   type Match,
-  type Name,
   type NodeSettings,
   type ProjectConfig,
 } from './config';
-import type { Localized } from './importer/spec';
 import { COLLAPSED_NAME, ITEM_NAME, mergeAll, repeatOf, type Repeat, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
@@ -64,10 +60,8 @@ export interface ProjectNode extends NodeSettings, StructureInfo {
   match: Match[];
   /** A real position no config node matches: not part of the configuration until edited. */
   virtual?: true;
-  nameId?: string;
-  /** From the node's name: the label and description participants see. */
-  label?: Localized;
-  description?: Localized;
+  /** A table's or field's name (`ConfigNode.name`); see `names.ts`. */
+  named?: string;
   /** The real keys the node matched in the structures it was laid over. */
   keys?: string[];
   children?: ProjectNode[];
@@ -263,21 +257,13 @@ export interface Built {
 }
 
 /** The working node of a config node, without children. */
-function fromConfig(config: ConfigNode, names: Map<string, Name>): ProjectNode {
+function fromConfig(config: ConfigNode): ProjectNode {
   const node: ProjectNode = { id: config.id, kind: config.kind, name: '', match: [...config.match] };
   for (const key of SETTINGS) {
     const value = config[key];
     if (value !== undefined) (node as unknown as Record<string, unknown>)[key] = structuredClone(value);
   }
-  if (config.nameId !== undefined) {
-    node.nameId = config.nameId;
-    const name = names.get(config.nameId);
-    if (name) {
-      node.label = nameLabel(name);
-      const description = nameDescription(name);
-      if (description !== undefined) node.description = description;
-    }
-  }
+  if (config.name !== undefined) node.named = config.name;
   return node;
 }
 
@@ -290,7 +276,6 @@ export const virtualId = (kind: NodeKind, name: string) => `~${kind}:${name}`;
  * matches a position gets it, so overlapping matches see the same data (ADR 0012).
  */
 export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOptions = {}): Built {
-  const names = new Map(config.names.map((n) => [n.id, n]));
   const sources = new Map<ProjectNode, Shape[]>();
   const conflicts = new Set<ProjectNode>();
   const shared = new Map<ProjectNode, ProjectNode[]>();
@@ -328,7 +313,7 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
     const firstAt = new Map<ProjectNode, number>();
     const at = (child: ProjectNode, index: number) => firstAt.set(child, Math.min(firstAt.get(child) ?? index, index));
     for (const config of configChildren) {
-      const child = fromConfig(config, names);
+      const child = fromConfig(config);
       const matched: Source[] = [];
       for (const [index, r] of real.entries()) {
         if (matchesPosition(node, child, r.shape.kind, r.shape.name)) matched.push(r);
@@ -390,7 +375,7 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
     else delete node.children;
   };
 
-  const root = fromConfig(config.root, names);
+  const root = fromConfig(config.root);
   const seen = options.seen && unifyElementTwins(options.seen);
   const start: Source[] = shape ? [{ shape: unifyElementTwins(shape), ...(seen ? { seen } : {}) }] : [];
   visit(root, config.root.children ?? [], start, [], false, false);
@@ -434,13 +419,13 @@ export function configTree(config: ProjectConfig): ProjectNode {
 
 /** A configuration with only a root, for a structure nobody has configured yet. */
 export function emptyConfig(kind: NodeKind): ProjectConfig {
-  return { root: { id: 'root', kind, match: [] }, names: [] };
+  return { root: { id: 'root', kind, match: [] } };
 }
 
 /** Whether a virtual node was given something: a name or a setting, here or below. */
 function touched(node: ProjectNode): boolean {
   // A map the structures show with data keys is collapsed without anyone saying so.
-  if (node.nameId !== undefined || SETTINGS.some((key) => key !== 'collapsed' && node[key] !== undefined)) return true;
+  if (node.named !== undefined || SETTINGS.some((key) => key !== 'collapsed' && node[key] !== undefined)) return true;
   return (node.children ?? []).some(touched);
 }
 
@@ -454,7 +439,7 @@ export function toConfig(tree: ProjectNode): ConfigNode {
     const out: ConfigNode = node.virtual
       ? { id: newId(), kind: node.kind, match: [node.name] }
       : { id: node.id, kind: node.kind, match: [...node.match] };
-    if (node.nameId !== undefined) out.nameId = node.nameId;
+    if (node.named !== undefined) out.name = node.named;
     for (const key of SETTINGS) {
       if (node.virtual && key === 'collapsed') continue;
       const value = node[key];
@@ -606,7 +591,7 @@ export interface ShapeComparison {
 
 /** The nodes of a tree that a shape has, by any of their matches. */
 export function matchShape(root: ProjectNode, shape: Shape): Set<ProjectNode> {
-  const built = buildTree({ root: toConfig(root), names: [] }, shape);
+  const built = buildTree({ root: toConfig(root) }, shape);
   const seen = new Set<ProjectNode>();
   const visit = (node: ProjectNode, own: ProjectNode | undefined) => {
     if (!own) return;

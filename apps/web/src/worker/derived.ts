@@ -2,7 +2,8 @@
  * Importing through a project tree (docs/tree-decisions.md): the root found in an upload
  * (`locateRoot`) is matched against the configuration of its upload point, and the tables
  * inferred from it are what the participant sees. Nested tables stay nested: their rows are
- * kept inside the parent row. Tables of nodes that share a name are one table (ADR 0012).
+ * kept inside the parent row. Tables of nodes that share a name are one table (ADR 0012), shown
+ * with the labels of the study's texts (ADR 0013).
  *
  * Everything here runs in the data worker, on the participant's own data. Nothing is sent.
  */
@@ -14,11 +15,13 @@ import {
   getNode,
   groupTables,
   headerNames,
+  labelsOf,
   parseImporterFile,
   parseStructureFile,
   type ColumnDef,
   type DerivedRow,
   type FieldValue,
+  type Labels,
   type NodePath,
   type ProjectConfig,
   type ProjectNode,
@@ -48,14 +51,19 @@ export interface PointProject {
   seen: Shape;
   /** The configuration laid over the seen structures: for finding the root of an upload. */
   tree: ProjectNode;
+  /** How participants see its tables and fields: the pack's labels. */
+  labels: Labels;
 }
 
 const projects = new Map<string, PointProject>();
 /** The study's own configurations, by upload point, with the files they were read from. */
 const own = new Map<string, { files: string; project: PointProject }>();
 
-function project(config: ProjectConfig, seen: Shape): PointProject {
-  return { config, seen, tree: buildTree(config, seen).tree };
+/** The labels of an upload point: its pack's, if it started from one. */
+const labelsFor = (point: UploadPoint): Labels => labelsOf(packs.find((p) => p.id === point.pack)?.texts);
+
+function project(config: ProjectConfig, seen: Shape, labels: Labels): PointProject {
+  return { config, seen, tree: buildTree(config, seen).tree, labels };
 }
 
 /**
@@ -71,7 +79,7 @@ export function pointProject(point: UploadPoint): PointProject | undefined {
         const importer = parseImporterFile(point.importer);
         own.set(point.id, {
           files,
-          project: project(configOf(importer), parseStructureFile(point.structure).root),
+          project: project(configOf(importer), parseStructureFile(point.structure).root, labelsFor(point)),
         });
       } catch {
         // A configuration the client cannot read: fall back to the pack, if there is one.
@@ -88,6 +96,7 @@ export function pointProject(point: UploadPoint): PointProject | undefined {
       config: configOf(pack.importer),
       seen: pack.structure.root,
       tree: packTree(pack),
+      labels: labelsFor(point),
     });
   return projects.get(pack.id);
 }
@@ -193,7 +202,7 @@ export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project
   const tree = built.tree;
   const added = new Set(freshPaths(tree, built.fresh).map(pathKey));
   // Tables of nodes that share a name are one table, with the rows of each.
-  const ungrouped = deriveTables(tree);
+  const ungrouped = deriveTables(tree, project.labels);
   const { tables: defs, rows } = groupTables(ungrouped, deriveRows(root.prepared, tree, ungrouped));
   // Undecided parts are hidden unless the researcher lets participants see them.
   const hideUndecided = tree.undecided !== 'show';
@@ -210,7 +219,7 @@ export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project
     let headerRow: Row | undefined;
     if (def.headerRow && nested[i]!.length > 0) {
       headerRow = nested[i]!.shift()!;
-      const names = headerNames(tree, def, headerRow);
+      const names = headerNames(tree, def, headerRow, project.labels);
       columns = columns.map((c) => {
         const name = names.get(c.id);
         if (name === undefined) return c;
@@ -222,6 +231,7 @@ export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project
     const table: DerivedTable = {
       key: def.id,
       name: def.name,
+      ...(def.description !== undefined ? { description: def.description } : {}),
       path: def.where,
       record: def.rows === undefined,
       collection,

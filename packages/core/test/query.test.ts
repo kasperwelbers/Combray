@@ -43,7 +43,7 @@ describe('runQuery', () => {
       steps: [
         { mutate: 'month', from: 'at', fn: { datePart: 'month' } },
         { group: ['month'] },
-        { summarise: [{ name: 'n', fn: 'count' }, { name: 'likes', fn: 'sum', column: 'stats/likes' }] },
+        { summarise: [{ name: 'n', fn: 'count' }, { name: 'likes', fn: 'sum', column: 'likes' }] },
         { arrange: 'month' },
       ],
     });
@@ -57,11 +57,11 @@ describe('runQuery', () => {
   it('unnests nested tables with the parent row alongside', () => {
     const result = run({
       from: 0,
-      steps: [{ unnest: 1 }, { filter: 'comments/[*]/by', test: { equals: 'Marcel' } }, { select: ['text', 'comments/[*]/text'] }],
+      steps: [{ unnest: 1 }, { filter: 'comments/by', test: { equals: 'Marcel' } }, { select: ['text', 'comments/text'] }],
     });
     expect(result.rows).toEqual([
-      { text: 'Madeleines today', 'comments/[*]/text': 'Lovely' },
-      { text: 'Tea', 'comments/[*]/text': 'Yes' },
+      { text: 'Madeleines today', 'comments/text': 'Lovely' },
+      { text: 'Tea', 'comments/text': 'Yes' },
     ]);
     const kept = run({ from: 0, steps: [{ unnest: 1, keepEmpty: true }, { summarise: [{ name: 'n', fn: 'count' }] }] });
     expect(kept.rows).toEqual([{ n: 4 }]);
@@ -71,31 +71,31 @@ describe('runQuery', () => {
     const result = run({
       from: 0,
       steps: [
-        { unnestList: 'tags/[*]' },
-        { filter: 'tags/[*]', test: { empty: false } },
-        { group: ['tags/[*]'] },
+        { unnestList: 'tags' },
+        { filter: 'tags', test: { empty: false } },
+        { group: ['tags'] },
         { summarise: [{ name: 'n', fn: 'count' }] },
         { arrange: 'n', desc: true },
         { limit: 1 },
       ],
     });
-    expect(result.rows).toEqual([{ 'tags/[*]': 'tea', n: 2 }]);
+    expect(result.rows).toEqual([{ 'tags': 'tea', n: 2 }]);
     const distinct = run({
       from: 0,
-      steps: [{ unnest: 1 }, { summarise: [{ name: 'd', fn: 'distinct', column: 'comments/[*]/by' }] }],
+      steps: [{ unnest: 1 }, { summarise: [{ name: 'd', fn: 'distinct', column: 'comments/by' }] }],
     });
     expect(distinct.rows).toEqual([{ d: 2 }]);
   });
 
   it('filters ranges and negations', () => {
     const n = (steps: Query['steps']) => run({ from: 0, steps: [...steps, { summarise: [{ name: 'n', fn: 'count' }] }] }).rows[0]!.n;
-    expect(n([{ filter: 'stats/likes', test: { min: 1 } }])).toBe(2);
+    expect(n([{ filter: 'likes', test: { min: 1 } }])).toBe(2);
     expect(n([{ filter: 'at', test: { min: '2024-03-02', max: '2024-03-31' } }])).toBe(1);
     expect(n([{ filter: 'text', test: { contains: 'TEA' }, not: true }])).toBe(2);
   });
 
   it('lists the columns available after unnesting', () => {
-    expect(queryColumns(tables, 0, 1).map((c) => c.id)).toContain('comments/[*]/by');
+    expect(queryColumns(tables, 0, 1).map((c) => c.id)).toContain('comments/by');
   });
 
   it('reports unknown columns and tables', () => {
@@ -132,7 +132,7 @@ describe('charts', () => {
   });
 
   it('counts nested rows per category of the parent, split by a column', () => {
-    const spec = { table: 1, x: { column: 'text' }, split: 'comments/[*]/by' };
+    const spec = { table: 1, x: { column: 'text' }, split: 'comments/by' };
     const query = chartQuery(tables, spec);
     expect(query.steps[0]).toEqual({ unnest: 1 });
     const data = chartData(run(query), spec);
@@ -142,7 +142,7 @@ describe('charts', () => {
   });
 
   it('counts the items of list cells', () => {
-    const spec = { table: 0, x: { column: 'tags/[*]' } };
+    const spec = { table: 0, x: { column: 'tags' } };
     const data = chartData(run(chartQuery(tables, spec)), spec);
     expect(data.xs).toEqual(['tea', 'baking']);
   });

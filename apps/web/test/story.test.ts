@@ -94,7 +94,7 @@ describe('tables for the story editor', () => {
   it('are the tables of a platform with their columns, nested ones too, and their dates', () => {
     const project = pointProject({ id: 'takeout', pack: 'google-takeout' })!;
     const tables = storyTables('takeout', 'Google Takeout', deriveTables(project.tree));
-    const history = tables.find((t) => t.id === 'youtube-watch-history')!;
+    const history = tables.find((t) => t.id === 'youtube_watch_history')!;
     expect(history.platform).toBe('takeout');
     expect(history.columns.map((c) => c.id)).toEqual(expect.arrayContaining(['video', 'time', 'channels/channel']));
     expect(history.date).toBe('time');
@@ -118,16 +118,16 @@ describe('a story over an upload', () => {
         {
           id: 's',
           blocks: [
-            { type: 'data', id: 'count', platform: 'takeout', table: 'youtube-watch-history', view: 'amount' },
-            { type: 'data', id: 'channels', platform: 'takeout', table: 'youtube-watch-history', view: 'top', column: 'channels/channel' },
-            { type: 'data', id: 'hours', platform: 'takeout', table: 'youtube-watch-history', view: 'rhythm' },
-            { type: 'data', id: 'other', platform: 'tiktok', table: 'tiktok-likes', view: 'amount' },
+            { type: 'data', id: 'count', platform: 'takeout', table: 'youtube_watch_history', view: 'amount' },
+            { type: 'data', id: 'channels', platform: 'takeout', table: 'youtube_watch_history', view: 'top', column: 'channels/channel' },
+            { type: 'data', id: 'hours', platform: 'takeout', table: 'youtube_watch_history', view: 'rhythm' },
+            { type: 'data', id: 'other', platform: 'tiktok', table: 'tiktok_likes', view: 'amount' },
           ],
         },
       ],
     })!;
     const views = storyViews(story, tables);
-    const rows = derived.tables.find((t) => t.table.key === 'youtube-watch-history')!.rows.length;
+    const rows = derived.tables.find((t) => t.table.key === 'youtube_watch_history')!.rows.length;
     expect(views.count).toMatchObject({ view: 'amount', count: rows });
     expect(views.channels?.view === 'top' && views.channels.items.length).toBeGreaterThan(0);
     expect(views.hours?.view === 'rhythm' && views.hours.counts.reduce((a, b) => a + b, 0)).toBe(rows);

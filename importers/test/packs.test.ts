@@ -15,6 +15,7 @@ import {
   normalizeTree,
   parseImporterFile,
   structureFile,
+  treeNames,
   unionShape,
   type ProjectNode,
   type Row,
@@ -63,6 +64,17 @@ describe.each(PACK_IDS)('pack %s', (id) => {
 
   it('is bundled and valid', () => {
     expect(packs.map((p) => p.id)).toContain(id);
+  });
+
+  it('has texts only for tables and fields it names', () => {
+    const pack = packs.find((p) => p.id === id)!;
+    const names = treeNames(packTree(pack));
+    const known = new Map(names.tables.map((t, i) => [t.id, new Set([...names.fields.values()].filter((f) => f.table === i).map((f) => f.id))]));
+    for (const [table, texts] of Object.entries(pack.texts.tables ?? {})) {
+      expect(known.has(table), table).toBe(true);
+      for (const field of Object.keys(texts.fields ?? {})) expect(known.get(table)!.has(field), `${table}.${field}`).toBe(true);
+    }
+    expect(Object.keys(pack.texts.tables ?? {}).length).toBeGreaterThan(0);
   });
 });
 

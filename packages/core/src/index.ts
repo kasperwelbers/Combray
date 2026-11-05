@@ -20,11 +20,15 @@ export {
   isRegex,
   isItemNode,
   isKeysNode,
-  nameLabel,
   SETTINGS,
   MAX_REGEX,
 } from './config';
-export type { ConfigNode, Match, Name, NodeSettings, ProjectConfig } from './config';
+export type { ConfigNode, Match, NodeSettings, ProjectConfig } from './config';
+export { isName, toName, typingName, defaultLabel, freeName, MAX_NAME } from './names';
+export { labelsOf, checkPlatformTexts, checkTranslations, parseTextsFile, TextsError, TEXTS_FORMAT, LANGUAGE } from './texts';
+export type { PlatformTexts, TableTexts, FieldTexts, TextsFile, Translations } from './texts';
+export { nameKind, currentName, nameGroup, nameProblem, setName, renameNode, keepNames, remapAfter } from './naming';
+export type { NameKind } from './naming';
 export {
   buildTree,
   configTree,
@@ -72,16 +76,13 @@ export {
   combineNodes,
   combineProblem,
   combineConflicts,
-  setName,
   addMatch,
   removeMatch,
   splitByKey,
-  createName,
-  nodesNamed,
 } from './joins';
 export type { JoinConflict } from './joins';
-export { deriveTables, deriveRows, groupTables, headerNames, outline, valuesAt, convertValue, KEY_COLUMN, VALUE_COLUMN } from './derive';
-export type { TableDef, ColumnDef, DerivedRow, DeriveOptions, OutlineGroup } from './derive';
+export { deriveTables, deriveRows, groupTables, headerNames, outline, treeNames, keyName, pathKey, valuesAt, convertValue, KEY_COLUMN, VALUE_COLUMN } from './derive';
+export type { TableDef, ColumnDef, DerivedRow, DeriveOptions, OutlineGroup, TreeNames, NamedTable, NamedField, Labels } from './derive';
 export { combineDonations, donationValues, withoutRows } from './donate';
 export type { DonatedCell, DonatedRow, DonatedTableInfo, DonatedValue, DonationContent } from './donate';
 export {
@@ -135,5 +136,5 @@ export type {
   LocateResult,
 } from './locate';
 export type { CombineSuggestion } from './suggest';
-export { DATA_VIEWS, QUESTION_KINDS, STORY_LIMITS, fillText, optionValue, parseStory, slideFromTemplate, storyQuestions, validAnswer } from './story';
-export type { Answer, DataBlock, DataViewKind, QuestionBlock, QuestionKind, Slide, SlideTemplate, Story, StoryBlock, StoryValues, TextBlock } from './story';
+export { DATA_VIEWS, QUESTION_KINDS, STORY_LIMITS, fillText, optionValue, parseStory, renameInStory, slideFromTemplate, storyQuestions, storyReferences, validAnswer } from './story';
+export type { Answer, DataBlock, DataViewKind, QuestionBlock, QuestionKind, Slide, SlideTemplate, Story, StoryBlock, StoryReference, StoryValues, TextBlock } from './story';

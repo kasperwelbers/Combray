@@ -2,7 +2,7 @@
  * Pure helpers for the researcher workspace: editing project trees and summarising decisions.
  * The core does the decision logic (`@combray/core`); this is what the screens need on top.
  *
- * The workspace keeps a configuration (config nodes and names) and the structures seen so far;
+ * The workspace keeps a configuration (config nodes, with their names) and the structures seen so far;
  * the tree on screen is the one laid over the other (`buildTree`). Edits change a copy of that
  * tree, and the configuration is taken back out of it (`toConfig`). See ADR 0012.
  */
@@ -15,6 +15,7 @@ import {
   isDecidable,
   isLeaf,
   structureFile,
+  treeNames,
   unionShape,
   type Built,
   type ColumnDef,
@@ -233,7 +234,7 @@ export function undecidedBelow(
 
 /**
  * A run of inner nodes shown as one row: each has exactly one child, which is again an inner
- * node, and none of them has a label, is a repeated node, or holds one (those are tables).
+ * node, and none of them has a name of its own, is a repeated node, or holds one (those are tables).
  * Returns the nodes of the run with their paths, top first.
  */
 export function foldChain(node: ProjectNode, path: NodePath): { node: ProjectNode; path: NodePath }[] {
@@ -249,7 +250,7 @@ export function foldChain(node: ProjectNode, path: NodePath): { node: ProjectNod
       isLeaf(current) ||
       isLeaf(only) ||
       current.collapsed ||
-      current.label !== undefined ||
+      current.named !== undefined ||
       isRepeatedName(current.name) ||
       isRepeatedName(only.name)
     ) {
@@ -293,7 +294,7 @@ export function withSameNamesTogether(children: ProjectNode[]): ProjectNode[] {
   const done = new Set<ProjectNode>();
   for (const child of children) {
     if (done.has(child)) continue;
-    const same = child.nameId === undefined ? [child] : children.filter((c) => c.nameId === child.nameId);
+    const same = child.named === undefined ? [child] : children.filter((c) => c.named === child.named && c.kind === child.kind);
     for (const c of same) {
       out.push(c);
       done.add(c);
@@ -441,6 +442,11 @@ export function rowInfo(built: Built, config: ProjectConfig, structures: readonl
       if (own.conflicts.has(node)) conflicts.set(pathKey(path), (conflicts.get(pathKey(path)) ?? 0) + 1);
     });
   }
+  const names = treeNames(built.tree);
+  const tableKey = (index: number): string => {
+    const table = names.tables[index]!;
+    return table.parent === undefined ? table.id : `${tableKey(table.parent)}/${table.id}`;
+  };
   const byName = new Map<string, ProjectNode[]>();
   walk(built.tree, (node, path) => {
     if (path.length > 0 && !node.virtual && !node.keys?.length) add(node, { notSeen: true });
@@ -448,7 +454,12 @@ export function rowInfo(built: Built, config: ProjectConfig, structures: readonl
     if (count) add(node, { conflicts: count });
     const shared = built.shared.get(node);
     if (shared?.length) add(node, { alsoMatchedBy: shared.map((n) => n.name) });
-    if (node.nameId !== undefined && isDecidable(node)) byName.set(node.nameId, [...(byName.get(node.nameId) ?? []), node]);
+    const field = isDecidable(node) && isLeaf(node) ? names.fields.get(path.join('/')) : undefined;
+    if (field && field.own) {
+      // Tables with the same name in the same table are one table: the field is one field there.
+      const key = `${tableKey(field.table)}/${field.id}`;
+      byName.set(key, [...(byName.get(key) ?? []), node]);
+    }
   });
   for (const nodes of byName.values()) {
     if (new Set(nodes.map((n) => n.decision ?? 'undecided')).size > 1) for (const n of nodes) add(n, { nameMismatch: true });

@@ -749,6 +749,40 @@ main.wide {
   margin-top: 0.5rem;
 }
 
+/* Parts that share a name: a bar in the group's colour, and their number (#1 gives the value). */
+.decision-row.shared-name > .decision-line {
+  box-shadow: inset 4px 0 0 var(--shared);
+}
+
+.shared-0 { --shared: var(--dusk); }
+.shared-1 { --shared: var(--madeleine); }
+.shared-2 { --shared: var(--terracotta); }
+.shared-3 { --shared: var(--tilleul); }
+.shared-4 { --shared: var(--hawthorn); }
+.shared-5 { --shared: var(--madeleine-deep); }
+
+.name-number {
+  margin-right: 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.name-input {
+  font-family: var(--font-mono);
+}
+
+.date-formats ol {
+  margin: 0.25rem 0;
+  padding-left: 1.4rem;
+}
+
+.date-formats li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .node-icon {
   display: inline-block;
   min-width: 1.9em;

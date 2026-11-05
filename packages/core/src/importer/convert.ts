@@ -120,6 +120,19 @@ function formatRegex(format: string): RegExp {
  * are tried. Values with a zone become UTC ISO strings (`...Z`); values without one stay
  * floating (`YYYY-MM-DDTHH:mm:ss`), as the participant's local time.
  */
+/**
+ * A date read with one of several formats, tried in order: the first that reads it wins (an
+ * export that changed how it writes dates). No format guesses, as `parseDate` does.
+ */
+export function parseDateAs(raw: string, format?: string | readonly string[]): string | null {
+  if (typeof format === 'string' || format === undefined || format.length === 0) return parseDate(raw, typeof format === 'string' ? format : undefined);
+  for (const f of format) {
+    const date = parseDate(raw, f);
+    if (date !== null) return date;
+  }
+  return null;
+}
+
 export function parseDate(raw: string, format?: string): string | null {
   const s = raw.trim();
   if (s === '') return null;
@@ -190,7 +203,7 @@ export function parseDuration(raw: string): number | null {
   return null;
 }
 
-export function convert(value: FieldValue, type: FieldType, format?: string): FieldValue {
+export function convert(value: FieldValue, type: FieldType, format?: string | readonly string[]): FieldValue {
   if (type === 'json') return value;
   return mapValue(value, (s) => {
     switch (type) {
@@ -207,7 +220,7 @@ export function convert(value: FieldValue, type: FieldType, format?: string): Fi
       case 'bool':
         return /^(true|yes|1)$/i.test(s.trim()) ? true : /^(false|no|0)$/i.test(s.trim()) ? false : null;
       case 'datetime':
-        return parseDate(s, format);
+        return parseDateAs(s, format);
       case 'url':
         return /^(https?:\/\/|www\.)\S+$/i.test(s.trim()) ? s.trim() : null;
       case 'domain':

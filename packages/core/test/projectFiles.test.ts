@@ -21,16 +21,14 @@ const shape = extractShape(watchHistory);
 function decided() {
   let tree = treeOf(shape);
   tree = setDecision(tree, at(tree, '[*]', 'time'), 'donate');
-  Object.assign(nodeAt(tree, '[*]', 'time'), { nameId: 'when' });
+  Object.assign(nodeAt(tree, '[*]', 'time'), { named: 'watched_at' });
   nodeAt(tree, '[*]', 'title').match = ['title', 'titel', { regex: '^Title$', flags: 'i' }];
   return tree;
 }
-const names = [{ id: 'when', text: 'Watched at', label: { nl: 'Bekeken op' } }, { id: 'unused', text: 'Unused' }];
 
 /** An importer file with these nodes below the root. */
 const importer = (children: object[], root: object = {}) => ({
-  format: 'combray-importer@1',
-  names: [{ id: 'n', text: 'A name' }],
+  format: 'combray-importer@2',
   root: { id: 'root', kind: 'map', match: [], ...root, children },
 });
 const leaf = (extra: object = {}) => ({ id: 'a', kind: 'value', match: ['a'], ...extra });
@@ -38,13 +36,12 @@ const leaf = (extra: object = {}) => ({ id: 'a', kind: 'value', match: ['a'], ..
 describe('project files', () => {
   it('keep the configuration apart from the structure, and lay over it to the same tree', () => {
     const tree = decided();
-    const file = importerFile({ root: toConfig(tree), names }, 'YouTube');
-    expect(file.names.map((n) => n.id)).toEqual(['when']);
+    const file = importerFile({ root: toConfig(tree) }, 'YouTube');
     // Only nodes someone touched: the untouched title is configured because its matches changed.
     expect(JSON.stringify(file)).not.toMatch(/subtitles|titleUrl|types/);
     const roundTrip = parseImporterFile(JSON.parse(JSON.stringify(file)));
     const again = buildTree(configOf(roundTrip), parseStructureFile(JSON.parse(JSON.stringify(structureFile(shape)))).root).tree;
-    expect(nodeAt(again, '[*]', 'time')).toMatchObject({ decision: 'donate', label: { en: 'Watched at', nl: 'Bekeken op' } });
+    expect(nodeAt(again, '[*]', 'time')).toMatchObject({ decision: 'donate', named: 'watched_at' });
     expect(nodeAt(again, '[*]', 'title').keys).toEqual(['title']);
   });
 
@@ -57,9 +54,9 @@ describe('project files', () => {
     expect(() => parseImporterFile(importer([leaf({ match: [] })]))).toThrow('at least one match');
     expect(() => parseImporterFile(importer([leaf({ match: ['[*]', 'b'] })]))).toThrow('matches of their own');
     expect(() => parseImporterFile(importer([leaf(), leaf()]))).toThrow('used twice');
-    expect(() => parseImporterFile(importer([leaf({ nameId: 'nope' })]))).toThrow('unknown name');
+    expect(() => parseImporterFile(importer([leaf({ name: 'Not A Name' })]))).toThrow('lowercase');
+    expect(() => parseImporterFile({ ...importer([]), format: 'combray-importer@1' })).toThrow('combray-importer@2');
     expect(() => parseImporterFile(importer([], { match: ['x'] }))).toThrow('has no match');
-    expect(() => parseImporterFile({ ...importer([]), names: [{ id: 'n', text: ' ' }] })).toThrow('text');
   });
 
   it('accepts formats made of tokens only, so no values can travel in them', () => {
@@ -92,7 +89,7 @@ describe('project files', () => {
     tree.find = ['watch-history*.json'];
     tree.newChildren = 'skip';
     nodeAt(tree, '[*]', 'time').required = true;
-    const parsed = parseImporterFile(JSON.parse(JSON.stringify(importerFile({ root: toConfig(tree), names }))));
+    const parsed = parseImporterFile(JSON.parse(JSON.stringify(importerFile({ root: toConfig(tree) }))));
     expect(parsed.root).toMatchObject({ find: ['watch-history*.json'], newChildren: 'skip' });
     expect(nodeAt(buildTree(configOf(parsed), shape).tree, '[*]', 'time').required).toBe(true);
 

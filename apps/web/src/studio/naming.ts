@@ -1,34 +1,41 @@
 /**
- * Names in the tree editor (docs/plans/2026-11-05-researcher-experience.md): every matched part
- * has a name. It is its own name (a `Name`, which participants see and donations are exported
- * with) or, until it gets one, its key. Parts nothing matches are "not matched". Matching a part
- * gives it a name and a decision in one step; giving it a name another part already has asks
- * whether it is the same data (merge into that node) or only the same name (a node of its own).
+ * Names in the tree editor (docs/decisions/0013-names-labels-versions.md). Tables and fields have
+ * names: lowercase words joined by underscores, which stories, filters and donations refer to.
+ * A table or field without a name of its own is called by the name its key gives (`treeNames`).
+ * Other parts (folders, objects, list items) have no name; they are matched for their settings.
+ *
+ * Matching a part gives it a decision and, for a table or field, its name, in one step. Renaming
+ * a name others share renames it for all of them (and the story follows), or splits this part
+ * off (the story stays with the old name unless the researcher moves it along).
  */
 import {
   combineNodes,
-  createName,
+  currentName,
   getNode,
   isDecidable,
   isItemNode,
   isKeysNode,
   materialise,
   matchText,
-  nodesNamed,
+  nameGroup,
+  nameKind,
+  pathKey as corePathKey,
+  renameNode,
   setDecision,
   setName,
+  treeNames,
   type LeafDecision,
-  type Name,
+  type NameKind,
   type NodePath,
   type ProjectNode,
+  type TreeNames,
 } from '@combray/core';
 
 import { displayName } from './model';
 
 /** The name a row shows: its own name, else its key (list items and keys that are data in words). */
-export function rowName(node: ProjectNode, names: readonly Name[], t: (key: string) => string): string {
-  const own = node.nameId === undefined ? undefined : names.find((n) => n.id === node.nameId);
-  return own?.text || displayName(node.name, t);
+export function rowName(node: ProjectNode, t: (key: string) => string): string {
+  return node.named ?? displayName(node.name, t);
 }
 
 /**
@@ -43,91 +50,153 @@ export function keysBehind(node: ProjectNode, shown: string): string[] {
 /** List items and keys that are data are named by their list or map, not on their own. */
 export const isPositional = (node: ProjectNode) => isItemNode(node) || isKeysNode(node);
 
-/** What giving a part a name that exists already would join it to. */
+/** What a part is called, and who else is called so. */
+export interface NameInfo {
+  kind: NameKind;
+  /** The name it is called by now: its own, or its key's. */
+  name: string;
+  own: boolean;
+  /** The parts with this name (itself included), in the order they give a value. */
+  group: NodePath[];
+  /** Its place in `group`, from 1. */
+  number: number;
+}
+
+export function nameInfo(tree: ProjectNode, path: NodePath, names: TreeNames = treeNames(tree)): NameInfo | undefined {
+  const kind = nameKind(tree, path, names);
+  const name = kind && currentName(tree, path, names);
+  if (!kind || name === undefined) return undefined;
+  const group = nameGroup(tree, path, names);
+  const key = corePathKey(path);
+  return { kind, name, own: getNode(tree, path)?.named !== undefined, group, number: group.findIndex((p) => corePathKey(p) === key) + 1 };
+}
+
+/** A part that shares its name: its number in the group, and the group's colour (an index). */
+export interface SharedName {
+  number: number;
+  colour: number;
+  name: string;
+}
+
+/** Groups of parts that share a name (two or more), by each part's path (`/`-joined). */
+export function sharedNames(tree: ProjectNode): Map<string, SharedName> {
+  const names = treeNames(tree);
+  const out = new Map<string, SharedName>();
+  let colour = 0;
+  const visit = (node: ProjectNode, path: NodePath) => {
+    const key = corePathKey(path);
+    if (path.length > 0 && !out.has(key) && !node.virtual) {
+      const group = nameGroup(tree, path, names);
+      if (group.length > 1) {
+        const name = currentName(tree, path, names)!;
+        group.forEach((p, i) => out.set(corePathKey(p), { number: i + 1, colour, name }));
+        colour++;
+      }
+    }
+    for (const child of node.children ?? []) visit(child, [...path, child.id]);
+  };
+  visit(tree, []);
+  return out;
+}
+
+/** Who else has a name a part could be given. */
 export interface NameTaken {
-  /** A node next to this one with that name, of the same kind: the two can be merged into one node. */
+  /** A node next to this one with that name, of the same kind: the two can be combined into one node. */
   sibling?: NodePath;
-  /** The name to share, if it exists as a name of its own (rather than a key). */
-  nameId?: string;
-  /** How many parts have the name. */
+  /** The other parts with the name. */
+  others: NodePath[];
   count: number;
 }
 
-/**
- * Whether `text` is already the name of another part, and what this one could be joined to.
- * Names are compared as written, ignoring case and the space around them.
- */
-export function nameTaken(tree: ProjectNode, path: NodePath, names: readonly Name[], text: string, t: (key: string) => string): NameTaken | undefined {
-  const wanted = text.trim().toLowerCase();
+/** Whether `name` is the name of other tables (or fields) this part would share it with. */
+export function nameTaken(tree: ProjectNode, path: NodePath, name: string, names: TreeNames = treeNames(tree)): NameTaken | undefined {
   const node = getNode(tree, path);
-  if (!node || wanted === '') return undefined;
-  const same = (n: ProjectNode) => n !== node && !n.virtual && !isPositional(n) && rowName(n, names, t).trim().toLowerCase() === wanted;
-  const parent = getNode(tree, path.slice(0, -1));
-  const sibling = (parent?.children ?? []).find((c) => same(c) && c.kind === node.kind);
-  const named = names.find((n) => n.id !== node.nameId && n.text.trim().toLowerCase() === wanted);
-  const count = named ? nodesNamed(tree, named.id).length : sibling ? 1 : 0;
-  if (!sibling && !named) return undefined;
+  const kind = nameKind(tree, path, names);
+  if (!node || !kind || name === '') return undefined;
+  const key = corePathKey(path);
+  let others: string[];
+  if (kind === 'field') {
+    const own = names.fields.get(key)!;
+    others = [...names.fields].filter(([k, f]) => k !== key && f.table === own.table && f.id === name).map(([k]) => k);
+  } else {
+    const mine = names.tables.filter((t) => t.source && corePathKey(t.source) === key);
+    const parent = mine[0]?.parent;
+    others = [
+      ...new Set(
+        names.tables.filter((t) => t.source && corePathKey(t.source) !== key && t.id === name && t.parent === parent).map((t) => corePathKey(t.source!)),
+      ),
+    ];
+  }
+  if (others.length === 0) return undefined;
+  const parentPath = path.slice(0, -1);
+  const sibling = (getNode(tree, parentPath)?.children ?? []).find(
+    (c) => c !== node && c.kind === node.kind && others.includes(corePathKey([...parentPath, c.id])),
+  );
   return {
-    ...(sibling ? { sibling: [...path.slice(0, -1), sibling.id] } : {}),
-    ...(named ? { nameId: named.id } : sibling?.nameId ? { nameId: sibling.nameId } : {}),
-    count: Math.max(count, 1),
+    ...(sibling ? { sibling: [...parentPath, sibling.id] } : {}),
+    others: others.map((k) => (k === '' ? [] : k.split('/'))),
+    count: others.length,
   };
 }
 
 /** What the match dialog asks for. */
 export interface MatchChoice {
-  text: string;
-  /** For a name another part has: the same data (merge) or only the same name (own node). */
-  join?: 'merge' | 'same-name';
-  /** A name this part shares with others: change it for all of them (default), or give this part its own. */
+  /** The name, for a table or field. */
+  name?: string;
+  /** For a name another part next to it has: the same data (combine) or only the same name. */
+  join?: 'combine' | 'same-name';
+  /** A name this part shares with others: change it for all of them (default), or only this part's. */
   renameAll?: boolean;
+  /** When only this part is renamed: move the story's references to it along. */
+  moveReferences?: boolean;
   decision?: LeafDecision;
+}
+
+/** A name that changed, for updating the story (`renameInStory`). */
+export interface Renamed {
+  kind: NameKind;
+  from: string;
+  to: string;
+  /** For a field: its table's name (`''` for fields outside any table). */
+  table?: string;
+  /** Whether the story's references follow. */
+  references: boolean;
 }
 
 /**
  * Match a part (making it real when nothing matched it), give it the chosen name, and set its
- * decision. Returns the new tree and names, and where the part is now.
+ * decision. Returns the new tree, where the part is now, and the name that changed.
  */
-export function saveMatch(
-  tree: ProjectNode,
-  names: readonly Name[],
-  path: NodePath,
-  choice: MatchChoice,
-  t: (key: string) => string,
-): { tree: ProjectNode; names: Name[]; path: NodePath } {
-  let nextNames = [...names];
-  const text = choice.text.trim();
-  const taken = nameTaken(tree, path, names, text, t);
+export function saveMatch(tree: ProjectNode, path: NodePath, choice: MatchChoice): { tree: ProjectNode; path: NodePath; renamed?: Renamed } {
+  const names = treeNames(tree);
+  const info = nameInfo(tree, path, names);
+  const wanted = choice.name?.trim();
   let { tree: next, path: at } = materialise(tree, path);
+  let renamed: Renamed | undefined;
 
-  if (taken && choice.join === 'merge' && taken.sibling) {
-    // The same data: one node with both matches, the other's settings first.
-    const target = getNode(tree, taken.sibling)!;
-    const real = materialise(next, [...at.slice(0, -1), target.id]);
-    const combined = combineNodes(real.tree, [real.path, [...real.path.slice(0, -1), at.at(-1)!]]);
-    next = combined.tree;
-    at = combined.path;
-  } else if (taken) {
-    // The same name, a node of its own: share the name, made one if it was only a key.
-    let nameId = taken.nameId;
-    if (nameId === undefined) {
-      const name = createName(text);
-      nextNames = [...nextNames, name];
-      nameId = name.id;
-      if (taken.sibling) next = setName(next, [[...at.slice(0, -1), getNode(tree, taken.sibling)!.id]], nameId);
-    }
-    next = setName(next, [at], nameId);
-  } else if (text !== '') {
-    const node = getNode(next, at)!;
-    const own = node.nameId === undefined ? undefined : nextNames.find((n) => n.id === node.nameId);
-    const shared = own ? nodesNamed(next, own.id).length > 1 : false;
-    if (own && (!shared || choice.renameAll !== false)) {
-      if (own.text !== text) nextNames = nextNames.map((n) => (n.id === own.id ? { ...n, text } : n));
-    } else if (own || text !== displayName(node.name, t)) {
-      // A name of its own; the key needs none.
-      const name = createName(text);
-      nextNames = [...nextNames, name];
-      next = setName(next, [at], name.id);
+  if (info && wanted && wanted !== info.name) {
+    const taken = nameTaken(tree, path, wanted, names);
+    if (taken?.sibling && choice.join === 'combine') {
+      // The same data: one node with both matches, the other's settings first.
+      const target = getNode(tree, taken.sibling)!;
+      const real = materialise(next, [...at.slice(0, -1), target.id]);
+      const combined = combineNodes(real.tree, [real.path, [...real.path.slice(0, -1), at.at(-1)!]]);
+      next = combined.tree;
+      at = combined.path;
+      renamed = { kind: info.kind, from: info.name, to: wanted, ...fieldTable(names, path, info.kind), references: info.group.length === 1 };
+    } else {
+      // A name the others only have by their key becomes theirs, so it stays when this part takes it.
+      if (taken) next = setName(next, taken.others.filter((p) => getNode(tree, p)?.named === undefined), wanted);
+      const all = choice.renameAll !== false || info.group.length === 1;
+      const result = renameNode(next, at, wanted, { all });
+      next = result.tree;
+      renamed = {
+        kind: result.kind,
+        from: result.from,
+        to: wanted,
+        ...(result.table !== undefined ? { table: result.table } : {}),
+        references: all || choice.moveReferences === true,
+      };
     }
   }
 
@@ -135,18 +204,20 @@ export function saveMatch(
   if (node && choice.decision !== undefined && (isDecidable(node) || choice.decision === 'ignore' || choice.decision === 'undecided')) {
     if ((node.decision ?? 'undecided') !== choice.decision) next = setDecision(next, at, choice.decision);
   }
-  // A name nothing has any more is gone.
-  return { tree: next, names: nextNames.filter((n) => nodesNamed(next, n.id).length > 0), path: at };
+  return { tree: next, path: at, ...(renamed ? { renamed } : {}) };
 }
 
-/**
- * Take a part out of the configuration: its settings and name go, and what it matched is not
- * matched again. Names nothing has any more are dropped.
- */
-export function unmatch(tree: ProjectNode, names: readonly Name[], path: NodePath): { tree: ProjectNode; names: Name[] } {
+function fieldTable(names: TreeNames, path: NodePath, kind: NameKind): { table?: string } {
+  if (kind !== 'field') return {};
+  const field = names.fields.get(corePathKey(path));
+  return field ? { table: names.tables[field.table]!.id } : {};
+}
+
+/** Take a part out of the configuration: its settings and name go, and what it matched is not matched again. */
+export function unmatch(tree: ProjectNode, path: NodePath): ProjectNode {
   const copy = structuredClone(tree);
   const parent = getNode(copy, path.slice(0, -1));
-  if (!parent || path.length === 0) return { tree, names: [...names] };
+  if (!parent || path.length === 0) return tree;
   parent.children = (parent.children ?? []).filter((c) => c.id !== path.at(-1));
-  return { tree: copy, names: names.filter((n) => nodesNamed(copy, n.id).length > 0) };
+  return copy;
 }

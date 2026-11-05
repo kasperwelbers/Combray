@@ -46,7 +46,7 @@ export interface UploadPoint {
 /** A column of a table derived through a project tree. */
 export interface ColumnInfo {
   id: string;
-  /** The researcher's label; empty for the key and value of a key/value table. */
+  /** Its label, or its name with spaces; empty for the key and value of a key/value table. */
   name: Localized;
   type: ColumnDef['type'];
   state: ColumnDef['state'];
@@ -66,11 +66,13 @@ export interface ColumnInfo {
 /** What a table derived through a project tree adds to its manifest. */
 export interface DerivedTable {
   /**
-   * The table's stable id in the project (`TableDef.id`: its name's id, or the path of its rows),
-   * which stories refer to it by. Missing on tables imported before stories.
+   * The table's name in the project (`TableDef.id`), which stories refer to it by. Missing on
+   * tables imported before stories.
    */
   key?: string;
   name: Localized;
+  /** What the table is, from the project's texts. */
+  description?: Localized;
   /** Where its rows are in the project tree, for breadcrumbs. */
   path: NodePath;
   /** A single record of fields outside any list. */

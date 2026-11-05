@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { fillText, optionValue, parseStory, slideFromTemplate, storyQuestions, validAnswer, type QuestionBlock } from '../src';
+import {
+  fillText,
+  optionValue,
+  parseStory,
+  renameInStory,
+  slideFromTemplate,
+  storyQuestions,
+  storyReferences,
+  validAnswer,
+  type DataBlock,
+  type QuestionBlock,
+  type Story,
+} from '../src';
 
 describe('parseStory', () => {
   it('keeps the blocks that are right and leaves out the rest', () => {
@@ -85,5 +97,36 @@ describe('fillText', () => {
     const text = { en: 'You watched {count} videos, {unknown}.', nl: 'Je keek {count} video’s.' };
     expect(fillText(text, 'nl', { count: '4.312' })).toBe('Je keek 4.312 video’s.');
     expect(fillText(text, 'en', { count: '4,312' })).toBe('You watched 4,312 videos, {unknown}.');
+  });
+});
+
+describe('renaming in a story', () => {
+  const story: Story = {
+    slides: [
+      {
+        id: 's',
+        blocks: [
+          { type: 'data', id: 'a', platform: 'yt', table: 'watch_history', view: 'top', column: 'channels/channel' },
+          { type: 'data', id: 'b', platform: 'yt', table: 'watch_history', view: 'over-time', date: 'time' },
+          { type: 'data', id: 'c', platform: 'tt', table: 'watch_history', view: 'amount' },
+        ],
+      },
+    ],
+  };
+
+  it('follows a renamed table, also in the columns of tables nested in another', () => {
+    const renamed = renameInStory(story, 'yt', { kind: 'table', from: 'channels', to: 'creators' });
+    expect(renamed.slides[0]!.blocks[0]).toMatchObject({ column: 'creators/channel' });
+    const table = renameInStory(story, 'yt', { kind: 'table', from: 'watch_history', to: 'videos' });
+    expect(table.slides[0]!.blocks.map((b) => (b as DataBlock).table)).toEqual(['videos', 'videos', 'watch_history']);
+  });
+
+  it('follows a renamed field of the table or of a nested table, on that platform only', () => {
+    const field = renameInStory(story, 'yt', { kind: 'field', table: 'watch_history', from: 'time', to: 'watched_at' });
+    expect(field.slides[0]!.blocks[1]).toMatchObject({ date: 'watched_at' });
+    const nested = renameInStory(story, 'yt', { kind: 'field', table: 'channels', from: 'channel', to: 'name' });
+    expect(nested.slides[0]!.blocks[0]).toMatchObject({ column: 'channels/name' });
+    expect(storyReferences(story, 'yt', 'channels', 'channel')).toHaveLength(1);
+    expect(storyReferences(story, 'yt', 'watch_history')).toHaveLength(2);
   });
 });

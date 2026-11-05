@@ -22,21 +22,21 @@ describe('donationValues', () => {
     const { tables, values } = donationValues(data, tree, deriveTables(tree));
     // Only what is asked for: the time is shown, not donated.
     expect(values).toEqual([
-      { table: 'watch-history.json/[*]', row: 0, field: 'title', path: ['watch-history.json', '[0]', 'title'], value: 'Madeleines', raw: 'Watched Madeleines' },
-      { table: 'watch-history.json/[*]', row: 1, field: 'title', path: ['watch-history.json', '[1]', 'title'], value: 'Tea', raw: 'Watched Tea' },
+      { table: 'watch_history', row: 0, field: 'title', path: ['watch-history.json', '[0]', 'title'], value: 'Madeleines', raw: 'Watched Madeleines' },
+      { table: 'watch_history', row: 1, field: 'title', path: ['watch-history.json', '[1]', 'title'], value: 'Tea', raw: 'Watched Tea' },
     ]);
-    expect(tables).toEqual([{ id: 'watch-history.json/[*]', name: 'watch-history.json', fields: [{ id: 'title', name: 'title' }] }]);
+    expect(tables).toEqual([{ id: 'watch_history', name: 'Watch history', fields: [{ id: 'title', name: 'Title' }] }]);
   });
 
   it('links nested rows to their parent row, and leaves filtered rows out', () => {
     let tree = keyedTree(extractShape(data));
     tree = setDecision(tree, at(tree, 'watch-history.json', '[*]', 'subtitles', '[*]', 'name'), 'donate');
     tree = setDecision(tree, at(tree, 'watch-history.json', '[*]', 'title'), 'donate');
-    nodeAt(tree, 'watch-history.json', '[*]').filter = [{ column: 'details/[*]', test: { equals: 0 } }];
+    nodeAt(tree, 'watch-history.json', '[*]').filter = [{ column: 'details', test: { equals: 0 } }];
     const { values } = donationValues(data, tree, deriveTables(tree));
     expect(values.map((v) => [v.table, v.row, v.field, v.value, v.parent])).toEqual([
-      ['watch-history.json/[*]', 0, 'title', 'Watched Madeleines', undefined],
-      ['watch-history.json/[*]/subtitles/[*]', 0, 'name', 'Proust', { table: 'watch-history.json/[*]', row: 0 }],
+      ['watch_history', 0, 'title', 'Watched Madeleines', undefined],
+      ['subtitles', 0, 'name', 'Proust', { table: 'watch_history', row: 0 }],
     ]);
   });
 
@@ -64,14 +64,14 @@ describe('donationValues', () => {
     tree = setDecision(tree, at(tree, 'watch-history.json', '[*]', 'title'), 'donate');
     const content = donationValues(data, tree, deriveTables(tree));
     expect(content.rows.map((r) => [r.table, r.row, r.path])).toEqual([
-      ['watch-history.json/[*]', 0, ['watch-history.json', '[0]']],
-      ['watch-history.json/[*]', 1, ['watch-history.json', '[1]']],
-      ['watch-history.json/[*]/subtitles/[*]', 0, ['watch-history.json', '[0]', 'subtitles', '[0]']],
+      ['watch_history', 0, ['watch-history.json', '[0]']],
+      ['watch_history', 1, ['watch-history.json', '[1]']],
+      ['subtitles', 0, ['watch-history.json', '[0]', 'subtitles', '[0]']],
     ]);
     // Leaving out the first video leaves out its subtitles too.
     const left = withoutRows(content, (r) => r.path.join('/') === 'watch-history.json/[0]');
     expect(left.values.map((v) => v.value)).toEqual(['Watched Tea']);
-    expect(left.tables.map((t) => t.id)).toEqual(['watch-history.json/[*]']);
+    expect(left.tables.map((t) => t.id)).toEqual(['watch_history']);
     expect(left.rows).toHaveLength(1);
   });
 
@@ -84,8 +84,8 @@ describe('donationValues', () => {
     expect(both.tables).toEqual(one.tables);
     expect(both.values.filter((v) => v.field === 'title').map((v) => v.row)).toEqual([0, 1, 2, 3]);
     expect(both.values.filter((v) => v.field === 'name').map((v) => [v.row, v.parent])).toEqual([
-      [0, { table: 'watch-history.json/[*]', row: 0 }],
-      [1, { table: 'watch-history.json/[*]', row: 2 }],
+      [0, { table: 'watch_history', row: 0 }],
+      [1, { table: 'watch_history', row: 2 }],
     ]);
   });
 });

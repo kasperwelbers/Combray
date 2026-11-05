@@ -6,9 +6,9 @@ export const VIEW_KEY = 'combray:studio:view';
 export function loadView(): { view: TreeView; hideIgnored: boolean } {
   try {
     const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}') as { view?: unknown; hideIgnored?: unknown };
-    return { view: saved.view === 'tree' ? 'tree' : 'fields', hideIgnored: saved.hideIgnored === true };
+    return { view: saved.view === 'tree' ? 'tree' : 'named', hideIgnored: saved.hideIgnored === true };
   } catch {
-    return { view: 'fields', hideIgnored: false };
+    return { view: 'named', hideIgnored: false };
   }
 }
 

@@ -1,0 +1,151 @@
+{
+  "format": "combray-texts@1",
+  "tables": {
+    "chrome_browsing_history": {
+      "label": {
+        "nl": "Chrome-browsergeschiedenis"
+      },
+      "fields": {
+        "page": {
+          "label": {
+            "nl": "Pagina"
+          }
+        },
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        },
+        "how_you_got_there": {
+          "label": {
+            "nl": "Hoe je er kwam"
+          }
+        }
+      }
+    },
+    "youtube_searches": {
+      "label": {
+        "en": "YouTube searches",
+        "nl": "YouTube-zoekopdrachten"
+      },
+      "fields": {
+        "search": {
+          "label": {
+            "nl": "Zoekopdracht"
+          }
+        },
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        }
+      }
+    },
+    "youtube_watch_history": {
+      "label": {
+        "en": "YouTube watch history",
+        "nl": "YouTube-kijkgeschiedenis"
+      },
+      "description": {
+        "en": "Videos you watched on YouTube, with their channels.",
+        "nl": "Video's die je op YouTube hebt bekeken, met hun kanalen."
+      },
+      "fields": {
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        }
+      }
+    },
+    "channels": {
+      "label": {
+        "en": "Channel",
+        "nl": "Kanaal"
+      },
+      "fields": {
+        "channel": {
+          "label": {
+            "nl": "Kanaal"
+          }
+        },
+        "channel_link": {
+          "label": {
+            "nl": "Kanaallink"
+          }
+        }
+      }
+    },
+    "youtube_watch_history_older_export": {
+      "label": {
+        "en": "YouTube watch history (older export)",
+        "nl": "YouTube-kijkgeschiedenis (oudere export)"
+      },
+      "fields": {
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        },
+        "channel": {
+          "label": {
+            "nl": "Kanaal"
+          }
+        },
+        "channel_link": {
+          "label": {
+            "nl": "Kanaallink"
+          }
+        }
+      }
+    },
+    "youtube_subscriptions": {
+      "label": {
+        "en": "YouTube subscriptions",
+        "nl": "YouTube-abonnementen"
+      },
+      "fields": {
+        "channel": {
+          "label": {
+            "nl": "Kanaal"
+          }
+        }
+      }
+    },
+    "google_searches": {
+      "label": {
+        "nl": "Google-zoekopdrachten"
+      },
+      "fields": {
+        "search": {
+          "label": {
+            "nl": "Zoekopdracht"
+          }
+        },
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        }
+      }
+    },
+    "google_searches_older_export": {
+      "label": {
+        "en": "Google searches (older export)",
+        "nl": "Google-zoekopdrachten (oudere export)"
+      },
+      "fields": {
+        "time": {
+          "label": {
+            "nl": "Tijd"
+          }
+        },
+        "search": {
+          "label": {
+            "nl": "Zoekopdracht"
+          }
+        }
+      }
+    }
+  }
+}

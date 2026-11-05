@@ -71,7 +71,7 @@ describe('single elements where other files repeat them', () => {
     const project = keyedTree(extractShape(many));
     const tables = deriveTables(project);
     const rows = deriveRows(one, project, tables);
-    const hrefs = rows.flat().flatMap((r) => Object.entries(r.values).filter(([k]) => k.endsWith('@href')).map(([, v]) => v));
+    const hrefs = rows.flat().flatMap((r) => Object.entries(r.values).filter(([k]) => k.endsWith('href')).map(([, v]) => v));
     expect(hrefs).toContain('https://e.com/0');
   });
 });

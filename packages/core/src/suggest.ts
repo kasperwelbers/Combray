@@ -87,7 +87,7 @@ const positional = (name: string) => name === ITEM_NAME || name === COLLAPSED_NA
  * paths are in that tree once the shape is added to it.
  */
 export function suggestCombines(tree: ProjectNode, shape: Shape): CombineSuggestion[] {
-  const built = buildTree({ root: toConfig(tree), names: [] }, shape);
+  const built = buildTree({ root: toConfig(tree) }, shape);
   const out: CombineSuggestion[] = [];
   const key = (n: ProjectNode) => (n.virtual ? `~${n.kind}\u0000${n.name}` : n.id);
   const inShape = (n: ProjectNode) => n.virtual || (built.sources.get(n)?.length ?? 0) > 0;

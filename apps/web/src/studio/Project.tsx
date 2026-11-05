@@ -1,4 +1,4 @@
-import { localize, parseImporterFile, parseStructureFile, type Localized } from '@combray/core';
+import { localize, parseImporterFile, parseStructureFile, renameInStory, storyReferences, type Localized, type Story } from '@combray/core';
 import { packs } from '@combray/importers';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,7 @@ import { ApiFailure, useProjectApi, type Donations, type Draft, type Member, typ
 import { resetExample } from './exampleApi';
 import { HelpProvider } from './Help';
 import { StoryEditor } from './StoryEditor';
+import type { Renamed } from './naming';
 import { Studio, type DraftStore } from './Studio';
 
 const english = (text: Localized | undefined): string => (text === undefined ? '' : localize(text, 'en'));
@@ -549,6 +550,23 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
     };
   }, [projectApi, platform, projectId, platformId, onSaved]);
 
+  /** A renamed table or field: the story's data blocks on this platform follow (ADR 0013). */
+  const followInStory = useCallback(
+    async (renamed: Renamed): Promise<number> => {
+      const raw = (await projectApi.story(projectId)) as Story | null;
+      if (!raw || !Array.isArray(raw.slides)) return 0;
+      const before = renamed.kind === 'table' ? storyReferences(raw, platformId, renamed.from) : storyReferences(raw, platformId, renamed.table, renamed.from);
+      if (before.length === 0) return 0;
+      const change =
+        renamed.kind === 'table'
+          ? { kind: 'table' as const, from: renamed.from, to: renamed.to }
+          : { kind: 'field' as const, table: renamed.table ?? '', from: renamed.from, to: renamed.to };
+      await projectApi.saveStory(projectId, renameInStory(raw, platformId, change));
+      return before.length;
+    },
+    [projectApi, projectId, platformId],
+  );
+
   if (platform === 'failed' || store === 'unreadable') return <p className="message error">{t('studio.project.platformFailed')}</p>;
   if (!platform || !store) return null;
   return (
@@ -562,7 +580,7 @@ function PlatformEditor({ projectId, platformId, onSaved, onRemove }: { projectI
           {t('studio.project.removePlatform')}
         </button>
       </div>
-      <Studio draft={store} packages={packages} {...(platform.pack ? { pack: platform.pack } : {})} />
+      <Studio draft={store} packages={packages} onRename={followInStory} {...(platform.pack ? { pack: platform.pack } : {})} />
     </div>
   );
 }

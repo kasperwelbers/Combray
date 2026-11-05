@@ -13,18 +13,15 @@ import {
   matchText,
   regexProblem,
   type Match,
-  type Name,
   type NodePath,
   type ProjectNode,
 } from '@combray/core';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { LANGUAGES } from '../i18n';
 import { Conversion } from './Conversion';
 import { HelpButton, type HelpTopic } from './Help';
 import { filterColumns, type NodePatch, type RowInfo } from './model';
-import { isPositional } from './naming';
 import { SectionHead } from './Popover';
 import { RowFilters } from './RowFilters';
 
@@ -87,90 +84,27 @@ export function RowsPanel({ tree, path, node, onPatch }: { tree: ProjectNode; pa
 }
 
 /** Set one language of a per-language text; empty texts are removed, and so is an empty map. */
-function withLanguage(value: Record<string, string> | undefined, language: string, text: string): Record<string, string> | undefined {
-  const base = { ...value };
-  if (text.trim() === '') delete base[language];
-  else base[language] = text;
-  return Object.keys(base).length > 0 ? base : undefined;
-}
-
-/** A name with one field set, or removed when it is empty. */
-function withField(name: Name, key: 'label' | 'description', value: Record<string, string> | undefined): Name {
-  const out = { ...name };
-  if (value === undefined) delete out[key];
-  else out[key] = value;
-  return out;
-}
-
 export interface MoreActions {
-  /** Give the row a name of its own (its key), so it can have labels and a description. */
-  ownName: (path: NodePath) => void;
-  editName: (nameId: string, change: (name: Name) => Name) => void;
   keysAreData: (path: NodePath) => void;
 }
 
-/** The rarer settings of a row: labels per language and a description, and how it is found. */
+/** The rarer settings of a row: whether uploads need it, new parts below it, and keys that are data. */
 export function MorePanel({
   tree,
   path,
   node,
-  names,
   onPatch,
   actions,
 }: {
   tree: ProjectNode;
   path: NodePath;
   node: ProjectNode;
-  names: Name[];
   onPatch: (patch: NodePatch) => void;
   actions: MoreActions;
 }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const name = node.nameId === undefined ? undefined : names.find((n) => n.id === node.nameId);
-  const describable = isLeaf(node) || node.name === '{*}';
   return (
     <>
-      {!isPositional(node) && (
-        <>
-          <SectionHead title={t('studio.more.labels')} topic="names" />
-          {name ? (
-            <>
-              {LANGUAGES.filter((l) => l !== 'en').map((language) => (
-                <label key={language} className="field compact">
-                  <span>{t(`studio.language.${language}`)}</span>
-                  <input
-                    value={name.label?.[language] ?? ''}
-                    placeholder={name.text}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      actions.editName(name.id, (n) => withField(n, 'label', withLanguage(n.label, language, value)));
-                    }}
-                  />
-                </label>
-              ))}
-              {describable &&
-                LANGUAGES.map((language) => (
-                  <label key={`d-${language}`} className="field compact">
-                    <span>{t('studio.more.description', { language: t(`studio.language.${language}`) })}</span>
-                    <textarea
-                      rows={2}
-                      value={name.description?.[language] ?? ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        actions.editName(name.id, (n) => withField(n, 'description', withLanguage(n.description, language, value)));
-                      }}
-                    />
-                  </label>
-                ))}
-            </>
-          ) : (
-            <button type="button" className="link-button" onClick={() => actions.ownName(path)}>
-              {describable ? t('studio.more.addLabelsAndDescription') : t('studio.more.addLabels')}
-            </button>
-          )}
-        </>
-      )}
-
       <CheckWithHelp
         checked={node.required === true}
         onChange={(checked) => onPatch({ required: checked ? true : undefined })}
@@ -231,8 +165,8 @@ export function MatchList({ path, node, info, actions }: { path: NodePath; node:
   const [problem, setProblem] = useState<string>();
   const keys = node.keys ?? [];
 
-  function add(event: FormEvent) {
-    event.preventDefault();
+  // Not a form of its own: the list sits inside the match dialog's form.
+  function add() {
     const value = text.trim();
     if (value === '') return;
     const found = regex ? regexProblem(value) : undefined;
@@ -264,16 +198,26 @@ export function MatchList({ path, node, info, actions }: { path: NodePath; node:
           );
         })}
       </ul>
-      <form className="inline-form" onSubmit={add}>
-        <input aria-label={t('studio.match.new')} value={text} placeholder={t('studio.match.new')} onChange={(e) => setText(e.target.value)} />
+      <div className="inline-form" role="group" aria-label={t('studio.match.new')}>
+        <input
+          aria-label={t('studio.match.new')}
+          value={text}
+          placeholder={t('studio.match.new')}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            add();
+          }}
+        />
         <label className="check">
           <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
           {t('studio.regex')}
         </label>
-        <button className="button quiet" type="submit">
+        <button className="button quiet" type="button" onClick={add}>
           {t('studio.add')}
         </button>
-      </form>
+      </div>
       {problem && (
         <p className="message error" role="alert">
           {t('studio.match.bad', { problem })}

@@ -4,14 +4,14 @@
  * - **Combine into one node:** siblings of the same kind become one config node with all their
  *   matches, for variants that need the same settings. Their children are one subtree.
  * - **Give the same name:** nodes keep their own settings and subtrees, and share a name, so
- *   participants see one table or column.
+ *   participants see one table or column (`naming.ts`).
  *
  * The studio offers both from a part's name, in its match dialog (`apps/web/src/studio/naming.ts`).
  *
  * Splitting is the reverse: take a match off a node (the real node it matched is unmatched again),
  * or give a node its own name. Every function returns a new tree; the input is not changed.
  */
-import { isItemNode, isKeysNode, newId, sameMatch, SETTINGS, type ConfigNode, type Match, type Name } from './config';
+import { isItemNode, isKeysNode, newId, sameMatch, SETTINGS, type ConfigNode, type Match } from './config';
 import {
   buildTree,
   DecisionError,
@@ -52,7 +52,7 @@ export function combineProblem(tree: ProjectNode, paths: NodePath[]): string | u
 /** Fold `from` into `into`: matches, settings `into` lacks, and children, recursively. */
 function fold(into: ConfigNode, from: ConfigNode, path: NodePath, conflicts: JoinConflict[]): void {
   for (const m of from.match) if (!into.match.some((x) => sameMatch(x, m))) into.match.push(m);
-  for (const key of [...SETTINGS, 'nameId'] as const) {
+  for (const key of [...SETTINGS, 'name'] as const) {
     const value = from[key];
     if (value === undefined) continue;
     if (into[key] === undefined) (into as unknown as Record<string, unknown>)[key] = value;
@@ -110,46 +110,12 @@ function fromConfigDeep(config: ConfigNode): ProjectNode {
 export function combineConflicts(tree: ProjectNode, structures: readonly Shape[], paths: NodePath[]): number {
   if (combineProblem(tree, paths)) return 0;
   const { tree: combined, path } = combineNodes(tree, paths);
-  const config = { root: toConfig(combined), names: [] };
+  const config = { root: toConfig(combined) };
   return structures.filter((shape) => {
     const built = buildTree(config, shape);
     const node = getNode(built.tree, path);
     return node !== undefined && built.conflicts.has(node);
   }).length;
-}
-
-/** Give nodes a name (an existing one's id), so participants see them as one; undefined takes it off. */
-export function setName(tree: ProjectNode, paths: NodePath[], nameId: string | undefined): ProjectNode {
-  let current = tree;
-  for (const path of paths) {
-    const real = materialise(current, remapAfter(current, path));
-    const node = getNode(real.tree, real.path)!;
-    if (nameId === undefined) delete node.nameId;
-    else node.nameId = nameId;
-    current = real.tree;
-  }
-  return current;
-}
-
-/** A path in a tree that may have had other virtual nodes made real since: by ids, then by key. */
-function remapAfter(tree: ProjectNode, path: NodePath): NodePath {
-  const out: NodePath = [];
-  let node = tree;
-  for (const id of path) {
-    const next = node.children?.find((c) => c.id === id);
-    if (!next) {
-      // `~kind:key` became a config node matching that key.
-      const [, kind, key] = /^~([a-z]+):(.*?)'*$/.exec(id) ?? [];
-      const real = node.children?.find((c) => c.kind === kind && c.match.some((m) => m === key));
-      if (!real) throw new DecisionError(`no node at ${path.join('/')}`);
-      out.push(real.id);
-      node = real;
-    } else {
-      out.push(next.id);
-      node = next;
-    }
-  }
-  return out;
 }
 
 /** Add a match to a node (making it real first). Returns the tree and the node's path. */
@@ -197,20 +163,4 @@ export function splitByKey(tree: ProjectNode, path: NodePath): ProjectNode {
   const copies = keys.map((key) => ({ ...withNewIds(node), name: key, match: [key], keys: [key] }));
   parent.children = (parent.children ?? []).flatMap((c) => (c === node ? copies : [c]));
   return copy;
-}
-
-/** A new name with this text. */
-export function createName(text: string): Name {
-  return { id: newId(), text: text.trim() };
-}
-
-/** Paths of the nodes that have a name. */
-export function nodesNamed(tree: ProjectNode, nameId: string): NodePath[] {
-  const out: NodePath[] = [];
-  const visit = (node: ProjectNode, path: NodePath) => {
-    if (node.nameId === nameId) out.push(path);
-    for (const child of node.children ?? []) visit(child, [...path, child.id]);
-  };
-  visit(tree, []);
-  return out;
 }

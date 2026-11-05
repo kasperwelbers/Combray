@@ -48,7 +48,7 @@ export function uploadDonation(sourceId: string, raw: TreeNode, project: PointPr
   const tree = buildTree(project.config, extractShape(prepared), {
     seen: project.seen,
   }).tree;
-  const tables = deriveTables(tree);
+  const tables = deriveTables(tree, project.labels);
   const content = donationValues(prepared, tree, tables);
   const names = new Map<string, { name: Localized; fields: Map<string, Localized> }>();
   for (const t of tables) {

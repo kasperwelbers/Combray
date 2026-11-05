@@ -6,13 +6,13 @@ import {
   combineConflicts,
   combineNodes,
   combineProblem,
-  createName,
   deriveRows,
   deriveTables,
   extractShape,
   groupTables,
   jsonToTree,
-  nodesNamed,
+  nameGroup,
+  renameNode,
   removeMatch,
   setDecision,
   setName,
@@ -91,19 +91,17 @@ describe('combining into one node', () => {
 
 describe('giving the same name', () => {
   it('keeps nodes and their settings apart, and joins them for participants', () => {
-    const name = createName('Watch history');
     const tree = treeOf(seen);
-    const named = setName(tree, [at(tree, 'watch-history.json'), at(tree, 'kijkgeschiedenis.json')], name.id);
-    const built = buildTree({ root: toConfig(named), names: [name] }, seen).tree;
-    expect(nodesNamed(built, name.id)).toHaveLength(2);
-    expect(built.children!.map((c) => c.label)).toEqual(['Watch history', 'Watch history']);
+    const named = setName(tree, [at(tree, 'watch-history.json'), at(tree, 'kijkgeschiedenis.json')], 'watch_history');
+    const built = buildTree({ root: toConfig(named) }, seen).tree;
+    expect(nameGroup(built, at(built, 'watch-history.json'))).toHaveLength(2);
     const both = { kind: 'dir' as const, name: '', children: [...(english as unknown as { children: [] }).children, ...(dutch as unknown as { children: [] }).children] };
     const tables = deriveTables(built);
     const grouped = groupTables(tables, deriveRows(both, built, tables));
-    expect(grouped.tables.map((t) => t.name)).toEqual(['Watch history']);
+    expect(grouped.tables.map((t) => [t.id, t.name])).toEqual([['watch_history', 'Watch history']]);
     expect(grouped.rows[0]).toHaveLength(2);
     // Giving one its own name again splits them.
-    const apart = buildTree({ root: toConfig(setName(built, [at(built, 'kijkgeschiedenis.json')], undefined)), names: [name] }, seen).tree;
-    expect(nodesNamed(apart, name.id)).toHaveLength(1);
+    const apart = buildTree({ root: toConfig(renameNode(built, at(built, 'kijkgeschiedenis.json'), 'kijkgeschiedenis', { all: false }).tree) }, seen).tree;
+    expect(nameGroup(apart, at(apart, 'watch-history.json'))).toHaveLength(1);
   });
 });

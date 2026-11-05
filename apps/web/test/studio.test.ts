@@ -41,7 +41,7 @@ function everything(shape: Shape): ProjectConfig {
     match: root ? [] : [s.name],
     ...(s.children ? { children: s.children.map((c) => node(c)) } : {}),
   });
-  return { root: node(shape, true), names: [] };
+  return { root: node(shape, true) };
 }
 
 /** The project tree of a shape, with every position configured, so paths are its keys. */
@@ -62,12 +62,11 @@ describe('studio model', () => {
     expect(ids.sort()).toEqual(['time', 'title']);
   });
 
-  it('folds runs of single-child groups, but not into the rows of a table or past a label', () => {
+  it('folds runs of single-child groups, but not into the rows of a table or past a name of its own', () => {
     const t = tree();
     const youtube = t.children![0]!.children!.find((c) => c.name === 'YouTube')!;
     expect(foldChain(youtube, ['Takeout', 'YouTube']).map((c) => c.node.name)).toEqual(['YouTube', 'history']);
-    youtube.nameId = 'yt';
-    youtube.label = 'YouTube';
+    youtube.named = 'youtube';
     expect(foldChain(youtube, ['Takeout', 'YouTube'])).toHaveLength(1);
   });
 
@@ -89,7 +88,7 @@ describe('studio model', () => {
   });
 
   it('saves the configuration and the seen structures as files, and keeps settings for parts not seen', () => {
-    const config = { root: toConfig(setDecision(tree(), ['Takeout', 'Chrome', 'x'], 'donate')), names: [] };
+    const config = { root: toConfig(setDecision(tree(), ['Takeout', 'Chrome', 'x'], 'donate')) };
     const empty = extractShape(jsonToTree('e.json', {}));
     const { structure, importer } = toFiles({ config, seen: empty });
     const back = fromFiles(structure, importer);
@@ -176,7 +175,6 @@ describe('row notes', () => {
   it('flag a node that matches two keys side by side in one package, not in the union', () => {
     const config: ProjectConfig = {
       root: { id: 'root', kind: 'map', match: [], children: [{ id: 'h', kind: 'list', match: [{ regex: 'json$' }] }] },
-      names: [],
     };
     const built = buildTree(config, seen);
     const node = built.tree.children![0]!;
@@ -195,12 +193,11 @@ describe('row notes', () => {
         kind: 'map',
         match: [],
         children: [
-          { id: 'a', kind: 'list', match: ['watch-history.json'], nameId: 'n', children: [{ id: 'i', kind: 'map', match: ['[*]'], children: [{ id: 't', kind: 'value', match: ['title'], nameId: 'title', decision: 'show' }] }] },
-          { id: 'b', kind: 'list', match: ['kijkgeschiedenis.json'], nameId: 'n', children: [{ id: 'i', kind: 'map', match: ['[*]'], children: [{ id: 't', kind: 'value', match: ['title'], nameId: 'title', decision: 'donate' }] }] },
+          { id: 'a', kind: 'list', match: ['watch-history.json'], name: 'watch_history', children: [{ id: 'i', kind: 'map', match: ['[*]'], children: [{ id: 't', kind: 'value', match: ['title'], name: 'title', decision: 'show' }] }] },
+          { id: 'b', kind: 'list', match: ['kijkgeschiedenis.json'], name: 'watch_history', children: [{ id: 'i', kind: 'map', match: ['[*]'], children: [{ id: 't', kind: 'value', match: ['title'], name: 'title', decision: 'donate' }] }] },
           { id: 'c', kind: 'list', match: ['other.json'] },
         ],
       },
-      names: [{ id: 'n', text: 'Watch history' }, { id: 'title', text: 'Title' }],
     };
     const built = buildTree(config, seen);
     const info = rowInfo(built, config, []);

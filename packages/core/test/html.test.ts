@@ -145,7 +145,7 @@ describe('Snapchat chat history (<table>)', () => {
     const { records, names, types } = load('snapchat-chats.html', { keys: (k) => known.has(k) }).main((t) =>
       t.node.includes('table'),
     );
-    expect(names).toEqual(expect.arrayContaining(['From', 'To', 'Created', 'Media Type', 'Text']));
+    expect(names).toEqual(expect.arrayContaining(['From', 'To', 'Created', 'Media type', 'Text']));
     expect(types.Created).toEqual(['date-like']);
     expect(records.map((r) => r.From)).toEqual(['gilberte_s', 'robert_sl', 'gilberte_s', null, null]);
     expect(records.map((r) => r.To)).toEqual([null, null, null, 'gilberte_s', 'albertine_b']);
@@ -170,10 +170,10 @@ describe('Account page (<dl> and a table without a header)', () => {
     const { tables, rows } = load('account-info.html');
     const record = tables.findIndex((t) => t.rows === undefined);
     const values = rows[record]![0]!.values;
-    const byName = Object.fromEntries(tables[record]!.columns.map((c) => [localize(c.name, 'en'), values[c.id]]));
-    expect(byName['#dt[1]']).toBe('Date joined');
-    expect(byName['#dd[1]']).toBe('Jan 10, 2019');
-    expect(byName['#dd[4]']).toEqual(['French', 'English']);
+    const byName = Object.fromEntries(tables[record]!.columns.map((c) => [c.id, values[c.id]]));
+    expect(byName.dt_1).toBe('Date joined');
+    expect(byName.dd_1).toBe('Jan 10, 2019');
+    expect(byName.dd_4).toEqual(['French', 'English']);
   });
 
   it('uses allowed terms as keys', () => {
@@ -183,8 +183,8 @@ describe('Account page (<dl> and a table without a header)', () => {
     const named = Object.fromEntries(columns.map((c) => [localize(c.name, 'en'), rows[record]![0]!.values[c.id]]));
     expect(named.Username).toBe('marcel.p');
     expect(named.Email).toBe('marcel@combray.example');
-    expect(named['@href']).toBe('https://combray.example/marcel');
-    expect(columns.map((c) => localize(c.name, 'en'))).not.toContain('#dt[0]');
+    expect(named.Href).toBe('https://combray.example/marcel');
+    expect(columns.map((c) => c.id)).not.toContain('dt_0');
   });
 
   it('turns a table without a header into rows with positional cells', () => {
@@ -251,14 +251,14 @@ describe('a first row the researcher says holds the column names', () => {
     const project = keyedTree(extractShape(tree));
     const rows = deriveTables(project).find((t) => t.rows !== undefined)!.rows!;
     getNode(project, rows)!.headerRow = true;
-    getNode(project, [...rows, '#cell[1]'])!.label = { en: 'Town' };
+    getNode(project, [...rows, '#cell[1]'])!.named = 'town';
     const tables = deriveTables(project);
     const i = tables.findIndex((t) => t.rows !== undefined);
     expect(tables[i]!.headerRow).toBe(true);
     const derived = deriveRows(tree, project, tables)[i]!;
     expect(derived).toHaveLength(2);
     const names = headerNames(project, tables[i]!, derived[0]!.values);
-    expect([...names]).toEqual([['#cell[0]', 'Name']]);
+    expect([...names]).toEqual([['cell_0', 'Name']]);
   });
 });
 

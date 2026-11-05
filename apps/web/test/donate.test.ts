@@ -10,13 +10,14 @@ const TAKEOUT: UploadPoint = { id: 'takeout', pack: 'google-takeout' };
 
 /** The Takeout pack, asking for everything it shows. */
 function asking(): PointProject {
-  const project = structuredClone(pointProject(TAKEOUT)!);
+  const project = pointProject(TAKEOUT)!;
+  const config = structuredClone(project.config);
   const visit = (node: ConfigNode) => {
     if (node.decision === 'show') node.decision = 'donate';
     node.children?.forEach(visit);
   };
-  visit(project.config.root);
-  return { ...project, tree: buildTree(project.config, project.seen).tree };
+  visit(config.root);
+  return { ...project, config, tree: buildTree(config, project.seen).tree };
 }
 
 /** The donation of a fixture, from its tree as the data worker stores it (flattened). */
@@ -35,7 +36,7 @@ describe('the donation of an upload', () => {
     expect(overview.tables.length).toBeGreaterThan(0);
     expect(overview.leftOut).toBe(0);
     // Names are for the participant, in their language; the pack names the history in Dutch too.
-    const history = overview.tables.find((t) => t.id === 'youtube-watch-history')!;
+    const history = overview.tables.find((t) => t.id === 'youtube_watch_history')!;
     expect(history.name).toMatchObject({ nl: 'YouTube-kijkgeschiedenis' });
     expect(history.rowCount).toBeGreaterThan(0);
     expect(history.fields.length).toBeGreaterThan(0);

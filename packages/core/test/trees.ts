@@ -4,7 +4,6 @@ import {
   emptyConfig,
   getNode,
   toConfig,
-  type Name,
   type NodePath,
   type ProjectConfig,
   type ProjectNode,
@@ -35,8 +34,8 @@ export function nodeAt(tree: ProjectNode, ...names: string[]): ProjectNode {
 }
 
 /** The configuration of a tree, laid over a shape again: what the studio does after an edit. */
-export function rebuild(tree: ProjectNode, shape?: Shape, names: Name[] = []): ProjectNode {
-  return buildTree({ root: toConfig(tree), names }, shape).tree;
+export function rebuild(tree: ProjectNode, shape?: Shape): ProjectNode {
+  return buildTree({ root: toConfig(tree) }, shape).tree;
 }
 
 /**
