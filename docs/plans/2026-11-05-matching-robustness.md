@@ -42,15 +42,16 @@ Paths are matched from the root of the export, and the root is found flexibly ([
 ## Proposal: exact matches stay the rule; near matches ask the participant
 
 1. **What a near match is.** For each table the study shows or asks for, the studio works out its **distinguishing path** when it publishes: the shortest end of its path that is unique among the seen structures of the platform (`YouTube/history/watch-history.json` → `watch-history.json`, or `activity/[*]` → `Browser/activity/[*]`). It is stored in the published version, so it is fixed per version: what a version matches does not change when new structures arrive later. A near match is a part of a package that is not matched exactly, but whose path ends with a table's distinguishing path.
-2. **Tables, not fields.** Near matches are about where a table is. Inside a near-matched table, fields are matched exactly, relative to the table, and at least one donated field must be there. A field renamed inside a table is not guessed; that is what new matches are for.
-3. **Never guess between candidates.** If the distinguishing path matches more than one place in a package, or a table is already matched exactly, there is no near match.
-4. **Showing is free, donating is asked.** Showing a near-matched table sends nothing, so participants simply see it, marked as found in another place. To donate it, the review shows it separately: "We found something that looks like your **watch history**, but in a different place than the researchers expected. Do you want to share it too?" It is unticked until the participant ticks it.
-5. **The donation says so.** Values from a near match keep their raw path (as all values do), and the donation marks the table as near-matched, so researchers can filter or check those rows. The key page adds a column for it.
-6. **The researcher closes the gap.** Structure sharing reports the new place. The studio suggests adding it as an exact match for the next version, with one click.
-7. **A single file is a near match.** When nothing fits as the root and the upload is one file whose name is a table's distinguishing path, it is read as that table, with the same question to the participant. This brings back the case dropped on 2026-11-02, without a separate mechanism.
-8. **A switch per platform**, on by default: "Offer near matches when the package is organised differently." A researcher who wants strict exact locations turns it off.
+2. **Tables, not fields.** Near matches are about where a table is. Inside a near-matched table, fields are matched exactly, relative to the table. A field renamed inside a table is not guessed; that is what new matches are for.
+3. **The table must look the same inside.** A short path alone can land on something unrelated (a `history` in another file). So a near match also needs every field that was **always present** in that table in the seen data: the table's fingerprint. It is worked out at publish time with the distinguishing path, stored in the version, and the studio shows it on the table so the researcher can see what a near match requires. "Always" means in every seen structure that has the table, not in every row, since fields that some rows lack are common. A part whose path fits but whose fields do not (a `history` table with four of the five usual fields) is not offered for donation. It is a new structure, so the participant is asked to share it ([structure sharing](../structure-versions.md)), and the researcher decides.
+4. **Never guess between candidates.** If the distinguishing path matches more than one place in a package, or a table is already matched exactly, there is no near match.
+5. **Participants are asked to look closer.** Participants already see everything they are asked to donate, so the only difference is emphasis. A near-matched table is shown, marked as found in another place. In the review it is set apart: "We found something that looks like your **watch history**, but in a different place than the researchers expected. Please check it before you share it." It is unticked until the participant ticks it.
+6. **The donation says so.** Values from a near match keep their raw path (as all values do), and the donation marks the table as near-matched, so researchers can filter or check those rows. The key page adds a column for it.
+7. **The researcher closes the gap.** Structure sharing reports the new place. The studio suggests adding it as an exact match for the next version, with one click.
+8. **A single file is a near match.** When nothing fits as the root and the upload is one file whose name is a table's distinguishing path, it is read as that table, with the same question to the participant. This brings back the case dropped on 2026-11-02, without a separate mechanism.
+9. **A switch per platform**, on by default: "Offer near matches when the package is organised differently." A researcher who wants strict exact locations turns it off.
 
-Privacy stays as it is: matching runs on the device, nothing new is sent, and the principle becomes "the researcher marks the exact locations, and the participant approves anything outside them."
+In short: **we choose precision, and so the protection of participants' data, and when we only find a partial match we say so and ask the participant for help.** Privacy stays as it is: matching runs on the device, nothing new is sent, and the researcher marks the exact locations while the participant approves anything outside them.
 
 Not proposed: similarity scores or fuzzy name matching at runtime, matching individual fields by name anywhere in a package, and rematching old donations.
 
@@ -70,6 +71,7 @@ A small script can measure this once we have the structures: for each pair of pa
 ## Open questions
 
 - How short may a distinguishing path be? A file name alone (`watch-history.json`) seems fine; a generic name (`data.json`, `[*]`, `items`) should probably need at least one parent.
+- With few seen structures, the fingerprint is strict (every field is "always present"); with many, it may shrink to almost nothing. Should it have a minimum, such as at least two fields or one donated field?
 - Should near matches count for `required` nodes, so that a package with a moved required part still fits?
 - Is the participant question clear enough without showing the path? The path is on their device only, so it may be shown to them.
 - Should the switch default to on, or should a researcher opt in after seeing a near match reported?
