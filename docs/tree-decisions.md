@@ -44,8 +44,8 @@ Besides the decision, a node in the project tree can have:
 | Property | On | Purpose |
 | --- | --- | --- |
 | `match` | any | The keys this node stands for: exact keys and regular expressions. A node that matches several keys is a combined node (see [Names and matches](#names-and-matches)) |
-| `nameId` | any | The name participants see, shared by every node that has it. A name holds the label (`Date`) and, for donated leaves, a participant-facing description ("the time you watched each video"), used in donation previews and in [missing-field requests](#missing-requested-fields) |
-| `as`, `format`, `transform` | leaves | Conversion, as in the current field spec, now attached to the node: "Read as" in the researcher UI. Scripts are not ported yet |
+| `name` | tables and fields | The name: the id stories, filters and donations use, shared by every node that has it ([ADR 0013](decisions/0013-names-labels-versions.md)). Without one, the name the key gives. Labels and descriptions participants see are project texts, per language, kept apart from the tree ([translation.md](translation.md#project-texts)) |
+| `as`, `format`, `transform` | leaves | Conversion, as in the current field spec, now attached to the node: "Read as" in the researcher UI. `format` can be a list of date formats; the first that reads a value wins. Scripts are not ported yet |
 | `role` | leaves | View hint: `date`, `title`, `url`, `group` (replaces `display`) |
 | `raw` | donated leaves | Donate the value as it is in the file instead of transformed ([What is donated](#what-is-donated)) |
 | `lifter` | inner | A sandboxed script that turns each row subtree into a map ([HTML](#html), layer 3) |

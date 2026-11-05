@@ -53,6 +53,31 @@ The file format is made for this: one small JSON file per feature, stable keys, 
 3. Run `pnpm --filter @combray/web test`. The locale test reports any key, placeholder or tag that does not match.
 4. Read the result once, as a participant would. A native speaker checks new screens before a study uses them.
 
+## Project texts
+
+A study can have texts of its own for participants, on the **Texts** page of the studio ([ADR 0013](decisions/0013-names-labels-versions.md)). They are stored with the project (`ProjectTexts` in `packages/core/src/texts.ts`) and published with it:
+
+- **Languages**: which of the app's languages participants can choose, the main one first.
+- **Labels and descriptions** of tables and fields, per platform. Without one, participants see the platform pack's label, or the name with spaces.
+- **App texts** the study words its own way, by `group:key` (`donate:title` for `donate.title` in `locales/{language}/donate.json`). Only texts of the screens inside a study can be changed (`PROJECT_GROUPS` in `apps/web/src/appTexts.ts`). Texts about privacy, keys and donating can be changed too, with a warning: they must stay true.
+
+The story and the information and consent texts are on their own pages, and are multilingual the same way.
+
+**Export for translation** gives one YAML file (`packages/core/src/translations.ts`) with every text participants read: languages, labels, the story, consent, and the app texts the study changed. Every text is a map by language:
+
+```yaml
+languages: [en, nl]
+tables:
+  takeout:
+    youtube_watch_history:
+      label: { en: YouTube watch history, nl: YouTube-kijkgeschiedenis }
+story:
+  intro:
+    title: { en: A year on YouTube }
+```
+
+Give it to a translator or an AI model with the instructions above ("Translating with an AI model"), asking for the same file with the missing languages filled in, and read it back with **Read a translated file**. Reading changes only texts: entries for tables, fields, slides or blocks that are not in the project are left out, and the structure of the story stays as it is.
+
 ## Adding a language
 
 Add the code to `LANGUAGES` in `apps/web/src/i18n.ts` and to the test, copy `locales/en` without `studio.json` to the new folder, and translate.

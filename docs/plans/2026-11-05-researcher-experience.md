@@ -13,6 +13,8 @@ Agreed with Kasper on 2026-11-05. Goal: make building the extractor and the stor
 
 ## Names always
 
+> Superseded in part by [ADR 0013](../decisions/0013-names-labels-versions.md): names are now the ids (lowercase, underscores), stored on the node as `name`, and labels moved to the project's texts.
+
 - Every matched part has a name: its own name (a `Name`, which participants see and donations are exported under) or, until it gets one, its key. Matched = named = decided. Parts nothing matches are "not matched", in a quiet style: nobody looked yet. "Ignore" stays a decision: someone looked and did not want it.
 - Keys are not stored as names. A part named by its key has no `nameId`, so tables, columns, their ids, header rows and HTML column names work exactly as before. Only a name that differs from the key becomes a `Name`.
 - One match dialog, opened from a row's name: the values in the test packages, the name (suggesting names that exist, and hints from the structure suggestions: "possibly the same as …"), the decision, and under "Advanced" the matches and regular expressions. A shared name can be renamed for all, or given to this part only.
@@ -21,7 +23,7 @@ Agreed with Kasper on 2026-11-05. Goal: make building the extractor and the stor
 
 ## The tree editor
 
-- One small panel per action, next to its button: the name (match dialog), "Read as", "Filter rows" and "More" (labels per language and a description, required, skip new parts, keys that are data). The tabbed settings panel is gone.
+- One small panel per action, next to its button: the name (match dialog), "Read as", "Filter rows" and "More" (required, skip new parts, keys that are data; labels are on the Texts page since ADR 0013). The tabbed settings panel is gone.
 - Settings that are set show on the row: "Read as date", "2 filters", always visible and highlighted.
 - Rows stay where they are: the studio lays the configuration over the seen data in the structure's order (`buildTree(…, { structureOrder: true })`), not config nodes first and unmatched parts after them. Shapes sort keys, so that order is by key, and stable. Participants' devices keep the configuration's order.
 - A row shows its name first, then the keys behind it in a quiet style when they differ: `Video title ← title, titleText`.

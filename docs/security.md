@@ -273,6 +273,8 @@ What we do instead:
 
 The story's views (an amount, top values, counts over time, by hour or weekday) are computed in the data worker from the participant's own tables (`apps/web/src/worker/story.ts`); only counts reach the page, and nothing is sent. They are drawn with HTML and CSS by React, so labels are text. A story comes from the project config: the server stores it as researchers wrote it (an object with slides, at most 256 KB), and every device checks it block by block (`parseStory` in `packages/core`) before using it. Text in slides is plain text, split into paragraphs, never HTML; values in sentences (`{count}`) are filled in as text.
 
+A project's texts ([ADR 0013](decisions/0013-names-labels-versions.md): labels, descriptions and the app texts a study words its own way) are researcher-written strings too, at most 256 KB, checked by `checkProjectTexts` on the server and again on every device. Labels are rendered as text. App texts replace i18n strings only for keys the app already has (`applyAppTexts`), so a study cannot add strings; where a string has tags (`<b>`), `<Trans>` turns only the tags the code names into React elements, never HTML. A study can reword the texts that explain privacy and keys; the studio warns that they must stay true, and the participant's protection never depends on them.
+
 Vega compiles expressions with `new Function`, which our CSP forbids. If we adopt Vega or Vega-Lite, it must run with `vega-interpreter`, never by adding `'unsafe-eval'`.
 
 ## Researcher sign-in and keys
