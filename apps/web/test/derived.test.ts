@@ -75,6 +75,18 @@ describe('importing through an upload point', () => {
     expect(String(watch.rows[0]!.time)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it("labels tables and fields with the study's own texts over the pack's", async () => {
+    const point: UploadPoint = {
+      ...TIKTOK,
+      texts: { tables: { tiktok_watch_history: { label: { en: 'What you watched' }, fields: { time: { label: { en: 'When', nl: 'Wanneer' } } } } } },
+    };
+    const result = await derived(point, fixtureListing('tiktok-2025'));
+    const watch = result.tables.find((t) => english(t) === 'What you watched')!;
+    expect(names(watch.table.columns)).toEqual(['When', 'Video']);
+    // Languages the study leaves out keep the pack's label.
+    expect((watch.table.name as Record<string, string>).nl).toBe('TikTok-kijkgeschiedenis');
+  });
+
   it('keeps nested tables inside their rows, and lets views count through them', async () => {
     const result = await derived(TAKEOUT, fixtureListing('google-takeout-en'));
     const watch = result.tables.find((t) => english(t) === 'YouTube watch history')!;

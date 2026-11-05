@@ -427,9 +427,9 @@ describe.skipIf(!enabled)('key page', () => {
     await page.locator('.decision-row strong', { hasText: 'archive_title' }).waitFor();
     // Help is in one dialog, opened at the topic asked for.
     await page.getByRole('button', { name: 'Help', exact: true }).click();
-    await page.getByRole('dialog', { name: 'Help with the tree editor' }).waitFor();
+    await page.getByRole('dialog', { name: 'Help with the studio' }).waitFor();
     await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Help with the tree editor' }).waitFor({ state: 'detached' });
+    await page.getByRole('dialog', { name: 'Help with the studio' }).waitFor({ state: 'detached' });
     // The story plays on the bundled synthetic packages.
     await page.getByRole('link', { name: 'Story' }).click();
     await page.getByRole('combobox', { name: 'Google Takeout' }).filter({ hasText: 'Google Takeout, in English (JSON)' }).waitFor();
@@ -437,6 +437,14 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByRole('button', { name: 'Next →' }).click();
     await page.getByText(/^You watched 3 videos: about/).waitFor();
     await page.getByRole('button', { name: 'Close the story' }).click();
+    // Texts: a label of the study's own, and one file to translate.
+    await page.getByRole('link', { name: 'Texts' }).click();
+    await page.locator('details.texts-table summary', { hasText: 'chrome_browsing_history' }).click();
+    await page.getByLabel('Label (Dutch)').first().fill('Mijn browsergeschiedenis');
+    await page.getByRole('button', { name: 'Save texts' }).click();
+    await page.getByText(/^Saved\./).waitFor();
+    const [exported] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export for translation' }).click()]);
+    expect(readFileSync((await exported.path())!, 'utf8')).toContain('Mijn browsergeschiedenis');
     await page.getByRole('link', { name: 'Donations' }).click();
     await page.getByText(/^Example projects get no donations/).waitFor();
     await context.close();
