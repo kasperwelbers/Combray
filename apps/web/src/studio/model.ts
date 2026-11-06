@@ -9,6 +9,7 @@
 import {
   buildTree,
   configOf,
+  correctedShape,
   deriveTables,
   getNode,
   importerFile,
@@ -268,10 +269,14 @@ export interface StudioDraft {
   seen?: Shape;
 }
 
-/** The workspace draft as files: the seen structures, and the configuration. */
+/**
+ * The workspace draft as files: the seen structures, and the configuration. The structures are
+ * saved (and published) with the configuration's corrections over them, so keys the researcher
+ * says are data never reach participants; the packages kept with the platform keep theirs.
+ */
 export function toFiles(draft: StudioDraft): { structure: StructureFile; importer: ImporterFile } {
   return {
-    structure: structureFile(draft.seen ?? { kind: draft.config.root.kind, name: '' }),
+    structure: structureFile(draft.seen ? correctedShape(draft.config, draft.seen) : { kind: draft.config.root.kind, name: '' }),
     importer: importerFile(draft.config),
   };
 }

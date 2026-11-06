@@ -198,6 +198,25 @@ function collapsedShape(map: Shape, names: string[]): Shape {
   );
 }
 
+/** What the screen markers stand for, as key types. */
+const MARKER_TYPES: Record<string, ValueType> = { '<email>': 'email-like', '<url>': 'url-like', '<date>': 'date-like', '<number>': 'int' };
+
+/**
+ * A map or folder shape with its keys treated as data: its children become `{*}`, as the
+ * extractor does for maps it recognises itself. For laying a researcher's "keys are data" over
+ * shapes recorded before (`correctedShape`). Shapes hold screened names, so markers count as
+ * the type they stand for.
+ */
+export function collapseShape(map: Shape): Shape {
+  if (map.collapsed || (map.kind !== 'map' && map.kind !== 'dir')) return map;
+  const names = (map.children ?? []).map((c) => c.name);
+  const typed = names.filter((n) => !(n in MARKER_TYPES));
+  const out = collapsedShape(map, typed);
+  const markers = names.flatMap((n) => (n in MARKER_TYPES ? [MARKER_TYPES[n]!] : []));
+  if (markers.length > 0) out.keyTypes = union(out.keyTypes, markers);
+  return out;
+}
+
 /**
  * Maps inside list items whose keys are data across the rows, such as `comments: {bob: …,
  * sarah: …}` in each tweet: many different keys, and none of them in more than half of the

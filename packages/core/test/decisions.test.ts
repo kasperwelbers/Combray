@@ -4,6 +4,7 @@ import {
   buildTree,
   closedNodes,
   compareShape,
+  correctedShape,
   DecisionError,
   effectiveStates,
   emptyConfig,
@@ -339,6 +340,32 @@ describe('keys that are data', () => {
     const later = buildTree({ root: toConfig(keyed) }, extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }])));
     expect(later.unmatched).toEqual([]);
     expect(JSON.stringify(toConfig(later.tree))).not.toContain('carl');
+  });
+
+  it('are not new on a participant device when the seen structures still have the old keys', () => {
+    const seen = extractShape(jsonToTree('a.json', [{ comments: { anna: 'hi', bob: 'hey' } }]));
+    const keyed = { root: toConfig(setKeysAreData(treeOf(seen), at(treeOf(seen), '[*]', 'comments'))) };
+    const later = extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }]));
+    expect(buildTree(keyed, later, { seen }).fresh.size).toBe(0);
+    // A part that really is new still is.
+    const other = extractShape(jsonToTree('c.json', [{ comments: { carl: 'yo' }, likes: 3 }]));
+    expect([...buildTree(keyed, other, { seen }).fresh].map((n) => n.name)).toEqual(['likes']);
+  });
+
+  it('are left out of the structures passed on, and compare as one position', () => {
+    const seen = extractShape(jsonToTree('a.json', [{ comments: { anna: 'hi', bob: 'hey', 'carol@example.org': 'yo' } }]));
+    const keyed = { root: toConfig(setKeysAreData(treeOf(seen), at(treeOf(seen), '[*]', 'comments'))) };
+    const corrected = correctedShape(keyed, seen);
+    expect(JSON.stringify(corrected)).not.toMatch(/anna|<email>/);
+    const comments = corrected.children![0]!.children![0]!;
+    expect(comments).toMatchObject({ collapsed: true, keyTypes: ['email-like', 'string'] });
+    expect(comments.children!.map((c) => c.name)).toEqual(['{*}']);
+    // The corrected structure still fits the configuration, and new keys add no new positions.
+    expect(buildTree(keyed, corrected).unmatched).toEqual([]);
+    const later = extractShape(jsonToTree('b.json', [{ comments: { carl: 'yo' } }]));
+    expect(newPositions(corrected, correctedShape(keyed, later)).size).toBe(0);
+    // Without corrections a shape comes back as it was.
+    expect(correctedShape({ root: toConfig(treeOf(seen)) }, seen)).toBe(seen);
   });
 
   it('take a decision of their own for the keys', () => {

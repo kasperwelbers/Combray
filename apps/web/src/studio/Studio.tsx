@@ -12,6 +12,7 @@ import {
   keepNames,
   isDecidable,
   newPositions,
+  correctedShape,
   parseImporterFile,
   parseStructureFile,
   remapPath,
@@ -388,7 +389,9 @@ export function Studio({
         return info.id;
       }
       setShapes((m) => new Map(m).set(info.id, shape));
-      const added = newPositions(seen, shape).size;
+      // Keys the researcher says are data are one position, however many new ones there are.
+      const corrected = (s: Shape) => (config ? correctedShape(config, s) : s);
+      const added = newPositions(seen && corrected(seen), corrected(shape)).size;
       const nextSeen = addSeen(seen, shape);
       setSeen(nextSeen);
       if (config) {

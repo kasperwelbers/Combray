@@ -23,7 +23,7 @@ import {
   type NodeSettings,
   type ProjectConfig,
 } from './config';
-import { COLLAPSED_NAME, ITEM_NAME, mergeAll, repeatOf, type Repeat, type Shape } from './shape';
+import { collapseShape, COLLAPSED_NAME, ITEM_NAME, mergeAll, repeatOf, type Repeat, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
 export type { LeafDecision, NewChildren, Role, RowFilter } from './config';
@@ -180,13 +180,16 @@ const hasElementItems = (list: { children?: { kind: NodeKind; name: string }[] }
  */
 export function unifyElementTwins(shape: Shape): Shape {
   if (!shape.children) return shape;
-  let children = shape.children.map(unifyElementTwins);
+  const unified = shape.children.map(unifyElementTwins);
+  let children = unified;
   for (const list of children.filter((c) => c.kind === 'list' && hasElementItems(c))) {
     const twin = children.find((c) => c.kind === 'element' && c.name === list.name);
     if (!twin) continue;
     const merged: Shape = { ...list, children: mergeAll([...(list.children ?? []), { ...twin, name: ITEM_NAME }]) };
     children = children.filter((c) => c !== twin).map((c) => (c === list ? merged : c));
   }
+  // Unchanged shapes stay the same objects, so `correctedShape` can find what a node matched.
+  if (children === unified && unified.every((c, i) => c === shape.children![i])) return shape;
   return { ...shape, children };
 }
 
@@ -301,12 +304,16 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
     if (tracking && path.length > 0 && from.length > 0 && from.every((s) => !s.seen)) fresh.add(node);
     const closed = closedHere(node, parentClosed);
 
-    const real = from.flatMap((s) =>
-      (s.shape.children ?? []).map((child): Source => {
-        const seen = s.seen?.children?.find((k) => k.kind === child.kind && k.name === child.name);
+    const real = from.flatMap((s) => {
+      // Below a map whose keys are data, every key is the one position `{*}`: a key nobody has
+      // seen is not new, also when the seen structures were recorded with their keys.
+      const seenHere = s.seen && node.collapsed ? collapseShape(s.seen) : s.seen;
+      return (s.shape.children ?? []).map((child): Source => {
+        const key = node.collapsed ? COLLAPSED_NAME : child.name;
+        const seen = seenHere?.children?.find((k) => k.kind === child.kind && k.name === key);
         return { shape: child, parent: s.shape, ...(seen ? { seen } : {}) };
-      }),
-    );
+      });
+    });
     const used = new Map<Shape, ProjectNode[]>();
     const children: ProjectNode[] = [];
     /** The first real position each child matched, for `structureOrder`. */
@@ -600,6 +607,30 @@ export function matchShape(root: ProjectNode, shape: Shape): Set<ProjectNode> {
   };
   visit(built.tree, root);
   return seen;
+}
+
+/**
+ * Shapes with the configuration's corrections laid over them: maps and folders the researcher
+ * says have keys that are data (`collapsed`) keep only `{*}`, so those keys are not passed on.
+ * For the structures a platform publishes to participants, and for comparing structures
+ * recorded before a correction with ones recorded after. Element twins come out unified, as
+ * `buildTree` sees them.
+ */
+export function correctedShape(config: ProjectConfig, shape: Shape): Shape {
+  const unified = unifyElementTwins(shape);
+  const { sources } = buildTree(config, unified);
+  const collapse = new Set<Shape>();
+  for (const [node, shapes] of sources) {
+    if (!node.collapsed) continue;
+    for (const s of shapes) if (!s.collapsed) collapse.add(s);
+  }
+  if (collapse.size === 0) return unified;
+  const visit = (s: Shape): Shape => {
+    const children = s.children?.map(visit);
+    const out = children && children.some((c, i) => c !== s.children![i]) ? { ...s, children: mergeAll(children) } : s;
+    return collapse.has(s) ? collapseShape(out) : out;
+  };
+  return visit(unified);
 }
 
 /** Paths of the required nodes (`required`) in a project tree, top first. */
