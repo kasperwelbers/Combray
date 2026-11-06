@@ -278,6 +278,8 @@ describe.skipIf(!enabled)('key page', () => {
     await page.getByRole('button', { name: 'Create my space' }).click();
     const zip = join(dir, 'takeout.zip');
     writeFileSync(zip, fixtureZip('google-takeout-en'));
+    // Wait for the space: the password screen has a file input of its own, for backups.
+    await page.getByRole('button', { name: /Lock/ }).waitFor();
     await page.locator('input[type=file]').first().setInputFiles(zip);
 
     // The story: the participant's own numbers, and questions; answers go with the donation.
