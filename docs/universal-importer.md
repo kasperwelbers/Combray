@@ -25,6 +25,8 @@ A DDP (a zip, a folder, or loose files) is parsed into a single tree.
 | Plain text | a `list` of lines |
 | Images, video, other binaries | `blob` nodes with type and size only (contents not parsed by default) |
 
+How each format becomes a tree in practice, the common ways tables show up, and the hard cases found in real packages are in [formats/](formats/README.md).
+
 Each node has a kind, a name (key, index, tag or filename), and either a value or children. Values keep their raw string plus a lightweight inferred type (`int`, `float`, `bool`, `string`, `date-like`, `url-like`, `email-like`). The tree is stored compactly (arena of nodes with string interning) in `combray-core`, and the same structure is used in the browser (WASM) and the CLI.
 
 Parsing is streaming where it can be: huge JSON arrays and CSVs are parsed incrementally and written to the encrypted store in chunks, so a multi-gigabyte Takeout does not need to fit in memory at once.

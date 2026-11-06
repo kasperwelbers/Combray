@@ -53,11 +53,6 @@ function onlyText(node: TreeNode): string | undefined {
   return text === '' ? undefined : text;
 }
 
-/** The lists inside an element, through elements but not into lists, in document order. */
-function listsIn(el: ElementNode): ListNode[] {
-  return el.children.flatMap((c) => (c.kind === 'list' ? [c] : c.kind === 'element' ? listsIn(c) : []));
-}
-
 /** The parts of a list item: the items of its one list, or its own content. */
 function partsOf(item: TreeNode): TreeNode[] {
   if (item.kind !== 'element') return [item];
@@ -74,16 +69,19 @@ interface Pair {
 /** How texts are names in an element (`textNames`): see the top of this file. */
 export type TextNames = 'pairs' | 'beside';
 
-/** A shape or project node, as far as finding lists in it goes. */
+/** A tree, shape or project node, as far as finding lists in it goes. */
 interface Positions {
   kind: string;
   name: string;
   children?: readonly Positions[];
 }
 
-/** The list positions inside an element, through elements but not into lists. */
-function listPositions(node: Positions): Positions[] {
-  return (node.children ?? []).flatMap((c) => (c.kind === 'list' ? [c] : c.kind === 'element' ? listPositions(c) : []));
+/**
+ * The lists inside an element (a tree node, or a position of a shape or project tree), through
+ * elements but not into the lists, in document order.
+ */
+function listPositions<T extends Positions>(node: T): T[] {
+  return ((node.children ?? []) as readonly T[]).flatMap((c) => (c.kind === 'list' ? [c] : c.kind === 'element' ? listPositions(c) : []));
 }
 
 /**
@@ -104,7 +102,7 @@ export function textNamesOf(node: Positions): TextNames | undefined {
 
 /** The pairs in a marked element, and the lists they came from; undefined if they do not line up. */
 function pairsIn(el: ElementNode, how: TextNames): { pairs: Pair[]; lists: ListNode[] } | undefined {
-  const lists = listsIn(el);
+  const lists = listPositions<TreeNode>(el) as ListNode[];
   if (lists.length !== (how === 'beside' ? 2 : 1)) return undefined;
   if (how === 'beside') {
     const [names, values] = lists as [ListNode, ListNode];
@@ -190,12 +188,12 @@ function marked(root: ProjectNode): Set<ProjectNode> {
 export function applyTextNames(tree: TreeNode, root: ProjectNode, keys: (text: string) => boolean): TreeNode {
   const walk = marked(root);
   if (walk.size === 0) return tree;
+  const read = (el: TreeNode, how: TextNames): TreeNode => {
+    if (el.kind !== 'element') return el;
+    const found = pairsIn(el, how);
+    return found ? withPairs(el, found, keys) : el;
+  };
   const visit = (node: TreeNode, project: ProjectNode): TreeNode => {
-    const read = (el: TreeNode, how: TextNames): TreeNode => {
-      if (el.kind !== 'element') return el;
-      const found = pairsIn(el, how);
-      return found ? withPairs(el, found, keys) : el;
-    };
     let out = node;
     if (project.textNames && node.kind === 'element') out = read(node, project.textNames);
     // A marked table: each of its rows.
