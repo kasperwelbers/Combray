@@ -11,11 +11,9 @@ import {
   combineDonations,
   deriveTables,
   donationValues,
-  extractShape,
-  knownKeys,
   localize,
-  normalizeTree,
   parseStory,
+  prepareTree,
   storyQuestions,
   validAnswer,
   withoutRows,
@@ -44,8 +42,8 @@ export interface UploadDonation {
  * study's settings. Rows are keyed by upload, table and the path of the row in the files.
  */
 export function uploadDonation(sourceId: string, raw: TreeNode, project: PointProject): UploadDonation {
-  const prepared = normalizeTree(raw, { keys: knownKeys(project.tree) });
-  const tree = buildTree(project.config, extractShape(prepared), {
+  const { prepared, shape } = prepareTree(raw, project.tree);
+  const tree = buildTree(project.config, shape, {
     seen: project.seen,
   }).tree;
   const tables = deriveTables(tree, project.labels);

@@ -609,30 +609,6 @@ export function matchShape(root: ProjectNode, shape: Shape): Set<ProjectNode> {
   return seen;
 }
 
-/**
- * Shapes with the configuration's corrections laid over them: maps and folders the researcher
- * says have keys that are data (`collapsed`) keep only `{*}`, so those keys are not passed on.
- * For the structures a platform publishes to participants, and for comparing structures
- * recorded before a correction with ones recorded after. Element twins come out unified, as
- * `buildTree` sees them.
- */
-export function correctedShape(config: ProjectConfig, shape: Shape): Shape {
-  const unified = unifyElementTwins(shape);
-  const { sources } = buildTree(config, unified);
-  const collapse = new Set<Shape>();
-  for (const [node, shapes] of sources) {
-    if (!node.collapsed) continue;
-    for (const s of shapes) if (!s.collapsed) collapse.add(s);
-  }
-  if (collapse.size === 0) return unified;
-  const visit = (s: Shape): Shape => {
-    const children = s.children?.map(visit);
-    const out = children && children.some((c, i) => c !== s.children![i]) ? { ...s, children: mergeAll(children) } : s;
-    return collapse.has(s) ? collapseShape(out) : out;
-  };
-  return visit(unified);
-}
-
 /** Paths of the required nodes (`required`) in a project tree, top first. */
 export function requiredPaths(root: ProjectNode): NodePath[] {
   const out: NodePath[] = [];

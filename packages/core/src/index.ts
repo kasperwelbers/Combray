@@ -42,7 +42,6 @@ export {
   remapPath,
   unionShape,
   unifyElementTwins,
-  correctedShape,
   newPositions,
   virtualId,
   effectiveStates,
@@ -102,6 +101,8 @@ export {
 } from './projectFiles';
 export type { StructureFile, ImporterFile } from './projectFiles';
 export { normalizeTree, MIN_REPEATS } from './normalize';
+export { applyTextNames, correctedShape, prepareTree, textNamesOf } from './corrections';
+export type { TextNames } from './corrections';
 export type { NormalizeOptions } from './normalize';
 export { runQuery, queryColumns, unnestPath, rootTable, datePart, QueryError } from './query';
 export type {

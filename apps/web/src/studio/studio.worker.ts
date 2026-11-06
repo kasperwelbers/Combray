@@ -5,6 +5,7 @@
  * the tab drops it.
  */
 import {
+  applyTextNames,
   chartData,
   chartQuery,
   countNodes,
@@ -14,6 +15,7 @@ import {
   groupTables,
   headerNames,
   extractShape,
+  knownKeys,
   normalizeTree,
   readSpot,
   runQuery,
@@ -26,6 +28,7 @@ import {
 import * as Comlink from 'comlink';
 
 import { deriveImport, pointProject } from '../worker/derived';
+import { textMarks } from './model';
 import { addStoryTables, storyViews, type StoryTables } from '../worker/story';
 import type { Upload } from '../worker/api';
 import { listUpload } from '../worker/upload';
@@ -38,7 +41,7 @@ const EXAMPLE_LENGTH = 40;
 // Nested rows kept per preview, so a deep tree cannot flood the main thread.
 const MAX_NESTED = 2000;
 
-const exports = new Map<number, { info: StudioExport; tree: TreeNode }>();
+const exports = new Map<number, { info: StudioExport; tree: TreeNode; read?: { marks: string; tree: TreeNode } }>();
 /** Test packages for the story preview, by key; kept apart so they never mix into the exports. */
 const storyPackages = new Map<string, TreeNode>();
 let nextId = 1;
@@ -63,13 +66,32 @@ function previewRow(row: DerivedRow, index: number): PreviewRow {
 }
 
 /**
+ * The trees of the loaded exports as the project reads them: with the names written as text
+ * read as names (`applyTextNames`). Any text may be a name here: these are the researcher's own
+ * exports, and that is how the names get into the project. Kept until the marks change.
+ */
+function readExports(projectTree: ProjectNode, only?: number): [number, TreeNode][] {
+  const marks = textMarks(projectTree);
+  const out: [number, TreeNode][] = [];
+  for (const [id, entry] of exports) {
+    if (only !== undefined && id !== only) continue;
+    if (!marks) {
+      out.push([id, entry.tree]);
+      continue;
+    }
+    if (entry.read?.marks !== marks) entry.read = { marks, tree: applyTextNames(entry.tree, projectTree, () => true) };
+    out.push([id, entry.read.tree]);
+  }
+  return out;
+}
+
+/**
  * The rows of all exports, one after the other (nested rows' parents shift with each export),
  * or of one export only.
  */
 function allRows(projectTree: ProjectNode, tables: TableDef[], only?: number): DerivedRow[][] {
   const all: DerivedRow[][] = tables.map(() => []);
-  for (const [id, { tree }] of exports) {
-    if (only !== undefined && id !== only) continue;
+  for (const [, tree] of readExports(projectTree, only)) {
     const offsets = all.map((rows) => rows.length);
     deriveRows(tree, projectTree, tables).forEach((rows, i) => {
       const parent = tables[i]!.parent;
@@ -110,7 +132,9 @@ const api: StudioApi = {
       const point = { id: source.platform, ...(source.pack ? { pack: source.pack } : {}), structure: source.structure, importer: source.importer };
       const project = tree && pointProject(point);
       if (!tree || !project) continue;
-      const derived = deriveImport({ prepared: tree, shape: extractShape(tree) }, project, point);
+      // Names written as text are read as the project says.
+      const prepared = applyTextNames(tree, project.tree, knownKeys(project.tree));
+      const derived = deriveImport({ prepared, shape: extractShape(prepared) }, project, point);
       addStoryTables(
         tables,
         source.platform,
@@ -139,6 +163,10 @@ const api: StudioApi = {
     const found = exports.get(id);
     if (!found) throw new Error('not-loaded');
     return found.tree;
+  },
+
+  async readShapes(projectTree) {
+    return readExports(projectTree).map(([, tree]) => extractShape(tree));
   },
 
   async removeExport(id) {
@@ -196,7 +224,7 @@ const api: StudioApi = {
     const counts = new Map<string, number>();
     let total = 0;
     let empty = 0;
-    for (const { tree } of exports.values()) {
+    for (const [, tree] of readExports(projectTree)) {
       for (const value of valuesAt(tree, projectTree, path)) {
         total++;
         const shown = text(value);
@@ -218,7 +246,7 @@ const api: StudioApi = {
     const out: Record<string, string[]> = {};
     for (const path of paths) {
       const counts = new Map<string, number>();
-      for (const { tree } of exports.values()) {
+      for (const [, tree] of readExports(projectTree)) {
         for (const value of valuesAt(tree, projectTree, path)) {
           const shown = text(value);
           if (shown) counts.set(shown, (counts.get(shown) ?? 0) + 1);

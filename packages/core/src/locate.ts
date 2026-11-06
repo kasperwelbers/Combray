@@ -13,11 +13,11 @@
  */
 import { unzipSync } from 'fflate';
 
-import { closedNodes, isDecidable, knownKeys, matchesPosition, matchShape, type ProjectNode } from './decisions';
-import { normalizeTree } from './normalize';
+import { closedNodes, isDecidable, matchesPosition, matchShape, type ProjectNode } from './decisions';
+import { prepareTree } from './corrections';
 import { isNoise, mergeDirs, parseEntries, parseFile, type ParseOptions } from './parse';
 import { globMatch } from './path';
-import { extractShape, type Shape } from './shape';
+import type { Shape } from './shape';
 import type { DirNode, TreeNode } from './tree';
 
 /** How much of an upload Combray looks at. Fixed: not a project setting. */
@@ -350,8 +350,7 @@ export interface ReadRoot extends ReadSpot {
 
 function prepare(tree: TreeNode, facts: TreeFacts): { prepared: TreeNode; shape: Shape } {
   // Header text from the participant's file only becomes a name when the project knows it.
-  const prepared = normalizeTree(tree, { keys: knownKeys(facts.tree) });
-  return { prepared, shape: extractShape(prepared) };
+  return prepareTree(tree, facts.tree);
 }
 
 /** Whether a read root has every required part and something the study shows. */

@@ -166,6 +166,7 @@ export type NodePatch = Partial<
     | 'find'
     | 'undecided'
     | 'headerRow'
+    | 'textNames'
   >
 >;
 
@@ -283,6 +284,20 @@ export function toFiles(draft: StudioDraft): { structure: StructureFile; importe
 
 export function fromFiles(structure: StructureFile, importer: ImporterFile): StudioDraft {
   return { config: configOf(importer), seen: structure.root };
+}
+
+/**
+ * Where a project tree says texts are names (`textNames`), as one string: it changes when a
+ * mark is set or taken off, and then the loaded packages are read again.
+ */
+export function textMarks(tree: ProjectNode): string {
+  const out: string[] = [];
+  const visit = (node: ProjectNode, path: string[]) => {
+    if (node.textNames) out.push(path.join('/'));
+    for (const child of node.children ?? []) visit(child, [...path, child.id]);
+  };
+  visit(tree, []);
+  return out.join('\n');
 }
 
 /** The seen structures with one more added (they only grow). */
