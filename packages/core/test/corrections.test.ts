@@ -90,6 +90,18 @@ describe('texts that are names', () => {
     }
   });
 
+  it('can be set on the table, for each of its rows', () => {
+    const tree = studioTree(page(PAIRS));
+    const project = treeOf(extractShape(tree));
+    const table = nodeAt(project, 'body', 'div.entry');
+    expect(textNamesOf(table)).toBe('pairs');
+    table.textNames = 'pairs';
+    const config = { root: toConfig(project) };
+    const read = buildTree(config, extractShape(applyTextNames(tree, buildTree(config).tree, () => true))).tree;
+    expect(entryNames(read)).toEqual(['span', 'title', 'url']);
+    expect(entryNames(buildTree(config, correctedShape(config, extractShape(tree))).tree)).toEqual(['span']);
+  });
+
   it('is offered where the structure has one list of pairs, or two lists', () => {
     const offered = (entry: (i: number) => string) => textNamesOf(nodeAt(treeOf(extractShape(studioTree(page(entry)))), 'body', 'div.entry', '[*]'));
     expect([SIDE_BY_SIDE, PAIRS, TAKING_TURNS, LABELLED].map(offered)).toEqual(['beside', 'pairs', 'pairs', 'pairs']);

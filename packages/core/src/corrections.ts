@@ -7,7 +7,8 @@
  *
  * "Texts are names": HTML where the names of fields are written as text, next to their values,
  * read as names and values (docs/formats/html.md#names-written-as-text). The researcher marks
- * the element that holds them (`textNames` on its config node); nothing is guessed.
+ * the element that holds them, or a table of such elements (`textNames` on its config node);
+ * nothing is guessed.
  *
  * Inside a marked element, Combray looks for the lists that hold the texts (normalisation makes
  * repeated siblings lists), going through elements but not into the lists themselves. Which of
@@ -33,7 +34,7 @@ import { buildTree, knownKeys, unifyElementTwins, type ProjectNode } from './dec
 import { matchesChild } from './derive';
 import { inferType } from './infer';
 import { normalizeTree } from './normalize';
-import { collapseShape, extractShape, mergeAll, type Shape } from './shape';
+import { collapseShape, extractShape, ITEM_NAME, mergeAll, type Shape } from './shape';
 import type { ElementNode, ListNode, MapNode, TreeNode, ValueNode } from './tree';
 
 /** Name text longer than this is a sentence, not a name (as for table headers). */
@@ -91,6 +92,11 @@ function listPositions(node: Positions): Positions[] {
  * offers the action only then, and keeps the answer, so every row is read the same way.
  */
 export function textNamesOf(node: Positions): TextNames | undefined {
+  // A table of elements: each of its rows.
+  if (node.kind === 'list') {
+    const item = node.children?.find((c) => c.kind === 'element' && c.name === ITEM_NAME);
+    return item && textNamesOf(item);
+  }
   if (node.kind !== 'element') return undefined;
   const lists = listPositions(node).length;
   return lists === 1 ? 'pairs' : lists === 2 ? 'beside' : undefined;
@@ -185,10 +191,18 @@ export function applyTextNames(tree: TreeNode, root: ProjectNode, keys: (text: s
   const walk = marked(root);
   if (walk.size === 0) return tree;
   const visit = (node: TreeNode, project: ProjectNode): TreeNode => {
+    const read = (el: TreeNode, how: TextNames): TreeNode => {
+      if (el.kind !== 'element') return el;
+      const found = pairsIn(el, how);
+      return found ? withPairs(el, found, keys) : el;
+    };
     let out = node;
-    if (project.textNames && node.kind === 'element') {
-      const found = pairsIn(node, project.textNames);
-      if (found) out = withPairs(node, found, keys);
+    if (project.textNames && node.kind === 'element') out = read(node, project.textNames);
+    // A marked table: each of its rows.
+    else if (project.textNames && node.kind === 'list') {
+      const how = project.textNames;
+      const items = node.children.map((item) => read(item, how));
+      if (items.some((item, i) => item !== node.children[i])) out = { ...node, children: items };
     }
     if (out.kind === 'value' || out.kind === 'text' || out.kind === 'blob') return out;
     const targets = (project.children ?? []).filter((c) => walk.has(c));
@@ -222,6 +236,11 @@ export function prepareTree(raw: TreeNode, root: ProjectNode): { prepared: TreeN
  * come from shapes read after (the studio reads its exports again).
  */
 function withoutTextLists(shape: Shape, how: TextNames): Shape {
+  if (shape.kind === 'list') {
+    const children = shape.children?.map((c) => (c.kind === 'element' && c.name === ITEM_NAME ? withoutTextLists(c, how) : c));
+    return children ? { ...shape, children } : shape;
+  }
+  if (shape.kind !== 'element') return shape;
   const lists = new Set(listPositions(shape));
   if (lists.size !== (how === 'beside' ? 2 : 1)) return shape;
   const without = (s: Shape): Shape => {

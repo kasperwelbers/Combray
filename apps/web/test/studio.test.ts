@@ -2,11 +2,12 @@ import {
   buildTree,
   deriveTables,
   effectiveStates,
-    extractShape,
+  extractShape,
   jsonToTree,
   normalizeTree,
   parseFile,
   setDecision,
+  setKeysAreData,
   toConfig,
   type ConfigNode,
   type ProjectConfig,
@@ -28,6 +29,7 @@ import {
   patchNode,
   rowInfo,
   shortNames,
+  textMarks,
   toFiles,
   undecidedBelow,
   withSameNamesTogether,
@@ -207,5 +209,23 @@ describe('row notes', () => {
     expect(info.get(a!.children![0]!.children![0]!)?.nameMismatch).toBe(true);
     expect(info.get(b!.children![0]!.children![0]!)?.nameMismatch).toBe(true);
     expect(withSameNamesTogether([c!, a!, { ...c!, id: 'd' }, b!]).map((n) => n.id)).toEqual(['c', 'a', 'b', 'd']);
+  });
+});
+
+describe('corrections in the saved files', () => {
+  it('saves the seen structures without the keys a researcher says are data', () => {
+    const seen = extractShape(jsonToTree('a.json', [{ comments: { anna: 'hi', bob: 'hey' } }]));
+    const tree = buildTree({ root: { id: 'root', kind: seen.kind, match: [] } }, seen).tree;
+    const item = tree.children![0]!;
+    const keyed = setKeysAreData(tree, [item.id, item.children![0]!.id]);
+    const { structure } = toFiles({ config: { root: toConfig(keyed) }, seen });
+    expect(JSON.stringify(structure)).not.toMatch(/anna|bob/);
+  });
+
+  it('notices where texts are names, so packages are read again', () => {
+    const shape = extractShape(normalizeTree(parseFile('a.html', new TextEncoder().encode('<div><span>url</span><span>x</span></div>'))));
+    const tree = buildTree({ root: { id: 'root', kind: shape.kind, match: [] } }, shape).tree;
+    expect(textMarks(tree)).toBe('');
+    expect(textMarks(patchNode(tree, [tree.children![0]!.id], { textNames: 'pairs' }))).not.toBe('');
   });
 });

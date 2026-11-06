@@ -175,7 +175,7 @@ function checkNode(e: unknown, at: string, count: { nodes: number }, depth: numb
   }
   if (e.textNames !== undefined) {
     check(e.textNames === 'pairs' || e.textNames === 'beside', `${at}: textNames must be pairs or beside`);
-    check(e.kind === 'element', `${at}: only HTML elements have texts that are names`);
+    check(e.kind === 'element' || e.kind === 'list', `${at}: only HTML elements and their tables have texts that are names`);
   }
   if (e.newChildren !== undefined) {
     check(e.newChildren === 'ask' || e.newChildren === 'skip', `${at}: newChildren must be ask or skip`);

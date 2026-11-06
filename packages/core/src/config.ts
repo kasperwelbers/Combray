@@ -82,9 +82,9 @@ export interface NodeSettings {
   /** Maps and folders: their keys are data, and their children are one `{*}` node. */
   collapsed?: true;
   /**
-   * HTML elements: names of fields are written as text inside them, next to their values
-   * (`corrections.ts`): in one list of pairs, or in a list beside a list of values. Their
-   * children are then one per name.
+   * HTML elements, or tables of them: names of fields are written as text inside them, next to
+   * their values (`corrections.ts`): in one list of pairs, or in a list beside a list of
+   * values. Their children are then one per name.
    */
   textNames?: 'pairs' | 'beside';
 }
