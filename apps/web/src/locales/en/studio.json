@@ -51,6 +51,13 @@
   "keysTitle": "Keys",
   "makeKeysData": "The keys are data",
   "keysAreData": "The keys here are data: each key is a row of a table with a key and a value column.",
+  "textsTitle": "Names written as text",
+  "makeTextsNames": "Texts here are names",
+  "textsAreNames": {
+    "pairs": "Texts here are read as names: each label and the value after it become a field.",
+    "beside": "Texts here are read as names: the first list holds the labels, the second their values, item by item."
+  },
+  "textsBackToValues": "Read them as values again",
   "confirmKeys": "All keys here become one position, and their names are not kept, because they are data. Decisions that differ between them are listed afterwards. Continue?",
   "keyColumn": "key",
   "valueColumn": "value",
@@ -572,6 +579,10 @@
       "filter-rows": {
         "title": "Filter rows",
         "body": "Conditions the rows of a table must meet, all of them, to be imported. Use them to leave out rows that are not the participant's own activity, such as ads. The button on the row says how many filters it has."
+      },
+      "texts-are-names": {
+        "title": "Texts that are names",
+        "body": "In some HTML files the names of fields are written as text, next to their values: a label \"url\" followed by the link, or a row of labels above a row of values. Combray then shows the labels as values, mixed in with the data. Choose \"Texts here are names\" on the part that holds both the labels and the values: each label becomes the name of the value next to it. This works for labels and values that take turns (label, value, label, value), parts that each hold a label and then its value, and a list of labels next to a list of values with as many items. Where they do not line up, nothing changes. On a participant's device, a label only becomes a name when your extractor knows it; a new label stays a position, and its text is never shared. See the HTML page of the format guide for examples."
       },
       "header-row": {
         "title": "First row holds the column names",

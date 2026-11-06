@@ -81,6 +81,12 @@ export interface NodeSettings {
   undecided?: 'show';
   /** Maps and folders: their keys are data, and their children are one `{*}` node. */
   collapsed?: true;
+  /**
+   * HTML elements, or tables of them: names of fields are written as text inside them, next to
+   * their values (`corrections.ts`): in one list of pairs, or in a list beside a list of
+   * values. Their children are then one per name.
+   */
+  textNames?: 'pairs' | 'beside';
 }
 
 export interface ConfigNode extends NodeSettings {
@@ -118,6 +124,7 @@ export const SETTINGS = [
   'find',
   'undecided',
   'collapsed',
+  'textNames',
 ] as const satisfies readonly (keyof NodeSettings)[];
 
 const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';

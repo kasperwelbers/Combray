@@ -95,6 +95,8 @@ These maps become `{*}` positions, so the names never reach the structure metada
 
 The keys themselves can be shown or donated: the `{*}` node has its own decision, separate from the values inside it. Below a `{*}` node, every key matches the one position, so new keys never add paths and are never offered in a consent request.
 
+Set by hand, "the keys are data" is a correction in the configuration (`collapsed`); the seen structures are not edited. They are read through the corrections wherever it matters (`correctedShape` in `corrections.ts`): the structure file a platform saves and publishes leaves the keys out, and on a participant's device a key below a collapsed map compares as `{*}`, so a key nobody has seen is not a new part. Every case of keys that are data, per format, is in [formats/](formats/README.md).
+
 ## HTML
 
 In JSON the keys say what a value is. In HTML the structure is positional and the labels are often values themselves: "Gezocht naar", a link and "5 mrt 2024" sit next to each other as text in one `div.content-cell`. The current shape makes this worse. Sibling elements with the same tag and classes merge without a count, so 3000 `div.outer-cell`s look like one, and all `#text` siblings merge into one node.
@@ -115,6 +117,8 @@ We handle HTML in three layers. Each produces a tree, so decisions, tables and n
 - **Wrapper folding.** Chains of single-child elements fold into one step in the researcher UI.
 
 After normalisation, Google My Activity is a list of `outer-cell` rows with leaves such as `content-cell…body-1/#text[0]` (string, "Searched for"), `a/@href` (url-like), `a/#text[0]` (the query) and `#text[1]` (date-like). That is an implicit table with typed but unnamed columns, named after the file. Synthetic examples of common export layouts (My Activity, Instagram, Facebook, Snapchat, an account page with a `<dl>`) are in `packages/core/test/html/`.
+
+**Texts that are names (correction).** Where the names of fields are written as text next to their values (a `<span>url</span>` before the link, or a list of labels beside a list of values), the researcher marks the element, or its table, with `textNames` (studio: More › Texts here are names). It is then read as a `<dl>`: each label names the value next to it, with the same rule as headers and terms (a label is a key only when the project knows it; otherwise `#dt[i]` and `#dd[i]`). Whether the texts are pairs or two lists is fixed when the element is marked; rows that do not line up are left as they are. See [formats/html.md](formats/html.md#names-written-as-text) and `corrections.ts`.
 
 **Layer 2: labels from the researcher.** The researcher works on their own export in the researcher UI, so they see the values next to the positions. They label the date-like text `date` and the link `url`. Types do most of the work, since there is usually one date-like and one url-like position per row. Participants only see labels.
 

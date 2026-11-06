@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import {
   buildTree,
   configOf,
+  correctedShape,
   deriveRows,
   deriveTables,
   extractShape,
@@ -17,6 +18,7 @@ import {
   structureFile,
   treeNames,
   unionShape,
+  type ProjectConfig,
   type ProjectNode,
   type Row,
   type TableDef,
@@ -29,14 +31,17 @@ import { FIXTURES, fixtureListing, fixtureNames, readFixture } from './load';
 const ROOT = join(import.meta.dirname, '..');
 const fixturesOf = (pack: string) => fixtureNames().filter((f) => f.startsWith(`${pack}-`));
 
-/** The structures seen in a pack's fixtures: their union, as facts (no configuration). */
-async function buildStructure(pack: string) {
+/**
+ * The structures seen in a pack's fixtures: their union, with the pack's corrections over it
+ * (keys that are data), as the studio publishes it.
+ */
+async function buildStructure(pack: string, config: ProjectConfig) {
   const shapes = [];
   for (const fixture of fixturesOf(pack)) {
     // The researcher's own (here: synthetic) exports, so header text may name columns.
     shapes.push(extractShape(normalizeTree(await readFixture(fixture), { keys: () => true })));
   }
-  return structureFile(unionShape(shapes)!);
+  return structureFile(correctedShape(config, unionShape(shapes)!));
 }
 
 /** Config nodes that matched nothing in the structure: a typo in a match would leave them unused. */
@@ -54,7 +59,7 @@ describe.each(PACK_IDS)('pack %s', (id) => {
   const importer = parseImporterFile(JSON.parse(readFileSync(join(ROOT, id, 'importer.json'), 'utf8')));
 
   it('has a structure built from its fixtures', async () => {
-    const structure = await buildStructure(id);
+    const structure = await buildStructure(id, configOf(importer));
     const path = join(ROOT, id, 'structure.json');
     if (process.env.UPDATE_EXPECTED) writeFileSync(path, `${JSON.stringify(structure, null, 2)}\n`);
     expect(structure).toEqual(JSON.parse(readFileSync(path, 'utf8')));

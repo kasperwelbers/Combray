@@ -57,6 +57,11 @@ export interface StudioApi {
   addTree(name: string, tree: TreeNode): Promise<{ export: StudioExport; shape: Shape }>;
   /** A loaded package's tree, to keep it with the project. */
   exportTree(id: number): Promise<TreeNode>;
+  /**
+   * The shapes of the loaded exports as the project tree reads them now: after a correction
+   * that changes their structure (texts that are names), for adding to the seen structures.
+   */
+  readShapes(tree: ProjectNode): Promise<Shape[]>;
   removeExport(id: number): Promise<void>;
   /** The derived tables of the loaded exports, with the first rows of each. */
   /**

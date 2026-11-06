@@ -6,6 +6,7 @@
  */
 import {
   closedNodes,
+  textNamesOf,
   findPatternProblem,
   getNode,
   isLeaf,
@@ -103,6 +104,8 @@ export function MorePanel({
   actions: MoreActions;
 }) {
   const { t } = useTranslation(undefined, { lng: 'en' });
+  // Offered on elements with one list of pairs or two lists of labels and values.
+  const textNames = textNamesOf(node);
   return (
     <>
       <CheckWithHelp
@@ -120,6 +123,23 @@ export function MorePanel({
           ) : (
             <button className="button quiet" type="button" onClick={() => actions.keysAreData(path)}>
               {t('studio.makeKeysData')}
+            </button>
+          )}
+        </>
+      )}
+      {(node.textNames || textNames) && (
+        <>
+          <SectionHead title={t('studio.textsTitle')} topic="texts-are-names" />
+          {node.textNames ? (
+            <>
+              <p className="meta">{t(`studio.textsAreNames.${node.textNames}`)}</p>
+              <button className="button quiet" type="button" onClick={() => onPatch({ textNames: undefined })}>
+                {t('studio.textsBackToValues')}
+              </button>
+            </>
+          ) : (
+            <button className="button quiet" type="button" onClick={() => onPatch({ textNames })}>
+              {t('studio.makeTextsNames')}
             </button>
           )}
         </>

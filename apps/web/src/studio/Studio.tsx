@@ -12,6 +12,7 @@ import {
   keepNames,
   isDecidable,
   newPositions,
+  correctedShape,
   parseImporterFile,
   parseStructureFile,
   remapPath,
@@ -44,6 +45,7 @@ import { HelpButton, HelpLink } from './Help';
 import { MatchDialog, type MatchHint } from './MatchDialog';
 import {
   addSeen,
+  textMarks,
   asParticipantsSee,
   notSeen,
   rowInfo,
@@ -136,7 +138,9 @@ export function Studio({
   const [config, setConfig] = useState<ProjectConfig | undefined>(initial?.config);
   /** The structures seen so far, as one union: it only grows. */
   const [seen, setSeen] = useState<Shape | undefined>(initial?.seen);
-  const built = useMemo(() => (config ? buildTree(config, seen, ORDER) : undefined), [config, seen]);
+  // Seen through the researcher's corrections: parts read as names and values are no longer
+  // shown as the lists they were read from.
+  const built = useMemo(() => (config ? buildTree(config, seen && correctedShape(config, seen), ORDER) : undefined), [config, seen]);
   const tree = built?.tree;
   const [exports, setExports] = useState<StudioExport[]>([]);
   /** The shapes of the loaded exports: what each one has, to tell which nodes occur together. */
@@ -269,6 +273,23 @@ export function Studio({
     };
   }, [packages, refreshStored, t]);
 
+  // Texts that are names change the structure of the parts they mark: the loaded packages are
+  // read again, and what they have then is seen too (the seen structures only grow).
+  const marks = useMemo(() => (tree ? textMarks(tree) : ''), [tree]);
+  const latestTree = useRef(tree);
+  latestTree.current = tree;
+  useEffect(() => {
+    const current = latestTree.current;
+    if (!marks || !current || exports.length === 0) return;
+    let cancelled = false;
+    void studio.readShapes(current).then((read) => {
+      if (!cancelled && read.length > 0) setSeen((s) => addSeen(s, ...read));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [marks, exports.length]);
+
   // A few common values per field, from all loaded packages, shown on the rows of the tree.
   const [rowValues, setRowValues] = useState<Record<string, string[]>>({});
   useEffect(() => {
@@ -388,7 +409,9 @@ export function Studio({
         return info.id;
       }
       setShapes((m) => new Map(m).set(info.id, shape));
-      const added = newPositions(seen, shape).size;
+      // Keys the researcher says are data are one position, however many new ones there are.
+      const corrected = (s: Shape) => (config ? correctedShape(config, s) : s);
+      const added = newPositions(seen && corrected(seen), corrected(shape)).size;
       const nextSeen = addSeen(seen, shape);
       setSeen(nextSeen);
       if (config) {

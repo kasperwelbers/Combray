@@ -12,6 +12,7 @@ import {
   flatten,
   locateRoot,
   matchingImporters,
+  prepareTree,
   readSpot,
   runImporter,
   optionValue,
@@ -290,7 +291,8 @@ async function upToDate(): Promise<void> {
     const tables = datasets.filter((t) => t.manifest.type === 'table' && t.manifest.sourceId === d.id && t.manifest.derived !== undefined);
     if (tables.length > 0 && tables.every((t) => (t.manifest as TableManifest).importer.version === study.version)) continue;
     const manifest = d.manifest as SourceManifest;
-    const derived = deriveImport({ prepared: unflatten(await nodesOf(d.id)), shape: manifest.shape }, project, point);
+    // The stored tree is the raw one: read it the way the project reads uploads.
+    const derived = deriveImport(prepareTree(unflatten(await nodesOf(d.id)), project.tree), project, point);
     for (const t of tables) {
       tableCache.delete(t.id);
       await s.deleteDataset(t.id);

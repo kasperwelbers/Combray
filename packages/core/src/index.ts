@@ -3,7 +3,7 @@ export { inferType } from './infer';
 export { valueFormat, isFormat, dateFormats, MAX_FORMATS } from './formats';
 export { parsePath, findPath, globMatch, PathError } from './path';
 export type { Path, PathMatch, Segment, NamePattern, ElementSelector } from './path';
-export { extractShape, screenName, elementName, repeatOf, REPEATS, mergeAll, shapeSize, ITEM_NAME, COLLAPSED_NAME } from './shape';
+export { extractShape, collapseShape, screenName, elementName, repeatOf, REPEATS, mergeAll, shapeSize, ITEM_NAME, COLLAPSED_NAME } from './shape';
 export type { Shape, Repeat } from './shape';
 export { parseFile, parseEntries, parseZip, mergeDirs, decodeText, jsonToTree, isNoise } from './parse';
 export type { ParseOptions, FileEntry } from './parse';
@@ -101,6 +101,8 @@ export {
 } from './projectFiles';
 export type { StructureFile, ImporterFile } from './projectFiles';
 export { normalizeTree, MIN_REPEATS } from './normalize';
+export { applyTextNames, correctedShape, prepareTree, textNamesOf } from './corrections';
+export type { TextNames } from './corrections';
 export type { NormalizeOptions } from './normalize';
 export { runQuery, queryColumns, unnestPath, rootTable, datePart, QueryError } from './query';
 export type {

@@ -11,6 +11,7 @@ Suggested reading order:
    - [researcher-keys.md](researcher-keys.md): researcher sign-in, passkeys, project keys and the key page (built for the pilot)
    - [key-design.md](key-design.md): every key from loading data to analysis and withdrawal, with an [explainer for researchers](explainers/keys.html); participants read the in-app Questions page
 4. [universal-importer.md](universal-importer.md): files as trees, importer specs
+   - [formats/](formats/README.md): how Combray reads JSON, HTML, CSV, text and folders, with every hard case we know and what researchers can do about it (for researchers and developers)
    - [tree-decisions.md](tree-decisions.md): importers as decisions on the tree, derived tables, HTML, names and matches (design)
    - [structure-versions.md](structure-versions.md): sharing structure after upload, which nodes occur together, and why that keeps joins safe (design)
    - [plans/2026-11-04-names-and-matches.md](plans/2026-11-04-names-and-matches.md): names and matches instead of aliases, seen structures kept apart from the researcher's tree, repetition instead of count ranges (plan, built)

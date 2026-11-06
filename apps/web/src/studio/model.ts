@@ -9,6 +9,7 @@
 import {
   buildTree,
   configOf,
+  correctedShape,
   deriveTables,
   getNode,
   importerFile,
@@ -165,6 +166,7 @@ export type NodePatch = Partial<
     | 'find'
     | 'undecided'
     | 'headerRow'
+    | 'textNames'
   >
 >;
 
@@ -268,16 +270,34 @@ export interface StudioDraft {
   seen?: Shape;
 }
 
-/** The workspace draft as files: the seen structures, and the configuration. */
+/**
+ * The workspace draft as files: the seen structures, and the configuration. The structures are
+ * saved (and published) with the configuration's corrections over them, so keys the researcher
+ * says are data never reach participants; the packages kept with the platform keep theirs.
+ */
 export function toFiles(draft: StudioDraft): { structure: StructureFile; importer: ImporterFile } {
   return {
-    structure: structureFile(draft.seen ?? { kind: draft.config.root.kind, name: '' }),
+    structure: structureFile(draft.seen ? correctedShape(draft.config, draft.seen) : { kind: draft.config.root.kind, name: '' }),
     importer: importerFile(draft.config),
   };
 }
 
 export function fromFiles(structure: StructureFile, importer: ImporterFile): StudioDraft {
   return { config: configOf(importer), seen: structure.root };
+}
+
+/**
+ * Where a project tree says texts are names (`textNames`), as one string: it changes when a
+ * mark is set or taken off, and then the loaded packages are read again.
+ */
+export function textMarks(tree: ProjectNode): string {
+  const out: string[] = [];
+  const visit = (node: ProjectNode, path: string[]) => {
+    if (node.textNames) out.push(path.join('/'));
+    for (const child of node.children ?? []) visit(child, [...path, child.id]);
+  };
+  visit(tree, []);
+  return out.join('\n');
 }
 
 /** The seen structures with one more added (they only grow). */
