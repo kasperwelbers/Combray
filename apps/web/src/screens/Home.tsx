@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { localize } from '@combray/core';
 
+import { BackupCard } from '../components/BackupCard';
 import { ImportCard } from '../components/ImportCard';
 import { foldedPath } from '../format';
 import { RawData } from './Explore';
@@ -103,6 +104,8 @@ export function Home({ datasets, points, onChanged, onOpenTable, onDonate, onSto
           </ul>
         )}
       </section>
+
+      {datasets.length > 0 && <BackupCard />}
     </>
   );
 }

@@ -29,7 +29,7 @@ import {
   type UploadListing,
 } from '@combray/core';
 import { importers } from '@combray/importers';
-import { LocalStore, WrongKeyError } from '@combray/store';
+import { BackupError, LocalStore, newPasswordSalt, passwordForServer, WrongKeyError } from '@combray/store';
 import * as Comlink from 'comlink';
 
 import type {
@@ -94,6 +94,14 @@ async function getStore(): Promise<LocalStore<DatasetManifest>> {
   if (!projectId) throw new Error('no project open');
   store ??= await LocalStore.open<DatasetManifest>(DB_PREFIX + projectId);
   return store;
+}
+
+/**
+ * What the server is sent for a password: derived with the store's salt, so the server never
+ * sees the password itself. Stores made before the salt existed send it as typed.
+ */
+async function forServer(s: LocalStore<DatasetManifest>, password: string): Promise<string> {
+  return s.passwordSalt ? passwordForServer(password, s.passwordSalt) : password;
 }
 
 async function unlockedStore(): Promise<LocalStore<DatasetManifest>> {
@@ -446,11 +454,13 @@ const api: DataApi = {
     const s = await getStore();
     if (project.id !== projectId) throw new Error('another project is open');
     const id = project.participants.mode === 'anonymous' ? undefined : participantId;
-    const created = await createServerStore(project.id, id, password);
+    const passwordSalt = newPasswordSalt();
+    const created = await createServerStore(project.id, id, await passwordForServer(password, passwordSalt));
     if (!created.ok) return created.result;
     await s.create(created.store, {
       project: { id: project.id, name: project.name },
       participantId: id,
+      passwordSalt,
     });
     return { status: 'ok' };
   },
@@ -458,7 +468,7 @@ const api: DataApi = {
   async resetPassword(token, password) {
     const s = await getStore();
     if (!s.storeId) throw new Error('no store on this device yet');
-    const reset = await resetPassword(s.storeId, token, password);
+    const reset = await resetPassword(s.storeId, token, await forServer(s, password));
     if (!reset.ok) return reset.result;
     try {
       await s.unlock(reset.kek);
@@ -472,7 +482,7 @@ const api: DataApi = {
   async unlock(password) {
     const s = await getStore();
     if (!s.storeId) throw new Error('no store on this device yet');
-    const fetched = await fetchKek(s.storeId, password);
+    const fetched = await fetchKek(s.storeId, await forServer(s, password));
     if (!fetched.ok) return fetched.result;
     try {
       await s.unlock(fetched.kek);
@@ -496,6 +506,24 @@ const api: DataApi = {
     if (s.storeId && s.deleteToken) await deleteServerStore(s.storeId, s.deleteToken);
     await s.destroy();
     store = undefined;
+  },
+
+  async backup() {
+    const s = await getStore();
+    const file = await s.exportBackup(self.location.origin);
+    return { file, name: `combray-${projectId}-${new Date().toISOString().slice(0, 10)}.combray` };
+  },
+
+  async restore(file) {
+    const s = await getStore();
+    forget();
+    try {
+      await s.restoreBackup(file, { origin: self.location.origin, projectId: projectId! });
+      return { status: 'ok' };
+    } catch (error) {
+      if (error instanceof BackupError) return { status: error.problem };
+      throw error;
+    }
   },
 
   async importFiles(uploads, onProgress, point) {

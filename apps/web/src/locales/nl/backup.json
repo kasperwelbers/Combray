@@ -1,0 +1,17 @@
+{
+  "title": "Bewaar een reservekopie",
+  "intro": "Bewaar je gegevens hier als één bestand. Het blijft op slot, en gaat alleen open met je wachtwoord, op deze computer of een andere. Zo houd je je gegevens als de browser ze opruimt, en kun je ergens anders verder.",
+  "after": "Heb je hem bewaard, dan kun je de oorspronkelijke download van het platform van je computer verwijderen. Een reservekopie bevat wat hier nu staat, dus bewaar een nieuwe als je gegevens toevoegt of iets deelt.",
+  "save": "Reservekopie bewaren",
+  "saved": "Je reservekopie staat bij je downloads. Bewaar hem op een veilige plek; hij gaat alleen open met je wachtwoord.",
+  "restoreAsk": "Eerder een reservekopie bewaard?",
+  "restore": "Open hem hier",
+  "restored": "Je reservekopie staat nu op deze computer. Typ je wachtwoord om hem te openen.",
+  "problem": {
+    "not-a-backup": "Dit bestand is geen reservekopie van Combray. Die eindigt op .combray.",
+    "damaged": "Deze reservekopie lijkt beschadigd of onvolledig, dus we konden hem niet openen. Heb je nog een andere kopie?",
+    "newer-version": "Deze reservekopie is gemaakt met een nieuwere versie van Combray. Probeer het later nog eens.",
+    "other-server": "Deze reservekopie hoort bij een andere Combray-server. Open hem daar.",
+    "other-project": "Deze reservekopie hoort bij een ander onderzoek. Open hem via de pagina van dat onderzoek."
+  }
+}

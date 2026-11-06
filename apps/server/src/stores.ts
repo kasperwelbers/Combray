@@ -17,6 +17,8 @@ function keyError(e: unknown): never {
       throw new HttpError(401, 'wrong_password', err.retryAfter);
     case 'too_many_attempts':
       throw new HttpError(429, 'too_many_attempts', err.retryAfter);
+    case 'locked':
+      throw new HttpError(423, 'store_locked');
   }
 }
 

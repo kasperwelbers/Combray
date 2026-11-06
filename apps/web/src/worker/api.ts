@@ -15,6 +15,7 @@ import type {
   ValueType,
 } from '@combray/core';
 import type { DonationConsent } from '@combray/seal';
+import type { BackupProblem } from '@combray/store';
 
 /** An imported archive, folder or file, stored as its tree. Encrypted; never sent anywhere. */
 export interface SourceManifest {
@@ -302,9 +303,14 @@ export type ResetResult =
 export type UnlockResult =
   | { status: 'ok' }
   | { status: 'wrong-password'; retryAfter?: number }
+  /** Too many wrong passwords in a row: only a reset link from the researchers opens it again. */
+  | { status: 'locked' }
   /** The server no longer has this store's key, so the data cannot be opened again. */
   | { status: 'store-gone' }
   | KeyServiceProblem;
+
+/** Restoring a backup file on this device. */
+export type RestoreResult = { status: 'ok' } | { status: BackupProblem };
 
 /**
  * What a data block of a story shows, computed from the participant's own tables on their device
@@ -419,6 +425,10 @@ export interface DataApi {
   resetPassword(token: string, password: string): Promise<ResetResult>;
   lock(): Promise<void>;
   destroy(): Promise<void>;
+  /** The open project's store as a backup file, still encrypted. Works while locked. */
+  backup(): Promise<{ file: Blob; name: string }>;
+  /** Fill this device's (empty) store for the open project from a backup file. It stays locked. */
+  restore(file: Blob): Promise<RestoreResult>;
   /**
    * Import an upload. With an upload point, its root is found for the point's project tree;
    * without, everything is read for the YAML importers.

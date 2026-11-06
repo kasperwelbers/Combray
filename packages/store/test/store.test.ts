@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { deleteDB, openDB } from 'idb';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { LocalStore, StoreLockedError, WrongKeyError, type ServerStore } from '../src';
+import { BackupError, LocalStore, newPasswordSalt, passwordForServer, StoreLockedError, WrongKeyError, type ServerStore } from '../src';
 
 let n = 0;
 const about = { project: { id: 'willow', name: { en: 'Willow study' } }, participantId: 'P1234' };
@@ -190,5 +190,127 @@ describe('LocalStore', () => {
     const again = await LocalStore.open(store.dbName);
     stores.push(again);
     expect(again.exists).toBe(false);
+  });
+});
+
+const ORIGIN = 'https://combray.example.edu';
+const expected = { origin: ORIGIN, projectId: 'willow' };
+
+/** A store with a few datasets, a file, and its server's KEK. */
+async function filledStore() {
+  const store = await newStore();
+  const server = serverStore();
+  const salt = newPasswordSalt();
+  await store.create(server, { ...about, passwordSalt: salt });
+  const a = await store.putDataset({ name: 'history' }, items, 5);
+  const b = await store.putDataset({ name: 'empty' }, []);
+  const bytes = crypto.getRandomValues(new Uint8Array(3000));
+  const f = await store.putFile({ name: 'file' }, new Blob([bytes]), 1024);
+  return { store, server, salt, ids: { a, b, f }, bytes };
+}
+
+async function restored(file: Blob, into = expected) {
+  const target = await newStore();
+  await target.restoreBackup(file, into);
+  return target;
+}
+
+async function problem(file: Blob, into = expected): Promise<string | undefined> {
+  const target = await newStore();
+  try {
+    await target.restoreBackup(file, into);
+    return undefined;
+  } catch (error) {
+    expect(target.exists).toBe(false);
+    if (error instanceof BackupError) return error.problem;
+    throw error;
+  }
+}
+
+describe('backup files', () => {
+  it('restore a store on another device, still locked, and open with the same KEK', async () => {
+    const { store, server, salt, ids, bytes } = await filledStore();
+    store.lock();
+    // Made while locked: nothing is decrypted.
+    const file = await store.exportBackup(ORIGIN);
+    const copy = await restored(file);
+    expect(copy.exists).toBe(true);
+    expect(copy.unlocked).toBe(false);
+    expect(copy.storeId).toBe(server.storeId);
+    expect(copy.deleteToken).toBe('token');
+    expect(copy.participantId).toBe('P1234');
+    expect(copy.project).toEqual(about.project);
+    expect(copy.passwordSalt).toEqual(salt);
+    await expect(copy.unlock(serverStore().kek)).rejects.toBeInstanceOf(WrongKeyError);
+    await copy.unlock(server.copy());
+    expect(await copy.getItems(ids.a)).toEqual(items);
+    expect(await copy.getItems(ids.b)).toEqual([]);
+    expect(new Uint8Array(await (await copy.getFile(ids.f)).arrayBuffer())).toEqual(bytes);
+    expect((await copy.listDatasets()).map((d) => d.manifest)).toEqual(
+      expect.arrayContaining([{ name: 'history' }, { name: 'empty' }, { name: 'file' }]),
+    );
+  });
+
+  it('contain no plaintext', async () => {
+    const { store } = await filledStore();
+    const text = new TextDecoder('latin1').decode(await (await store.exportBackup(ORIGIN)).arrayBuffer());
+    expect(text).not.toContain('memory 1');
+    expect(text).not.toContain('history');
+  });
+
+  it("refuse another server's or another project's backup", async () => {
+    const { store } = await filledStore();
+    const file = await store.exportBackup(ORIGIN);
+    expect(await problem(file, { origin: 'https://other.example.org', projectId: 'willow' })).toBe('other-server');
+    expect(await problem(file, { origin: ORIGIN, projectId: 'oak' })).toBe('other-project');
+  });
+
+  it('refuse other files, and truncated or reshuffled backups', async () => {
+    const { store } = await filledStore();
+    const file = await store.exportBackup(ORIGIN);
+    expect(await problem(new Blob(['takeout.zip contents']))).toBe('not-a-backup');
+    expect(await problem(new Blob([]))).toBe('not-a-backup');
+    expect(await problem(file.slice(0, file.size - 10))).toBe('damaged');
+    // Whole frames missing at the end: the end marker is gone.
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const view = new DataView(bytes.buffer);
+    let offset = 8;
+    const frames: number[] = [];
+    while (offset < bytes.length) {
+      frames.push(offset);
+      offset += 4 + view.getUint32(offset);
+    }
+    expect(await problem(new Blob([bytes.slice(0, frames.at(-1))]))).toBe('damaged');
+    // A frame left out in the middle: the counts do not add up.
+    expect(await problem(new Blob([bytes.slice(0, frames[3]), bytes.slice(frames[4])]))).toBe('damaged');
+  });
+
+  it('are caught by the data key when a record was changed', async () => {
+    const { store, server, ids } = await filledStore();
+    const bytes = new Uint8Array(await (await store.exportBackup(ORIGIN)).arrayBuffer());
+    // Flip a byte near the end, inside the last chunk's ciphertext (of whichever dataset is last).
+    bytes[bytes.length - 60]! ^= 1;
+    const copy = await restored(new Blob([bytes]));
+    await copy.unlock(server.copy());
+    const reads = await Promise.allSettled([copy.getItems(ids.a), copy.getItems(ids.b), copy.getFile(ids.f)]);
+    expect(reads.filter((r) => r.status === 'rejected')).toHaveLength(1);
+  });
+
+  it('are refused when a store already exists', async () => {
+    const { store } = await filledStore();
+    await expect(store.restoreBackup(await store.exportBackup(ORIGIN), expected)).rejects.toThrow('already exists');
+  });
+});
+
+describe('passwordForServer', () => {
+  it('depends on the password and the salt, and never contains the password', async () => {
+    const salt = newPasswordSalt();
+    const sent = await passwordForServer('madeleine', salt);
+    expect(sent).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(await passwordForServer('madeleine', salt)).toBe(sent);
+    expect(await passwordForServer('madeleinf', salt)).not.toBe(sent);
+    expect(await passwordForServer('madeleine', newPasswordSalt())).not.toBe(sent);
+    // The same password typed in another Unicode form is the same password.
+    expect(await passwordForServer('cafe\u0301', salt)).toBe(await passwordForServer('caf\u00e9', salt));
   });
 });

@@ -97,3 +97,30 @@ export async function decrypt(
   );
   return new Uint8Array(plaintext);
 }
+
+/** PBKDF2 iterations for the password the server sees. The server hashes it again with Argon2id. */
+export const PASSWORD_ITERATIONS = 100_000;
+
+/** A new random salt for `passwordForServer`, kept with the store (and in its backups). */
+export function newPasswordSalt(): Uint8Array<ArrayBuffer> {
+  return randomBytes(32);
+}
+
+/**
+ * What the browser sends to the key service instead of the password itself:
+ * PBKDF2-SHA-256(password, salt), base64url. The salt never leaves the device (or the
+ * participant's backup file), so the server never learns the password, nor can it test guesses
+ * for it, and a password used elsewhere stays private. The server still checks this value with
+ * Argon2id and its lockout, exactly as it checked the password. See docs/security.md#store-keys.
+ */
+export async function passwordForServer(password: string, salt: Uint8Array<ArrayBuffer>): Promise<string> {
+  const material = await crypto.subtle.importKey('raw', encoder.encode(password.normalize('NFC')), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: PASSWORD_ITERATIONS }, material, 256);
+  return base64Url(new Uint8Array(bits));
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}

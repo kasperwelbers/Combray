@@ -13,10 +13,14 @@
  *
  * The store never talks to the server itself: the caller fetches the KEK from the key service
  * and passes its raw bytes to `create` or `unlock`.
+ *
+ * `exportBackup` and `restoreBackup` copy these records, still encrypted, to and from a backup
+ * file (see ./backup.ts).
  */
 import { decode, encode } from '@msgpack/msgpack';
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
+import { BACKUP_VERSION, BackupError, BackupWriter, ownBytes, readBackup } from './backup';
 import {
   aad,
   createDek,
@@ -43,6 +47,11 @@ interface StoreMeta {
   project: StoreProject;
   /** The participant id from the study link, if the project uses them. */
   participantId?: string;
+  /**
+   * The salt for `passwordForServer`: the server only ever sees the password derived with it.
+   * Stores made before it was added send the password itself.
+   */
+  passwordSalt?: Uint8Array<ArrayBuffer>;
 }
 
 /** The project a store belongs to. The name is public (from the project config). */
@@ -144,13 +153,17 @@ export class LocalStore<M = unknown> {
     return this.meta?.participantId;
   }
 
+  get passwordSalt(): Uint8Array<ArrayBuffer> | undefined {
+    return this.meta?.passwordSalt;
+  }
+
   /**
    * Create a new, empty store whose DEK is wrapped under the server's KEK. Fails if a store
    * exists. The KEK bytes are wiped after import.
    */
   async create(
     server: ServerStore,
-    about: { project: StoreProject; participantId?: string | undefined },
+    about: { project: StoreProject; participantId?: string | undefined; passwordSalt?: Uint8Array<ArrayBuffer> },
   ): Promise<void> {
     if (this.meta) throw new Error('a store already exists on this device');
     const { wrapped, dek } = await createDek(await importKek(server.kek));
@@ -163,6 +176,7 @@ export class LocalStore<M = unknown> {
       project: about.project,
     };
     if (about.participantId) meta.participantId = about.participantId;
+    if (about.passwordSalt) meta.passwordSalt = about.passwordSalt;
     await this.db.put('meta', meta, 'store');
     this.meta = meta;
     this.dek = dek;
@@ -313,6 +327,116 @@ export class LocalStore<M = unknown> {
     ]);
   }
 
+  /**
+   * Copy the whole store, as it is on disk, into a backup file. Works while locked: nothing is
+   * decrypted. `origin` is the Combray server the store belongs to.
+   */
+  async exportBackup(origin: string): Promise<Blob> {
+    const meta = this.requireMeta();
+    const out = new BackupWriter();
+    out.add({ t: 'header', kind: 'combray-backup', version: BACKUP_VERSION, origin, created: new Date().toISOString().slice(0, 10), meta: metaFrame(meta) });
+    const entries = await this.db.getAll('index');
+    let chunks = 0;
+    for (const entry of entries) {
+      out.add({ t: 'index', v: entry });
+      const manifest = await this.db.get('manifests', entry.id);
+      if (!manifest) throw new Error(`missing manifest for ${entry.id}`);
+      out.add({ t: 'manifest', id: entry.id, iv: manifest.iv, data: new Uint8Array(manifest.ciphertext) });
+      for (let n = 0; n < entry.chunkCount; n++) {
+        const record = await this.db.get('chunks', [entry.id, n]);
+        if (!record) throw new Error(`missing chunk ${n} of ${entry.id}`);
+        out.add({ t: 'chunk', id: entry.id, n, iv: record.iv, data: new Uint8Array(record.ciphertext) });
+        chunks += 1;
+      }
+    }
+    out.add({ t: 'end', datasets: entries.length, chunks });
+    return out.finish();
+  }
+
+  /**
+   * Fill this empty database from a backup file. The store stays locked: it opens with the
+   * password as usual. Throws `BackupError` (and leaves the database empty) if the file is not
+   * a backup, is damaged, or belongs to another server or project.
+   */
+  async restoreBackup(file: Blob, expected: { origin: string; projectId: string }): Promise<void> {
+    if (this.meta) throw new Error('a store already exists on this device');
+    try {
+      await this.readInto(file, expected);
+    } catch (error) {
+      await this.clear();
+      throw error;
+    }
+  }
+
+  private async readInto(file: Blob, expected: { origin: string; projectId: string }): Promise<void> {
+    let meta: StoreMeta | undefined;
+    const index = new Map<string, DatasetIndexEntry>();
+    const manifests = new Set<string>();
+    let chunks = 0;
+    let ended = false;
+    for await (const frame of readBackup(file)) {
+      if (ended) throw new BackupError('damaged');
+      if (!meta) {
+        if (frame.t !== 'header' || frame.kind !== 'combray-backup') throw new BackupError('not-a-backup');
+        if (typeof frame.version !== 'number' || frame.version > BACKUP_VERSION) throw new BackupError('newer-version');
+        if (frame.origin !== expected.origin) throw new BackupError('other-server');
+        meta = parseMeta(frame.meta);
+        if (meta.project.id !== expected.projectId) throw new BackupError('other-project');
+        continue;
+      }
+      switch (frame.t) {
+        case 'index': {
+          const entry = parseIndexEntry(frame.v);
+          if (index.has(entry.id)) throw new BackupError('damaged');
+          index.set(entry.id, entry);
+          await this.db.put('index', entry);
+          break;
+        }
+        case 'manifest': {
+          const id = knownId(frame.id, index);
+          manifests.add(id);
+          await this.db.put('manifests', record(frame), id);
+          break;
+        }
+        case 'chunk': {
+          const id = knownId(frame.id, index);
+          const n = frame.n;
+          if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n >= index.get(id)!.chunkCount) throw new BackupError('damaged');
+          await this.db.put('chunks', record(frame), [id, n]);
+          chunks += 1;
+          break;
+        }
+        case 'end': {
+          const expectedChunks = [...index.values()].reduce((sum, e) => sum + e.chunkCount, 0);
+          if (frame.datasets !== index.size || frame.chunks !== chunks || chunks !== expectedChunks || manifests.size !== index.size) {
+            throw new BackupError('damaged');
+          }
+          ended = true;
+          break;
+        }
+        default:
+          throw new BackupError('damaged');
+      }
+    }
+    if (!meta) throw new BackupError('not-a-backup');
+    if (!ended) throw new BackupError('damaged');
+    // Last, so that a store only exists once everything else is in place.
+    await this.db.put('meta', meta, 'store');
+    this.meta = meta;
+  }
+
+  private async clear(): Promise<void> {
+    const tx = this.db.transaction(['meta', 'index', 'manifests', 'chunks'], 'readwrite');
+    await Promise.all([
+      tx.objectStore('meta').clear(),
+      tx.objectStore('index').clear(),
+      tx.objectStore('manifests').clear(),
+      tx.objectStore('chunks').clear(),
+      tx.done,
+    ]);
+    this.meta = undefined;
+  }
+
   private requireMeta(): StoreMeta {
     if (!this.meta) throw new Error('no store on this device yet');
     return this.meta;
@@ -323,4 +447,71 @@ export class LocalStore<M = unknown> {
     if (!this.dek) throw new StoreLockedError();
     return { dek: this.dek, storeId: meta.storeId };
   }
+}
+
+/** The store's metadata as written to a backup: byte fields as Uint8Array. */
+function metaFrame(meta: StoreMeta): Record<string, unknown> {
+  return { ...meta, unlock: { mode: meta.unlock.mode, wrappedDek: new Uint8Array(meta.unlock.wrappedDek) } };
+}
+
+const isString = (v: unknown, max = 256): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const DATASET_ID = /^[0-9a-f]{32}$/;
+
+function parseMeta(value: unknown): StoreMeta {
+  if (!isRecord(value) || !isRecord(value.unlock) || !isRecord(value.project)) throw new BackupError('damaged');
+  const { storeId, formatVersion, createdAt, unlock, deleteToken, project, participantId, passwordSalt } = value;
+  if (typeof formatVersion === 'number' && formatVersion > FORMAT_VERSION) throw new BackupError('newer-version');
+  if (
+    !isString(storeId, 64) ||
+    formatVersion !== FORMAT_VERSION ||
+    !isString(createdAt, 32) ||
+    unlock.mode !== 'server' ||
+    !isString(deleteToken, 128) ||
+    !isString(project.id, 64) ||
+    (participantId !== undefined && !isString(participantId, 64))
+  ) {
+    throw new BackupError('damaged');
+  }
+  const meta: StoreMeta = {
+    storeId,
+    formatVersion,
+    createdAt,
+    unlock: { mode: 'server', wrappedDek: ownBytes(unlock.wrappedDek).buffer },
+    deleteToken,
+    project: { id: project.id, ...(project.name !== undefined ? { name: project.name } : {}) },
+  };
+  if (participantId !== undefined) meta.participantId = participantId;
+  if (passwordSalt !== undefined) meta.passwordSalt = ownBytes(passwordSalt);
+  return meta;
+}
+
+function parseIndexEntry(value: unknown): DatasetIndexEntry {
+  if (!isRecord(value)) throw new BackupError('damaged');
+  const { id, kind, chunkCount, sizeBucket, formatVersion } = value;
+  if (
+    typeof id !== 'string' ||
+    !DATASET_ID.test(id) ||
+    (kind !== 'items' && kind !== 'bytes') ||
+    typeof chunkCount !== 'number' ||
+    !Number.isInteger(chunkCount) ||
+    chunkCount < 0 ||
+    typeof sizeBucket !== 'number' ||
+    typeof formatVersion !== 'number' ||
+    formatVersion > FORMAT_VERSION
+  ) {
+    throw new BackupError('damaged');
+  }
+  return { id, kind, chunkCount, sizeBucket, formatVersion };
+}
+
+function knownId(value: unknown, index: Map<string, DatasetIndexEntry>): string {
+  if (typeof value !== 'string' || !index.has(value)) throw new BackupError('damaged');
+  return value;
+}
+
+function record(frame: Record<string, unknown>): EncryptedRecord {
+  const iv = ownBytes(frame.iv);
+  if (iv.byteLength !== 12) throw new BackupError('damaged');
+  return { iv, ciphertext: ownBytes(frame.data).buffer };
 }

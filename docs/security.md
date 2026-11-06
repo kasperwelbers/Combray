@@ -133,14 +133,26 @@ Against an attacker who has only the device or only the server, this is exactly 
 ### Passwords and guessing
 
 - **Argon2id** with OWASP's recommended minimum: 19 MiB of memory, 2 passes, 1 lane, a 16-byte random salt, and a 32-byte output compared in constant time. The parameters are stored per store, so they can be raised later without breaking existing stores. Hashing runs on blocking threads, with a semaphore that bounds how many hashes run at once (one per CPU), so the memory cost cannot be used to exhaust the server.
-- **Length:** at least 8 characters and at most 1,024 bytes. There are no composition rules, which mostly make passwords harder to remember, not harder to guess.
+- **What the server sees:** not the password. The browser derives `PBKDF2-SHA-256(password (NFC), salt, 100,000 iterations)` as 32 bytes, base64url, and sends that. The salt is 32 random bytes made when the store is created, kept in the store's metadata on the device and in backup files, and never sent to the server. So the server (or anyone reading its traffic or logs) cannot learn the password, nor test guesses for it, and a password used elsewhere stays private. The server treats the derived value exactly as it treated a password: Argon2id, the lockout and the limits below. Stores created before the salt existed send the password as typed (`passwordForServer` in `packages/store/src/crypto.ts`, `forServer` in the data worker).
+- **Length:** the participant app asks for at least 6 characters; the server accepts 6 characters to 1,024 bytes. There are no composition rules and no list of refused passwords, which mostly make passwords harder to remember, not harder to guess. The app warns, without refusing, when a password looks easy to guess: length times log2 of the character classes used, with runs and simple sequences counted once, under 25 bits (`apps/web/src/passwordStrength.ts`). With guessing online only and the hard lock below, an attacker gets at most 50 guesses, so the choice is the participant's.
 - **Per-store lockout:** each attempt is counted as a failure *before* the hash is checked, in the same transaction as the lockout check, so parallel guesses are counted too. A correct password resets the count. The first 5 failures are free. After that, the store waits 30 seconds, then doubling up to a maximum of 1 hour. The correct password is also refused during the wait. This gives an attacker at most about 24 guesses a day.
+- **Hard lock:** after 50 failures since the last correct password, the store refuses every password, also the right one, with 423 `store_locked` and no `Retry-After`. Only a [reset link](#password-reset) (which clears the count) or deleting the store helps. An attacker with the device or a backup file therefore gets 50 guesses in total, not 24 a day forever. Someone without the device cannot reach this, because store ids are random. An honest participant will not type 50 wrong passwords in a row.
 - **Per-IP rate limits:** 120 unlock attempts and 60 new stores per 10 minutes, in memory. These are generous because a whole lab can share one IP. They stop one client from spraying many stores or filling the disk. The client IP is read from the peer address, or from the last `X-Forwarded-For` entry when `COMBRAY_CLIENT_IP_HEADER` is set (Caddy overwrites that header). IPs are never stored or logged.
-- **Responses** distinguish a wrong password (401, with `Retry-After` once the lockout starts), a lockout (429 with `Retry-After`) and an unknown store (404). Revealing whether a store exists does not matter, because ids are random and unguessable, and the client needs to know when a store has been deleted.
+- **Responses** distinguish a wrong password (401, with `Retry-After` once the lockout starts), a lockout (429 with `Retry-After`), a hard lock (423) and an unknown store (404). Revealing whether a store exists does not matter, because ids are random and unguessable, and the client needs to know when a store has been deleted.
 
 ### Deleting a store
 
 "Delete everything from this computer" first asks the server to forget the store's key, then deletes the local database. The request is authorised by a **delete token**: 32 random bytes the server issued when the store was created, kept on the device (the server stores only its SHA-256 hash). Keeping it on the device is harmless, because whoever can use it could just as well delete the local data. It means a participant who forgot their password can still start over cleanly. If the server cannot be reached, the local data is deleted anyway, and the orphaned server record is useless without the device data.
+
+### Backup files
+
+`exportBackup` and `restoreBackup` in `packages/store` (format in `packages/store/src/backup.ts`, flow in [key-design.md](key-design.md#8-the-backup-file)). A backup file is the store's IndexedDB records, byte for byte, plus its metadata: store id, project, participant id, the wrapped DEK, the delete token and the password salt. Nothing is decrypted to make it.
+
+- **Alone, the file is as safe as a copy of the disk:** reading it needs the KEK, which the server releases only for the password, with the lockout and hard lock above. The password salt in it is not a key.
+- **The delete token is in the file.** Whoever has the file can make the server forget the KEK, which only destroys data, and is what lets a participant delete everything from another computer.
+- **Restoring checks** that the file starts with the magic bytes, belongs to this server (origin) and project, has a supported version, valid ids and lengths, and an end marker whose counts match. On any problem the database is emptied again; the store's metadata is written last, so a half-restored store never exists. A changed byte inside a record is caught by AES-GCM and the record's additional data when it is read. Restoring is refused when this device already has a store for the project.
+- **Memory:** the file is written as a Blob of Blobs, flushed every 32 MiB, and read frame by frame with `Blob.slice`, so neither direction holds the whole store in memory.
+- **The server is not involved** in making or restoring a backup, and never stores one.
 
 ### No passphrase-only mode
 
@@ -152,9 +164,9 @@ An earlier design also wrapped the DEK with a non-extractable "device key" store
 
 ### Known limits
 
-- **The server sees the password** (over TLS) while it checks it. A password-authenticated key exchange (for example OPAQUE) would avoid that. It is a candidate for later, but it does not help against the out-of-scope case of a malicious server, which could serve altered code anyway.
+- **The server sees a value derived from the password**, not the password. It cannot test guesses for the password without the device's salt. Together with the device (or a backup file), the server operator could guess the password offline; but they could already open the data with the KEK they hold. A malicious server could serve altered code that sends the password itself, which is out of scope as before.
 - **Server and device together** (store master key, database and a copy of the disk) can decrypt without the password once the Argon2 hash is cracked. Mixing a password-derived secret into the KEK would only raise the cost to that of cracking the hash, so we do not.
-- **A forgotten password means lost data for anonymous participants.** Participants with an id can get a [reset link](#password-reset). Anyone can import their export again. A planned Combray package will let participants keep their encrypted store as a file that opens on any device with their password ([key-design.md](key-design.md#8-planned-the-combray-package-export-and-restore)).
+- **A forgotten password means lost data for anonymous participants.** Participants with an id can get a [reset link](#password-reset). Anyone can import their export again. A [backup file](#backup-files) does not help here: it opens with the same password.
 - **The store master key cannot be rotated yet.** Rotating it would mean re-wrapping on each device at its next unlock.
 - **Orphaned records** (a device whose browser data was cleared) stay on the server until a retention policy removes them. They are useless without the device data.
 
@@ -422,6 +434,9 @@ A project's platform keeps the test packages researchers add in the studio (`tes
 | Wrap the DEK instead of keeping it on the server | Server stores the DEK | The data key never leaves the device; rotation and extra unlock paths without re-encryption |
 | KEK derived with HKDF from a store master key and a per-store salt | Random KEK stored encrypted in the database | Same protection, no key material in the database, deletion is crypto-shredding |
 | Argon2id (19 MiB, t=2) with a per-store lockout | PBKDF2, bcrypt, rate limiting only | Memory-hard, OWASP-recommended; the lockout makes short passwords workable |
+| Browser sends PBKDF2(password, device salt), not the password | Send the password; OPAQUE | The server never learns the password, at the cost of one WebCrypto call; OPAQUE needs a non-vetted library in the browser ([ADR 0014](decisions/0014-participant-passwords-and-backups.md)) |
+| At least 6 characters, a warning for weak ones, hard lock after 50 failures | 8+ characters; a list of refused passwords; no hard lock | Guessing is online only and now capped at 50 guesses; lists are long to ship and keep current, and paternalistic |
+| Backup file the participant keeps, opened with the password | Recovery link; download from the server; a device key shared across projects | No new secret to explain, nothing stored on the server, no linking across studies ([ADR 0014](decisions/0014-participant-passwords-and-backups.md)) |
 | No passphrase or no-server mode | Offline fallback | It brings back offline guessing, and no study needs it yet |
 | No device-key layer | Device key + server secret | It sits on the same disk as the data, so it adds nothing |
 | Delete token for crypto-shredding | Require the password to delete | Participants who forgot their password can still delete cleanly, and the token gives no read access |

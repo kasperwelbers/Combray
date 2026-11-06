@@ -1,6 +1,7 @@
 /**
  * Client for the server's store key service. The server holds each store's KEK and releases it
- * only for the store's password; the data and its DEK never leave this device.
+ * only for the store's password; the data and its DEK never leave this device. The `password`
+ * passed here is what the server may see: `passwordForServer` of what the participant typed.
  * See docs/security.md#store-keys.
  */
 import type { ServerStore } from '@combray/store';
@@ -82,6 +83,8 @@ export async function fetchKek(
     }
     case 404:
       return { ok: false, result: { status: 'store-gone' } };
+    case 423:
+      return { ok: false, result: { status: 'locked' } };
     case 429:
       return { ok: false, result: { status: 'too-many-attempts', retryAfter: retryAfter(response) ?? 60 } };
     default:

@@ -21,7 +21,7 @@
     "donationKey": "donatiesleutel",
     "keptApart": "apart bewaard",
     "everyCopy": "elke kopie: voorgoed onleesbaar",
-    "package": "pakket",
+    "package": "reservekopie",
     "withPassword": "met je wachtwoord"
   },
   "items": {
@@ -36,8 +36,9 @@
     "server": {
       "q": "Wat doet de Combray-server?",
       "a": [
-        "De server wordt beheerd door de universiteit. Hij bewaart de sleutel van je kistje en geeft die alleen terug als je je wachtwoord intypt. Je gegevens krijgt hij nooit, dus hij kan ze ook niet lezen.",
-        "Omdat de server het wachtwoord controleert, krijgt iemand die het probeert te raden een paar pogingen en moet daarna steeds langer wachten."
+        "De server wordt beheerd door de universiteit. Hij bewaart de sleutel van je doosje en geeft die alleen terug als je je wachtwoord typt. Je gegevens krijgt hij nooit, dus hij kan ze ook niet lezen.",
+        "Je browser stuurt zelfs het wachtwoord niet mee, alleen een versleutelde versie ervan die nergens anders iets waard is. Een wachtwoord dat je ook ergens anders gebruikt kan dus, al is een nieuw beter.",
+        "Omdat de server het wachtwoord controleert, krijgt iemand die het probeert te raden een paar pogingen en moet daarna steeds langer wachten. Na veel verkeerde pogingen achter elkaar blijft je plek voorgoed op slot."
       ]
     },
     "open": {
@@ -58,8 +59,8 @@
     "forgot": {
       "q": "Ik ben mijn wachtwoord vergeten. Wat nu?",
       "a": [
-        "Doe je mee via een persoonlijke link, dan kunnen de onderzoekers je helpen. Ze controleren of jij het echt bent en sturen je een link om een nieuw wachtwoord te kiezen. Open die link op de computer waar je je gegevens hebt toegevoegd.",
-        "Zonder persoonlijke link kan niemand de gegevens nog openen, ook de onderzoekers niet. Je kunt opnieuw beginnen en je gegevens nog een keer toevoegen."
+        "Doe je mee via een persoonlijke link, dan kunnen de onderzoekers je helpen. Ze controleren of jij het echt bent en sturen je een link om een nieuw wachtwoord te kiezen. Open die link op de computer waar je je gegevens hebt toegevoegd. Dat geldt ook als je plek op slot ging na veel verkeerde pogingen.",
+        "Zonder persoonlijke link kan niemand de gegevens nog openen, ook de onderzoekers niet. Je kunt opnieuw beginnen en je gegevens nog een keer toevoegen. Een reservekopie helpt hier niet: die gaat open met hetzelfde wachtwoord."
       ]
     },
     "who": {
@@ -87,10 +88,11 @@
     },
     "package": {
       "q": "Kan ik mijn gegevens bewaren, of meenemen naar een andere computer?",
-      "art": "Download je versleutelde gegevens als één bestand, en open het op een andere computer met je wachtwoord.",
+      "art": "Bewaar je versleutelde gegevens als één bestand, en open het op een andere computer met je wachtwoord.",
       "a": [
-        "Je kunt je gegevens downloaden als één afgesloten bestand, een <b>Combray-pakket</b>. Het opent op elke computer, maar pas nadat je je wachtwoord typt. Zo kun je het veilig bewaren, meenemen, of de oorspronkelijke download van je computer verwijderen.",
-        "Verwijder je alles in Combray, dan gaat ook het pakket niet meer open."
+        "Ja. Kies <b>Reservekopie bewaren</b> onder je gegevens. Je krijgt één afgesloten bestand, dat op elke computer opent, maar pas nadat je je wachtwoord typt. Bewaar het op een veilige plek, dan kun je de oorspronkelijke download van je computer verwijderen.",
+        "Om het op een andere computer te openen, ga je daar naar de pagina van het onderzoek en kies je <b>Open hem hier</b> onder het wachtwoord. Deel je later iets, bewaar dan een nieuwe reservekopie, zodat die dat ook bevat.",
+        "Verwijder je alles in Combray, dan gaat ook een reservekopie niet meer open."
       ]
     },
     "delete": {

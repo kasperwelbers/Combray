@@ -9,13 +9,13 @@ import type { ProjectTexts, Translations } from '@combray/core';
 import i18n, { LANGUAGES } from './i18n';
 
 /** Groups of texts a project can word its own way: what participants see inside a study. */
-export const PROJECT_GROUPS = ['app', 'chart', 'datasets', 'donate', 'explore', 'faq', 'fields', 'import', 'kind', 'lock', 'notice', 'story', 'table', 'type', 'views'] as const;
+export const PROJECT_GROUPS = ['app', 'backup', 'chart', 'datasets', 'donate', 'explore', 'faq', 'fields', 'import', 'kind', 'lock', 'notice', 'story', 'table', 'type', 'views'] as const;
 
 /**
  * Groups about privacy, keys and donating: a project may word them its own way, but what they
  * say must stay true, so the Texts page warns before they are changed.
  */
-export const CAREFUL_GROUPS = new Set<string>(['lock', 'donate', 'notice', 'faq']);
+export const CAREFUL_GROUPS = new Set<string>(['lock', 'backup', 'donate', 'notice', 'faq']);
 
 export const appTextKey = (key: string) => key.replace(':', '.');
 
