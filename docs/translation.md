@@ -42,7 +42,7 @@ Everything participants see is in English and Dutch. Researcher tools and docume
 | researcher | onderzoeker |
 | personal link | persoonlijke link |
 | Questions (page) | Vragen |
-| Combray package | Combray-pakket |
+| backup (file) | reservekopie |
 
 ## Translating with an AI model
 

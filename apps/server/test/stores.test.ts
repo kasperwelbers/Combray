@@ -5,6 +5,7 @@
  */
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { describe, expect, it } from 'vitest';
 
@@ -195,13 +196,13 @@ describe('store keys', () => {
 
   it('rejects short and overlong passwords and unknown stores', async () => {
     const s = await startServer({ research: false });
-    for (const password of ['short', 'é'.repeat(7), 'x'.repeat(1025)]) {
+    for (const password of ['short', 'é'.repeat(5), 'x'.repeat(1025)]) {
       const r = await post(s, '/api/v1/stores', '192.0.2.1', { project: 'willow', password });
       expect(r.status, password).toBe(400);
       expect(r.json).toEqual({ error: 'invalid_password' });
     }
-    // Eight characters is enough, however many bytes.
-    await create(s, 'é'.repeat(8));
+    // Six characters is enough, however many bytes.
+    await create(s, 'é'.repeat(6));
 
     const unknown = await unlock(s, 'AAAAAAAAAAAAAAAAAAAAAA', PASSWORD);
     expect(unknown.status).toBe(404);
@@ -230,6 +231,27 @@ describe('store keys', () => {
     expect(right.status).toBe(429);
     expect(right.json).toEqual({ error: 'too_many_attempts' });
     expect(Number(right.headers['retry-after'])).toBeGreaterThan(0);
+  });
+
+  it('locks a store for good after 50 wrong passwords in a row, until a reset', async () => {
+    const s = await startServer();
+    const id = (await createIn(s, 'oak', 'P1234')).json.store_id as string;
+    // Waiting out 49 lockouts would take days: count the failures in the database instead.
+    const db = new DatabaseSync(s.paths.db);
+    db.prepare('UPDATE stores SET failures = 49, locked_until = 0 WHERE id = ?').run(id);
+    const fiftieth = await unlock(s, id, 'a wrong guess');
+    expect(fiftieth.status).toBe(423);
+    expect(fiftieth.json).toEqual({ error: 'store_locked' });
+    db.prepare('UPDATE stores SET locked_until = 0 WHERE id = ?').run(id);
+    // The right password no longer helps, and the lockout no longer counts down.
+    const right = await unlock(s, id, PASSWORD);
+    expect(right.status).toBe(423);
+    expect(right.headers['retry-after']).toBeUndefined();
+    db.close();
+    // A reset lifts it.
+    const done = await reset(s, id, await resetToken(s, 'oak', 'P1234'), 'a new password');
+    expect(done.status, done.text).toBe(200);
+    expect((await unlock(s, id, 'a new password')).status).toBe(200);
   });
 
   it('rate limits new stores per client IP (60 per 10 minutes)', async () => {

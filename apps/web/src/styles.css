@@ -2179,6 +2179,11 @@ button.tag {
   margin-top: 2rem;
 }
 
+/* The backup file offer, below the participant's uploads. */
+.backup-call {
+  margin-top: 2rem;
+}
+
 .donate-tables {
   display: grid;
   gap: 0.75rem;

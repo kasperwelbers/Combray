@@ -1,6 +1,6 @@
 # Key design: stores, donations and withdrawal
 
-This document follows one participant's data from the moment it is loaded to the moment a researcher analyses it, and names every key on the way. It is the agreed plan ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The local store, donation sealing and storage, withdrawal, and the researchers' key page are built; the participant donate screen and the package export are not yet. How researchers sign in and hold their keys is in [researcher-keys.md](researcher-keys.md) ([ADR 0007](decisions/0007-browser-key-page.md)). [security.md](security.md) records the details of what is built, and [privacy-and-encryption.md](privacy-and-encryption.md) the threat model and constructions.
+This document follows one participant's data from the moment it is loaded to the moment a researcher analyses it, and names every key on the way. It is the agreed plan ([ADR 0006](decisions/0006-revocable-donation-keys.md)). The local store, donation sealing and storage, withdrawal, the researchers' key page, the participant donate screen and backup files are built. How researchers sign in and hold their keys is in [researcher-keys.md](researcher-keys.md) ([ADR 0007](decisions/0007-browser-key-page.md)). [security.md](security.md) records the details of what is built, and [privacy-and-encryption.md](privacy-and-encryption.md) the threat model and constructions.
 
 For a version with pictures, see [the explainer for researchers](explainers/keys.html). Participants get the same story in the app, on the Questions page (`/p/{project}/faq`, `apps/web/src/screens/Faq.tsx`).
 
@@ -13,15 +13,15 @@ The participant's data is encrypted in their browser with a **data key**. The da
 | Key | What it is | Where it lives | Who can use it |
 | --- | --- | --- | --- |
 | **Data key** (store DEK) | Random AES-256 key that encrypts everything in the participant's local store | Only in the browser's data worker, non-extractable, while the store is open | The participant's open session |
-| **Locked box** (wrapped DEK) | The data key, encrypted with AES-KW under the box key | On the device, in the store's metadata; also in a Combray package | Nobody, without the box key |
+| **Locked box** (wrapped DEK) | The data key, encrypted with AES-KW under the box key | On the device, in the store's metadata; also in a backup file | Nobody, without the box key |
 | **Box key** (store KEK) | Derived on the server from the store master key and a per-store salt | On the server; sent to the browser for the right password, used once, wiped | The server, and the browser for a moment after login |
-| **Password** | Chosen by the participant, at least 8 characters | Only in the participant's head; the server keeps an Argon2id hash | The participant |
+| **Password** | Chosen by the participant, at least 6 characters | Only in the participant's head. The browser sends the server only PBKDF2(password, salt), with a salt kept on the device and in backup files; the server keeps an Argon2id hash of that | The participant |
 | **Donation key** | Fresh random AES-256 key for one donation | Made in the browser at donation time; only ever stored sealed | The researcher's tools, in memory |
 | **Sealed donation key** | The donation key, sealed with HPKE (X-Wing) to the project key | On the server, in a key database separate from the donations | A member with access, on the key page, who may fetch it from the server |
 | **Project key** | X-Wing (X25519 + ML-KEM-768) key pair for the project | Public key and fingerprint in the project config; the private key only sealed to each member's personal key | Members with access, on the key page, in memory |
 | **Personal key** | X-Wing key pair per researcher, from a master secret | Public key on the server; master secret on the server only locked under the researcher's passkey (PRF), and as their recovery code | One researcher, after a passkey or the recovery code |
 | **Researcher session** | Passkey (after an email code the first time) | `HttpOnly` cookie on the key site; a separate studio session without key access | One researcher |
-| **Withdrawal token** | Random secret from the donation receipt | Kept by the participant (device, package, or printed receipt); server stores a hash | The participant |
+| **Withdrawal token** | Random secret from the donation receipt | Kept by the participant (device, backup file, or the receipt code); server stores a hash | The participant |
 
 Two things never meet in one place by design: the locked box and its key (device and server), and the sealed donation keys and an open project key (server, and a researcher's key page while it is unlocked).
 
@@ -29,9 +29,9 @@ Two things never meet in one place by design: the locked box and its key (device
 
 ### 1. Starting: create a password
 
-The participant opens the project link and chooses a password. The server creates a store record (random 128-bit store id, KEK salt, Argon2id hash, a hash of the delete token) and returns the box key once. Built ([ADR 0004](decisions/0004-server-held-store-keys.md)).
+The participant opens the project link and chooses a password. The browser makes a random 32-byte salt, keeps it with the store, and sends PBKDF2-SHA-256(password, salt) instead of the password, so the server never learns the password itself. The server creates a store record (random 128-bit store id, KEK salt, Argon2id hash, a hash of the delete token) and returns the box key once. Built ([ADR 0004](decisions/0004-server-held-store-keys.md)).
 
-Keeping the password hash on the server is what makes guessing slow: the server counts failures and locks out after a few. It also lets the participant log in on another device. A hash cannot open anything; the server could hand out the box key anyway.
+Keeping the password hash on the server is what makes guessing slow: the server counts failures, locks out after a few, and after 50 in a row locks the store until a reset. It also lets the participant log in on another device. A hash cannot open anything; the server could hand out the box key anyway.
 
 ### 2. Loading data
 
@@ -85,28 +85,29 @@ From that moment no copy of the donation can be opened, wherever it is: not the 
 
 Built ([ADR 0005](decisions/0005-projects-scope-stores.md)): a participant with an id asks the researcher, who checks who they are and creates a one-time reset link. The server sets the new password and returns the same box key, so the data opens again. Whoever can create reset links (the researchers, and for now the server operator) could, with the participant's device in hand, open that local data. We accept this: the server operator already holds the box keys, and requiring the researcher key as well would not stop them.
 
-### 8. Planned: the Combray package (export and restore)
+### 8. The backup file
 
-A participant can download their store as one file, a **Combray package**:
+Built ([ADR 0014](decisions/0014-participant-passwords-and-backups.md)). Below their uploads, a participant can save their store as one file, a **backup file** (`.combray`; called the Combray package in earlier plans):
 
 ```
-CombrayPackage v1
-├─ manifest: format version, server URL, project id, store id, created_at (day)
-├─ locked box (the wrapped data key)
-└─ encrypted slices and caches, exactly as in IndexedDB
+CMBRYBK1, then length-prefixed MessagePack frames:
+├─ header: backup version, server origin, day, the store's metadata
+│    (store id, project, participant id, locked box, delete token, password salt)
+├─ per dataset: its index entry, encrypted manifest, encrypted chunks, as in IndexedDB
+└─ end marker with counts, which catches a truncated file
 ```
 
-It contains nothing that is not already on the disk, and it opens only by logging in with the password, on any device: the client imports the package, the participant enters the password, the server releases the box key for that store id, and the browser opens the box. The data key stays non-extractable throughout; the box is already plain bytes.
+It contains nothing that is not already on the disk, and nothing is decrypted to make it, so it can be made while the store is locked. It opens only by logging in with the password, on any device: on the study's page, before a store exists, the participant chooses **Open it here** under the password field; the browser checks that the file is a backup for this server and project and copies it into IndexedDB; the participant types the password; the server releases the box key for that store id; and the browser opens the box. The data key stays non-extractable throughout; the box is already plain bytes. Donation receipts (withdrawal tokens), answers and left-out rows are in the store, so they come along.
 
-This gives participants a safe way to keep their data, move it to another computer, and protect it against the browser clearing its storage. We can advise them to download the package right away and delete the original download package from their computer. Deleting the store on the server makes every package unreadable, which is what makes "delete everything" true. The client should also ask the browser for persistent storage (`navigator.storage.persist()`), so IndexedDB is less likely to be evicted.
+This gives participants a safe way to keep their data, move it to another computer, and protect it against the browser clearing its storage. The app advises them to delete the original download from the platform once the backup is saved, and to save a new one after adding data or donating. Deleting the store on the server ("Delete everything", with the delete token that is in the file too) makes every backup unreadable. The client also asks the browser for persistent storage (`navigator.storage.persist()`) after creating or opening a store, so IndexedDB is less likely to be evicted.
 
-What we give up is that data is tied to one browser. The protection stays the same as for a copy of the disk: the file alone is not enough, and password guessing is online only.
+The protection stays the same as for a copy of the disk: the file alone is not enough, and password guessing is online only. There is deliberately no recovery link and no download from the server: without the participant's own file there is nothing to recover except donations, and the receipt code covers those.
 
 ## Who can see what
 
 | Who | Has | Can read local data | Can read a donation |
 | --- | --- | --- | --- |
-| Someone with the participant's laptop or a package | Ciphertext, locked box | No (needs the password, guessed online only) | No |
+| Someone with the participant's laptop or a backup file | Ciphertext, locked box | No (needs the password, guessed online only) | No |
 | Server operator | Box keys, password hashes, envelopes, sealed keys, sealed project keys, locked personal keys | Only with the participant's device too | No (needs a researcher's passkey or recovery code), unless they serve a malicious key page ([limits](researcher-keys.md#limits)) |
 | Someone who stole the server database | Same as operator, without the store master key if kept apart | No | No |
 | Researcher | Passkey, recovery code, a session | No (never gets the data key) | Yes, while the donation is not withdrawn and they are a member |

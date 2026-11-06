@@ -1,0 +1,17 @@
+{
+  "title": "Keep a backup",
+  "intro": "Save your data here as one file. It stays locked, and opens only with your password, on this computer or another one. That way you keep your data if the browser clears it, and you can carry on elsewhere.",
+  "after": "Once you have saved it, you can delete the original download from the platform from your computer. A backup holds what is here now, so save a new one after you add data or share something.",
+  "save": "Save a backup",
+  "saved": "Your backup is in your downloads. Keep it somewhere safe; it opens only with your password.",
+  "restoreAsk": "Saved a backup earlier?",
+  "restore": "Open it here",
+  "restored": "Your backup is on this computer now. Type your password to open it.",
+  "problem": {
+    "not-a-backup": "This file is not a Combray backup. It ends in .combray.",
+    "damaged": "This backup seems damaged or incomplete, so we could not open it. Do you have another copy?",
+    "newer-version": "This backup was made with a newer version of Combray. Please try again later.",
+    "other-server": "This backup belongs to another Combray server. Open it there.",
+    "other-project": "This backup belongs to another study. Open it from that study's page."
+  }
+}

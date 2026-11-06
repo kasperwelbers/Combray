@@ -1,11 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Madeleine } from '../components/Madeleine';
-import type { CreateResult, ResetResult, UnlockResult } from '../worker/api';
-
-/** The server's minimum; see apps/server/src/keys.ts. */
-export const MIN_PASSWORD = 8;
+import { isWeakPassword, MIN_PASSWORD } from '../passwordStrength';
+import type { CreateResult, ResetResult, RestoreResult, UnlockResult } from '../worker/api';
 
 interface Props {
   exists: boolean;
@@ -16,10 +14,12 @@ interface Props {
   onCreate: (password: string) => Promise<CreateResult>;
   onUnlock: (password: string) => Promise<UnlockResult>;
   onReset: (password: string) => Promise<ResetResult>;
+  /** Restore a backup file made earlier, on this or another computer. Offered before a store exists. */
+  onRestore: (file: File) => Promise<RestoreResult>;
   onDeleteAll: () => Promise<void>;
 }
 
-export function Lock({ exists, reset, participantId, notice, onCreate, onUnlock, onReset, onDeleteAll }: Props) {
+export function Lock({ exists, reset, participantId, notice, onCreate, onUnlock, onReset, onRestore, onDeleteAll }: Props) {
   // A new password is chosen when creating the store and when resetting it.
   const choosing = !exists || reset;
   const { t } = useTranslation();
@@ -27,8 +27,10 @@ export function Lock({ exists, reset, participantId, notice, onCreate, onUnlock,
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const backupInput = useRef<HTMLInputElement>(null);
+  const weak = choosing && [...password].length >= MIN_PASSWORD && isWeakPassword(password);
 
-  function problem(result: CreateResult | UnlockResult | ResetResult): string | undefined {
+  function problem(result: CreateResult | UnlockResult | ResetResult | RestoreResult): string | undefined {
     const wait = (seconds: number) => t('lock.wait', { count: Math.ceil(seconds / 60) });
     switch (result.status) {
       case 'ok':
@@ -41,6 +43,14 @@ export function Lock({ exists, reset, participantId, notice, onCreate, onUnlock,
         return wait(result.retryAfter);
       case 'store-gone':
         return t('lock.storeGone');
+      case 'locked':
+        return participantId ? t('lock.lockedAskReset') : t('lock.lockedStartOver');
+      case 'not-a-backup':
+      case 'damaged':
+      case 'newer-version':
+      case 'other-server':
+      case 'other-project':
+        return t(`backup.problem.${result.status}`);
       case 'invalid-participant':
       case 'participant-required':
         return t('lock.invalidParticipant');
@@ -69,6 +79,19 @@ export function Lock({ exists, reset, participantId, notice, onCreate, onUnlock,
     }
   }
 
+  async function restore(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError(undefined);
+    setBusy(true);
+    try {
+      setError(problem(await onRestore(file)));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteAll() {
     if (window.confirm(t('lock.confirmDelete'))) await onDeleteAll();
   }
@@ -90,8 +113,14 @@ export function Lock({ exists, reset, participantId, notice, onCreate, onUnlock,
             onChange={(e) => setPassword(e.target.value)}
             autoFocus
             required
+            {...(choosing ? { 'aria-describedby': 'password-hint' } : {})}
           />
         </label>
+        {choosing && (
+          <p className="meta" id="password-hint" aria-live="polite">
+            {weak ? t('lock.weak') : t('lock.hint', { min: MIN_PASSWORD })}
+          </p>
+        )}
         {choosing && (
           <label className="field">
             {t('lock.confirm')}
@@ -113,6 +142,15 @@ export function Lock({ exists, reset, participantId, notice, onCreate, onUnlock,
           {busy ? t('lock.working') : reset ? t('lock.reset') : exists ? t('lock.unlock') : t('lock.create')}
         </button>
       </form>
+      {!exists && (
+        <p style={{ marginTop: '1.5rem' }}>
+          {t('backup.restoreAsk')}{' '}
+          <button className="link-button" type="button" disabled={busy} onClick={() => backupInput.current?.click()}>
+            {t('backup.restore')}
+          </button>
+          <input ref={backupInput} type="file" accept=".combray" hidden onChange={(e) => void restore(e)} />
+        </p>
+      )}
       {exists && !reset && (
         <p style={{ marginTop: '1.5rem' }}>
           {participantId && (

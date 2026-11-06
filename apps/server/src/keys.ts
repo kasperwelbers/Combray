@@ -8,7 +8,10 @@
  *   The database holds only the salt, so a copy of the database without the store master key yields
  *   no keys, and deleting the row crypto-shreds the store.
  * - Passwords are hashed with Argon2id. Failed attempts are counted per store *before* the hash is
- *   checked, so parallel guesses are counted too, and lead to an increasing lockout.
+ *   checked, so parallel guesses are counted too, and lead to an increasing lockout. After
+ *   HARD_LOCK_FAILURES failures in a row the store is locked for good: only a reset link (or
+ *   deleting it) helps. The browser sends a value derived from the password with a salt that
+ *   stays on the device, never the password itself (older stores excepted).
  * - Per client IP, attempts and new stores are rate limited in memory. IPs are never stored or logged.
  * - Only stores with a participant id can have their password reset, with a one-time token a
  *   researcher creates after verifying who the participant is. A reset keeps the KEK.
@@ -32,12 +35,15 @@ import { b64, fromB64, nowSecs, random, sameBytes, sha256, validRandomId } from 
 const KEK_INFO = 'combray/store-kek/v1/';
 /** How long a password reset link stays valid. */
 export const RESET_TTL_SECS = 72 * 3600;
-const MIN_PASSWORD_CHARS = 8;
+/** The browser asks for at least 6 characters; it sends a derived value, which is longer. */
+const MIN_PASSWORD_CHARS = 6;
 const MAX_PASSWORD_BYTES = 1024;
 /** Failed attempts allowed before the lockout starts. */
 const FREE_ATTEMPTS = 5;
 const LOCKOUT_BASE_SECS = 30;
 const LOCKOUT_MAX_SECS = 3600;
+/** Failed attempts since the last right one after which the store stays locked until a reset. */
+export const HARD_LOCK_FAILURES = 50;
 
 /** Generous, because a whole lab can share one IP; the per-store lockout is the real defence. */
 const ATTEMPTS_PER_IP = 120;
@@ -49,7 +55,8 @@ export type KeyError =
   | { kind: 'not_found' }
   | { kind: 'invalid_reset_token' }
   | { kind: 'wrong_password'; retryAfter?: number }
-  | { kind: 'too_many_attempts'; retryAfter: number };
+  | { kind: 'too_many_attempts'; retryAfter: number }
+  | { kind: 'locked' };
 
 export class KeyFailure extends Error {
   readonly error: KeyError;
@@ -185,6 +192,7 @@ export class KeyService {
       (tx) => {
         const store = tx.select().from(stores).where(eq(stores.id, storeId)).get();
         if (!store) return fail({ kind: 'not_found' });
+        if (store.failures >= HARD_LOCK_FAILURES) return fail({ kind: 'locked' });
         if (store.lockedUntil > now) return fail({ kind: 'too_many_attempts', retryAfter: store.lockedUntil - now });
         const failures = store.failures + 1;
         tx.update(stores).set({ failures, lockedUntil: now + lockoutSecs(failures) }).where(eq(stores.id, storeId)).run();
@@ -194,6 +202,7 @@ export class KeyService {
     );
     const hash = await this.hash(password, store.pwSalt, { mKib: store.mKib, t: store.tCost, p: store.pCost });
     if (!sameBytes(hash, store.pwHash)) {
+      if (failures >= HARD_LOCK_FAILURES) return fail({ kind: 'locked' });
       const lockout = lockoutSecs(failures);
       return fail({ kind: 'wrong_password', ...(lockout > 0 ? { retryAfter: lockout } : {}) });
     }

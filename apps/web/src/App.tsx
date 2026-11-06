@@ -278,12 +278,16 @@ function ProjectApp({ project, participantId, resetToken, keyPin, page }: Projec
             {...(notice ? { notice } : {})}
             onCreate={async (password) => {
               const result = await data.create(password, project, participantId);
-              if (result.status === 'ok') await refresh();
+              if (result.status === 'ok') {
+                keepStored();
+                await refresh();
+              }
               return result;
             }}
             onUnlock={async (password) => {
               const result = await data.unlock(password);
               if (result.status === 'ok') {
+                keepStored();
                 setNotice(undefined);
                 await refresh();
               }
@@ -294,6 +298,14 @@ function ProjectApp({ project, participantId, resetToken, keyPin, page }: Projec
               if (result.status === 'ok') {
                 setReset(undefined);
                 setNotice(undefined);
+                await refresh();
+              }
+              return result;
+            }}
+            onRestore={async (file) => {
+              const result = await data.restore(file);
+              if (result.status === 'ok') {
+                setNotice(t('backup.restored'));
                 await refresh();
               }
               return result;
@@ -351,4 +363,12 @@ function ProjectApp({ project, participantId, resetToken, keyPin, page }: Projec
       )}
     </Shell>
   );
+}
+
+/**
+ * Ask the browser to keep this site's data when disk space runs low, instead of clearing it
+ * (best effort: browsers decide, some ask the participant). A backup file is the real safeguard.
+ */
+function keepStored(): void {
+  navigator.storage?.persist?.().catch(() => undefined);
 }
