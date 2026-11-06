@@ -16,6 +16,8 @@ RUN pnpm install --frozen-lockfile
 COPY apps apps
 COPY packages packages
 COPY importers importers
+# The studio's example projects are bundled into the web client.
+COPY deploy/examples deploy/examples
 RUN pnpm --filter @combray/web build && pnpm --filter @combray/keys build
 # The server with its production dependencies only, in a folder of its own.
 RUN pnpm --filter @combray/server deploy --prod --legacy /out/server
