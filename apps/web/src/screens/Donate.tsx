@@ -121,6 +121,20 @@ export function Donate({ keyPin, onBack }: Props) {
               )}
             </p>
           )}
+          {overview.rules.length > 0 && (
+            <ul className="left-out-rules" aria-label={t('donate.rulesTitle')}>
+              {overview.rules.map((rule, i) => (
+                <li key={`${rule.table ?? ''}\u0000${rule.text}`}>
+                  {rule.tableName !== undefined
+                    ? t('donate.ruleInTable', { text: rule.text, table: localize(rule.tableName, i18n.language) || t('donate.unnamedTable'), count: rule.count })
+                    : t('donate.rule', { text: rule.text, count: rule.count })}{' '}
+                  <button type="button" className="link-button" onClick={async () => changed(await data.removeRule(i))}>
+                    {t('donate.putBack')}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="donate-tables">
             {overview.tables.map((table) => (
               <DonateTable key={table.id} table={table} parent={overview.tables.find((p) => p.id === table.parent)} version={version} onChanged={changed} />
@@ -357,6 +371,8 @@ function DonateTable({
                           <td>
                             {row.withParent ? (
                               <span className="meta">{t('donate.outWithParent')}</span>
+                            ) : row.byText ? (
+                              <span className="meta">{t('donate.outByText')}</span>
                             ) : (
                               <button
                                 type="button"

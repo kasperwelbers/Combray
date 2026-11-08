@@ -225,14 +225,18 @@ describe.skipIf(!enabled)('key page', () => {
 
   it('opens a donation and exports it as CSV', async () => {
     const config = await (await fetch(`${MAIN}/api/v1/p/willow/config`)).json();
-    const payload = encodePayload({
-      format: 'combray-donation/1',
-      tables: [{ id: 'watch', name: 'Watch history', fields: [{ id: 'title', name: 'title' }, { id: 'day', name: 'day' }] }],
+    const rows = [{ table: 'watch', steps: 2 }];
+    const payload = await encodePayload({
+      format: 'combray-donation/2',
+      entries: [
+        { platform: 'youtube', path: ['watch.json', '[*]', 'title'], table: 'watch', field: 'title', rows },
+        { platform: 'youtube', path: ['watch.json', '[*]', 'day'], table: 'watch', field: 'day', rows },
+      ],
       values: [
-        { table: 'watch', row: 0, field: 'title', path: ['watch.json', '[0]', 'title'], value: '=HYPERLINK("x")' },
-        { table: 'watch', row: 0, field: 'day', path: ['watch.json', '[0]', 'day'], value: '2026-10-01' },
-        { table: 'watch', row: 1, field: 'title', path: ['watch.json', '[1]', 'title'], value: 'A video' },
-        { table: 'watch', row: 1, field: 'day', path: ['watch.json', '[1]', 'day'], value: '2026-10-02' },
+        [0, [0], '=HYPERLINK("x")'],
+        [1, [0], '2026-10-01'],
+        [0, [1], 'A video'],
+        [1, [1], '2026-10-02'],
       ],
       answers: { q1: 'yes' },
     });
@@ -252,12 +256,13 @@ describe.skipIf(!enabled)('key page', () => {
       for (const [name, text] of Object.entries(unzip(readFileSync((await d.path())!)))) downloads[`willow-${name}`] = text;
     });
     await ada.page.getByRole('button', { name: 'Open and download' }).click();
-    await ada.page.getByText('Opened 1 donation(s).').waitFor();
+    await ada.page.getByText(/^Opened 1 donation\(s\)/).waitFor();
     await expect
       .poll(() => Object.keys(downloads).sort())
-      .toEqual(['willow-answers.csv', 'willow-donations.csv', 'willow-donations.json', 'willow-table-watch.csv', 'willow-values.csv']);
-    const csv = downloads['willow-table-watch.csv']!;
-    expect(csv).toContain('donation,day,row,title,day');
+      .toEqual(['willow-answers.csv', 'willow-donations.csv', 'willow-donations.json', 'willow-fields.csv', 'willow-values.csv', 'willow-youtube-watch.csv']);
+    // No name map for this platform: the names it was donated with.
+    const csv = downloads['willow-youtube-watch.csv']!;
+    expect(csv).toContain('.donation,.day,.version,.id,title,day');
     expect(csv).toContain(`'=HYPERLINK`);
     expect(csv).toContain('A video,2026-10-02');
     expect(downloads['willow-values.csv']).toContain('watch.json/[1]/title');
@@ -327,8 +332,8 @@ describe.skipIf(!enabled)('key page', () => {
       for (const [name, text] of Object.entries(unzip(readFileSync((await d.path())!)))) downloads[`willow-${name}`] = text;
     });
     await ada.page.getByRole('button', { name: 'Open and download' }).click();
-    await ada.page.getByText('Opened 2 donation(s).').waitFor();
-    await expect.poll(() => Object.keys(downloads)).toContain('willow-table-youtube_watch_history.csv');
+    await ada.page.getByText(/^Opened 2 donation\(s\)/).waitFor();
+    await expect.poll(() => Object.keys(downloads)).toContain('willow-takeout-youtube_watch_history.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-values.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-consent.csv');
     await expect.poll(() => Object.keys(downloads)).toContain('willow-questions.csv');
@@ -337,7 +342,7 @@ describe.skipIf(!enabled)('key page', () => {
     expect(downloads['willow-donations.csv']).toMatch(/,1,en\r\n/);
     expect(downloads['willow-answers.csv']).toMatch(/,More,2(,|\r\n)/);
     expect(downloads['willow-questions.csv']).toContain('en,hours,How many hours a day?,');
-    expect(downloads['willow-table-youtube_watch_history.csv']).toContain('Lime blossom tea');
+    expect(downloads['willow-takeout-youtube_watch_history.csv']).toContain('Lime blossom tea');
     expect(downloads['willow-values.csv']!.toLowerCase()).not.toContain('madeleines');
 
     // Withdrawn from the participant's own page.

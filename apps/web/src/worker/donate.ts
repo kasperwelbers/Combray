@@ -3,13 +3,15 @@
  * participant to review, leave rows out of, and send encrypted (docs/privacy-and-encryption.md).
  *
  * The values are matched afresh from the stored uploads with the study's current settings, in
- * long format (`donationValues` in `@combray/core`). They are sealed here, to the study's key,
- * and only the sealed envelope leaves the device.
+ * long format with their raw paths (`donationValues` in `@combray/core`, ADR 0015). Left-out rows
+ * are dropped, positions numbered again and the payload gzipped (`donationPayload`); it is
+ * sealed here, to the study's key, and only the sealed envelope leaves the device.
  */
 import {
   buildTree,
   combineDonations,
   deriveTables,
+  donationPayload,
   donationValues,
   localize,
   parseStory,
@@ -27,27 +29,26 @@ import {
 import { donationRequest, encodePayload, fingerprint, fromBase64Url, sealDonation, type DonationConsent, type DonationQuestion } from '@combray/seal';
 
 import { projectTexts, uploadPoints } from '../projectConfig';
-import type { DonateResult, DonationOverview, DonationRow, DonationTable, Page, StudyConsent, UploadPoint } from './api';
+import type { DonateResult, DonationOverview, DonationRow, DonationTable, LeaveOutRule, Page, StudyConsent, UploadPoint } from './api';
 import type { PointProject } from './derived';
 
-/** The donation from one upload, with a stable key per row and names for people. */
+/** The donation from one upload, with names for people. Rows are known by their hash (`DonatedRow.hash`). */
 export interface UploadDonation {
   content: DonationContent;
-  keys: string[];
   names: Map<string, { name: Localized; fields: Map<string, Localized> }>;
 }
 
 /**
  * What one upload gives: its tree (as stored) read the way the import read it, matched with the
- * study's settings. Rows are keyed by upload, table and the path of the row in the files.
+ * study's settings for its upload point (`pointId`, the platform its paths are in).
  */
-export function uploadDonation(sourceId: string, raw: TreeNode, project: PointProject): UploadDonation {
+export function uploadDonation(pointId: string, raw: TreeNode, project: PointProject): UploadDonation {
   const { prepared, shape } = prepareTree(raw, project.tree);
   const tree = buildTree(project.config, shape, {
     seen: project.seen,
   }).tree;
   const tables = deriveTables(tree, project.labels);
-  const content = donationValues(prepared, tree, tables);
+  const content = donationValues(prepared, tree, tables, pointId);
   const names = new Map<string, { name: Localized; fields: Map<string, Localized> }>();
   for (const t of tables) {
     const entry = names.get(t.id) ?? {
@@ -57,27 +58,38 @@ export function uploadDonation(sourceId: string, raw: TreeNode, project: PointPr
     for (const c of t.columns) if (!entry.fields.has(c.id)) entry.fields.set(c.id, c.name);
     names.set(t.id, entry);
   }
-  return {
-    content,
-    keys: content.rows.map((r) => JSON.stringify([sourceId, r.table, r.path])),
-    names,
-  };
+  return { content, names };
 }
+
+/**
+ * What the participant left out, kept on this device (ADR 0015): rows by their hash, and texts
+ * ("everything with bob", in one table or all), which also leave out rows of later uploads.
+ */
+export interface LeftOut {
+  rows: ReadonlySet<string>;
+  rules: readonly LeaveOutRule[];
+}
+
+export const NOTHING_LEFT_OUT: LeftOut = { rows: new Set(), rules: [] };
 
 const rowId = (table: string, row: number) => `${table}\u0000${row}`;
 
 const cellText = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
 
+/** Text as compared for leaving out: case and accents do not matter. */
+const folded = (text: string) => text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase();
+
 /**
- * The donation of all uploads, for review. Left-out rows are kept by key, so they stay out as
- * long as the uploads and the study's settings do not change.
+ * The donation of all uploads, for review. Rows are left out by their hash and by texts, so they
+ * stay out after a new upload or a new version of the study.
  */
 export class Review {
   readonly content: DonationContent;
   /** The study's settings it was made with: a donation is only sent with the same. */
   readonly settings: string;
-  private readonly keyOf = new Map<DonatedRow, string>();
   private readonly cells = new Map<string, Record<string, string[]>>();
+  /** Every value of a row as read and as in the file, folded: what texts are looked for in. */
+  private readonly searchable = new Map<string, string[]>();
   private readonly names = new Map<string, { name: Localized; fields: Map<string, Localized> }>();
 
   /** What the study tells participants and asks them to agree to. */
@@ -87,15 +99,16 @@ export class Review {
     this.settings = settings;
     this.consent = consent;
     this.content = combineDonations(parts.map((p) => p.content));
-    // `combineDonations` keeps the rows in order, upload after upload.
-    const keys = parts.flatMap((p) => p.keys);
-    this.content.rows.forEach((row, i) => this.keyOf.set(row, keys[i]!));
     for (const part of parts) for (const [id, n] of part.names) if (!this.names.has(id)) this.names.set(id, n);
     for (const v of this.content.values) {
       const id = rowId(v.table, v.row);
       const cells = this.cells.get(id) ?? {};
       (cells[v.field] ??= []).push(cellText(v.value));
       this.cells.set(id, cells);
+      const texts = this.searchable.get(id) ?? [];
+      texts.push(folded(cellText(v.value)));
+      if (v.source !== v.value) texts.push(folded(cellText(v.source)));
+      this.searchable.set(id, texts);
     }
   }
 
@@ -103,18 +116,31 @@ export class Review {
     return this.content.values.length === 0;
   }
 
+  private contains(row: DonatedRow, text: string): boolean {
+    return (this.searchable.get(rowId(row.table, row.row)) ?? []).some((v) => v.includes(text));
+  }
+
+  private byRule(row: DonatedRow, rule: LeaveOutRule): boolean {
+    return (rule.table === undefined || rule.table === row.table) && this.contains(row, folded(rule.text.trim()));
+  }
+
+  /** Whether a row is left out itself: by its hash, or by a text. */
+  private out(row: DonatedRow, leftOut: LeftOut): boolean {
+    return leftOut.rows.has(row.hash) || leftOut.rules.some((rule) => this.byRule(row, rule));
+  }
+
   /** Rows that are out: left out themselves, or in a row that is. */
-  private dropped(leftOut: ReadonlySet<string>): Set<string> {
+  private dropped(leftOut: LeftOut): Set<string> {
     const out = new Set<string>();
     for (const row of this.content.rows) {
-      if (leftOut.has(this.keyOf.get(row)!) || (row.parent && out.has(rowId(row.parent.table, row.parent.row)))) {
+      if (this.out(row, leftOut) || (row.parent && out.has(rowId(row.parent.table, row.parent.row)))) {
         out.add(rowId(row.table, row.row));
       }
     }
     return out;
   }
 
-  overview(leftOut: ReadonlySet<string>): DonationOverview {
+  overview(leftOut: LeftOut): DonationOverview {
     const dropped = this.dropped(leftOut);
     const tables: DonationTable[] = this.content.tables.map((t) => {
       const rows = this.content.rows.filter((r) => r.table === t.id);
@@ -136,46 +162,46 @@ export class Review {
       tables,
       rows: this.content.rows.length,
       leftOut: dropped.size,
+      rules: leftOut.rules.map((rule) => ({
+        ...rule,
+        ...(rule.table !== undefined ? { tableName: this.names.get(rule.table)?.name ?? rule.table } : {}),
+        count: this.content.rows.filter((r) => this.byRule(r, rule)).length,
+      })),
       ...(this.consent ? { consent: this.consent } : {}),
     };
   }
 
-  private matches(row: DonatedRow, query: string): boolean {
-    if (!query) return true;
-    const cells = this.cells.get(rowId(row.table, row.row)) ?? {};
-    return Object.values(cells).some((values) => values.some((v) => v.toLocaleLowerCase().includes(query)));
+  /** How many rows of a table (or all tables) contain the text. */
+  countMatching(tableId: string | undefined, query: string): number {
+    const q = folded(query.trim());
+    if (!q) return 0;
+    return this.content.rows.filter((r) => (tableId === undefined || r.table === tableId) && this.contains(r, q)).length;
   }
 
-  /** The keys of the rows of a table (or all tables) that contain the text. */
-  matching(tableId: string | undefined, query: string): string[] {
-    const q = query.trim().toLocaleLowerCase();
-    if (!q) return [];
-    return this.content.rows.filter((r) => (tableId === undefined || r.table === tableId) && this.matches(r, q)).map((r) => this.keyOf.get(r)!);
-  }
-
-  rows(tableId: string, query: string, offset: number, limit: number, leftOut: ReadonlySet<string>): Page<DonationRow> {
-    const q = query.trim().toLocaleLowerCase();
+  rows(tableId: string, query: string, offset: number, limit: number, leftOut: LeftOut): Page<DonationRow> {
+    const q = folded(query.trim());
     const dropped = this.dropped(leftOut);
-    const rows = this.content.rows.filter((r) => r.table === tableId && this.matches(r, q));
+    const rows = this.content.rows.filter((r) => r.table === tableId && (!q || this.contains(r, q)));
     return {
       total: rows.length,
       offset,
       items: rows.slice(offset, offset + limit).map((r) => {
-        const key = this.keyOf.get(r)!;
         const out = dropped.has(rowId(r.table, r.row));
+        const itself = this.out(r, leftOut);
         return {
-          key,
+          key: r.hash,
           cells: this.cells.get(rowId(r.table, r.row)) ?? {},
-          leftOut: out && leftOut.has(key),
-          withParent: out && !leftOut.has(key),
+          leftOut: out && itself,
+          byText: out && itself && !leftOut.rows.has(r.hash),
+          withParent: out && !itself,
         };
       }),
     };
   }
 
   /** What is sent: everything but the rows that are out. */
-  donated(leftOut: ReadonlySet<string>): DonationContent {
-    return withoutRows(this.content, (r) => leftOut.has(this.keyOf.get(r)!));
+  donated(leftOut: LeftOut): DonationContent {
+    return withoutRows(this.content, (r) => this.out(r, leftOut));
   }
 }
 
@@ -282,14 +308,14 @@ export async function sendDonation(
   const publicKey = fromBase64Url(study.key.public_key);
   const actual = await fingerprint(publicKey);
   if (actual !== study.key.fingerprint || (pin !== undefined && pin !== actual)) return { status: 'wrong-key' };
-  const payload = encodePayload({
-    format: 'combray-donation/1',
-    ...(study.version !== undefined ? { version: study.version } : {}),
-    tables: content.tables,
-    values: content.values,
-    ...(asked.questions.length > 0 ? asked : {}),
-    consent,
-  });
+  // Left-out rows are gone; positions are numbered again, so no gap shows where they were.
+  const payload = await encodePayload(
+    donationPayload(content, {
+      ...(study.version !== undefined ? { version: study.version } : {}),
+      ...(asked.questions.length > 0 ? asked : {}),
+      consent,
+    }),
+  );
   const sealed = await sealDonation(payload, {
     projectId,
     projectPublicKey: publicKey,

@@ -13,6 +13,7 @@ import {
   matchOne,
   matchText,
   regexProblem,
+  sideBySideProblem,
   type Match,
   type NodePath,
   type ProjectNode,
@@ -89,7 +90,7 @@ export interface MoreActions {
   keysAreData: (path: NodePath) => void;
 }
 
-/** The rarer settings of a row: whether uploads need it, new parts below it, and keys that are data. */
+/** The rarer settings of a row: whether uploads need it, new parts below it, keys that are data, and lists side by side. */
 export function MorePanel({
   tree,
   path,
@@ -123,6 +124,23 @@ export function MorePanel({
           ) : (
             <button className="button quiet" type="button" onClick={() => actions.keysAreData(path)}>
               {t('studio.makeKeysData')}
+            </button>
+          )}
+        </>
+      )}
+      {(node.sideBySide || sideBySideProblem(node) === undefined) && (
+        <>
+          <SectionHead title={t('studio.sideBySideTitle')} topic="side-by-side" />
+          {node.sideBySide ? (
+            <>
+              <p className="meta">{sideBySideProblem(node) === undefined ? t('studio.sideBySide') : t('studio.sideBySideBroken', { problem: sideBySideProblem(node) })}</p>
+              <button className="button quiet" type="button" onClick={() => onPatch({ sideBySide: undefined })}>
+                {t('studio.sideBySideOff')}
+              </button>
+            </>
+          ) : (
+            <button className="button quiet" type="button" onClick={() => onPatch({ sideBySide: true })}>
+              {t('studio.makeSideBySide')}
             </button>
           )}
         </>

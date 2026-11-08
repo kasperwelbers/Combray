@@ -43,6 +43,7 @@ import type {
   DatasetSummary,
   ImportProgress,
   ImportResult,
+  LeftOutItem,
   LocalProject,
   SourceManifest,
   StoreStatus,
@@ -51,7 +52,7 @@ import type {
   UploadPoint,
 } from './api';
 import { deriveImport, pointProject } from './derived';
-import { donatedAnswers, fetchSettings, Review, sendDonation, uploadDonation, withdrawDonation } from './donate';
+import { donatedAnswers, fetchSettings, NOTHING_LEFT_OUT, Review, sendDonation, uploadDonation, withdrawDonation, type LeftOut } from './donate';
 import { createServerStore, deleteServerStore, fetchKek, resetPassword } from './keyService';
 import { children, countFiles, nodeDetail, search } from './queries';
 import { STOPWORDS } from './stopwords';
@@ -75,7 +76,7 @@ let pending:
   | undefined;
 // The donation being reviewed, and the rows left out of it (kept encrypted in the store).
 let review: Review | undefined;
-let leftOut: { id?: string; keys: Set<string> } | undefined;
+let leftOut: { id?: string; value: LeftOut } | undefined;
 // The participant's answers to the story's questions (kept encrypted in the store).
 let answers: { id?: string; values: Record<string, Answer> } | undefined;
 /** The project version this device's tables were last checked against, in this session. */
@@ -192,7 +193,24 @@ async function runImporters(s: LocalStore<DatasetManifest>, sourceId: string, tr
   return tables;
 }
 
-/** Store a root that was read: its tree, its raw files, and the tables found in it. */
+/** Delete a dataset; a source with its files and the tables found in it. */
+async function removeSource(s: LocalStore<DatasetManifest>, id: string): Promise<void> {
+  for (const d of await s.listDatasets()) {
+    if ((d.manifest.type === 'table' || d.manifest.type === 'file') && d.manifest.sourceId === id) {
+      tableCache.delete(d.id);
+      await s.deleteDataset(d.id);
+    }
+  }
+  cache.delete(id);
+  tableCache.delete(id);
+  review = undefined;
+  await s.deleteDataset(id);
+}
+
+/**
+ * Store a root that was read: its tree, its raw files, and the tables found in it. One upload per
+ * upload point (ADR 0015): a new one replaces the one before, once it is stored.
+ */
 async function storeSource(
   listing: UploadListing,
   read: ReadSpot,
@@ -229,6 +247,12 @@ async function storeSource(
       size: bytes.byteLength,
     };
     await s.putFile(fileManifest, new Blob([bytes as Uint8Array<ArrayBuffer>]));
+  }
+  if (point) {
+    const datasets = await s.listDatasets();
+    for (const d of datasets) {
+      if (d.id !== id && d.manifest.type === 'source' && pointOf(d.id, d.manifest, datasets) === point.id) await removeSource(s, d.id);
+    }
   }
   onProgress({ step: 'importers' });
   const tables = await findTables(s, id, importedAt);
@@ -344,7 +368,7 @@ async function buildReview(): Promise<Review | 'unreachable'> {
     const pointId = pointOf(d.id, d.manifest, datasets);
     const point = study.points.find((p) => p.id === pointId);
     const project = point && pointProject(point);
-    if (project) parts.push(uploadDonation(d.id, unflatten(await nodesOf(d.id)), project));
+    if (project && pointId) parts.push(uploadDonation(pointId, unflatten(await nodesOf(d.id)), project));
   }
   review = new Review(parts, study.settings, study.consent);
   return review;
@@ -355,23 +379,25 @@ function reviewing(): Review {
   return review;
 }
 
-async function leftOutKeys(): Promise<Set<string>> {
-  if (leftOut) return leftOut.keys;
+/** What the participant left out: rows by hash, and texts. Older stores kept row keys that no longer apply. */
+async function leftOutNow(): Promise<LeftOut> {
+  if (leftOut) return leftOut.value;
   const s = await unlockedStore();
   const stored = (await s.listDatasets()).find((d) => d.manifest.type === 'left-out');
-  leftOut = {
-    ...(stored ? { id: stored.id } : {}),
-    keys: new Set(stored ? await s.getItems<string>(stored.id) : []),
-  };
-  return leftOut.keys;
+  const [item] = stored ? await s.getItems<LeftOutItem | string>(stored.id) : [];
+  const value: LeftOut =
+    typeof item === 'object' && item !== null && Array.isArray(item.rows) && Array.isArray(item.rules) ? { rows: new Set(item.rows), rules: item.rules } : NOTHING_LEFT_OUT;
+  leftOut = { ...(stored ? { id: stored.id } : {}), value };
+  return value;
 }
 
-async function saveLeftOut(keys: Set<string>): Promise<void> {
+async function saveLeftOut(value: LeftOut): Promise<void> {
   const s = await unlockedStore();
   const old = leftOut?.id;
-  const id = await s.putDataset({ type: 'left-out' }, [...keys]);
+  const item: LeftOutItem = { rows: [...value.rows], rules: [...value.rules] };
+  const id = await s.putDataset({ type: 'left-out' }, [item]);
   if (old) await s.deleteDataset(old);
-  leftOut = { id, keys };
+  leftOut = { id, value };
 }
 
 async function storedAnswers(): Promise<Record<string, Answer>> {
@@ -574,18 +600,7 @@ const api: DataApi = {
   },
 
   async deleteDataset(id) {
-    const s = await unlockedStore();
-    // Deleting a source also deletes its files and the tables found in it.
-    for (const d of await s.listDatasets()) {
-      if ((d.manifest.type === 'table' || d.manifest.type === 'file') && d.manifest.sourceId === id) {
-        tableCache.delete(d.id);
-        await s.deleteDataset(d.id);
-      }
-    }
-    cache.delete(id);
-    tableCache.delete(id);
-    review = undefined;
-    await s.deleteDataset(id);
+    await removeSource(await unlockedStore(), id);
   },
 
   async getNode(datasetId, index) {
@@ -655,35 +670,46 @@ const api: DataApi = {
   async donationOverview() {
     const r = await buildReview();
     if (r === 'unreachable') return r;
-    return r.overview(await leftOutKeys());
+    return r.overview(await leftOutNow());
   },
 
   async donationRows(tableId, query, offset, limit) {
-    return reviewing().rows(tableId, query, offset, limit, await leftOutKeys());
+    return reviewing().rows(tableId, query, offset, limit, await leftOutNow());
   },
 
   async leaveOut(keys, out) {
-    const next = new Set(await leftOutKeys());
+    const now = await leftOutNow();
+    const rows = new Set(now.rows);
     for (const key of keys) {
-      if (out) next.add(key);
-      else next.delete(key);
+      if (out) rows.add(key);
+      else rows.delete(key);
     }
+    const next = { ...now, rows };
     await saveLeftOut(next);
     return reviewing().overview(next);
   },
 
   async leaveOutMatching(tableId, query) {
     const r = reviewing();
-    const next = new Set(await leftOutKeys());
-    const keys = r.matching(tableId, query).filter((k) => !next.has(k));
-    for (const key of keys) next.add(key);
-    if (keys.length > 0) await saveLeftOut(next);
-    return { count: keys.length, overview: r.overview(next) };
+    const text = query.trim();
+    const now = await leftOutNow();
+    const count = r.countMatching(tableId, text);
+    if (!text || now.rules.some((rule) => rule.table === tableId && rule.text === text)) return { count, overview: r.overview(now) };
+    const next = { ...now, rules: [...now.rules, { ...(tableId !== undefined ? { table: tableId } : {}), text }] };
+    await saveLeftOut(next);
+    return { count, overview: r.overview(next) };
+  },
+
+  async removeRule(index) {
+    const now = await leftOutNow();
+    const next = { ...now, rules: now.rules.filter((_, i) => i !== index) };
+    await saveLeftOut(next);
+    return reviewing().overview(next);
   },
 
   async putBackAll() {
-    await saveLeftOut(new Set());
-    return reviewing().overview(new Set());
+    await saveLeftOut(NOTHING_LEFT_OUT);
+    return reviewing().overview(NOTHING_LEFT_OUT);
   },
 
   async donate(pin, consent) {
@@ -694,8 +720,8 @@ const api: DataApi = {
       review = undefined;
       return { status: 'changed' };
     }
-    const keys = await leftOutKeys();
-    const content = review.donated(keys);
+    const left = await leftOutNow();
+    const content = review.donated(left);
     const asked = donatedAnswers(study.story, await storedAnswers(), consent.language);
     if (content.values.length === 0 && asked.questions.length === 0) return { status: 'nothing' };
     const sent = await sendDonation(projectId!, study, content, pin, consent, asked);
@@ -707,7 +733,7 @@ const api: DataApi = {
       sent: new Date().toISOString(),
       rows: content.rows.length,
       tables: review
-        .overview(keys)
+        .overview(left)
         .tables.filter((t) => t.rowCount > t.leftOut)
         .map((t) => t.name),
     };

@@ -87,6 +87,12 @@ export interface NodeSettings {
    * values. Their children are then one per name.
    */
   textNames?: 'pairs' | 'beside';
+  /**
+   * Objects (maps, HTML elements) whose children are lists: the lists are one table, side by side,
+   * item `i` of each in row `i` (`liked_by` and `shared_by` of an `engagement`). Only how rows are
+   * grouped changes, never the paths (ADR 0015).
+   */
+  sideBySide?: true;
 }
 
 export interface ConfigNode extends NodeSettings {
@@ -125,6 +131,7 @@ export const SETTINGS = [
   'undecided',
   'collapsed',
   'textNames',
+  'sideBySide',
 ] as const satisfies readonly (keyof NodeSettings)[];
 
 const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';

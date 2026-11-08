@@ -2230,6 +2230,16 @@ button.tag {
   color: inherit;
 }
 
+.left-out-rules {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
+  color: var(--ink-soft);
+}
+
+.left-out-rules li + li {
+  margin-top: 0.25rem;
+}
+
 .consent {
   margin-top: 1.5rem;
 }

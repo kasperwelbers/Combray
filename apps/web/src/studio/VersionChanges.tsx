@@ -4,7 +4,7 @@
  * breaking changes, so a researcher publishes knowing what earlier donations will differ in.
  */
 import { localize, parseImporterFile, parseStructureFile, versionChanges, type ChangeKind, type Localized, type PlatformVersion, type VersionChange } from '@combray/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { fromFiles } from './model';
@@ -79,6 +79,47 @@ export function VersionChanges({ draft }: { draft: Draft }) {
           </div>
         );
       })}
+    </section>
+  );
+}
+
+/**
+ * Donated tables still called by their HTML structure (`div_mdl_cell`), per platform, as the studio
+ * saved them (`ImporterFile.unnamed`). The key page refuses to publish until they have a name.
+ */
+export function UnnamedTables({ draft }: { draft: Draft }) {
+  const { t } = useTranslation(undefined, { lng: 'en' });
+  const projectApi = useProjectApi();
+  const [unnamed, setUnnamed] = useState<{ platform: string; tables: string[] }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const out: { platform: string; tables: string[] }[] = [];
+      for (const p of draft.platforms) {
+        const importer = (await projectApi.platform(draft.id, p.id)).importer as { unnamed?: unknown } | null;
+        const tables = Array.isArray(importer?.unnamed) ? importer.unnamed.filter((n): n is string => typeof n === 'string') : [];
+        if (tables.length > 0) out.push({ platform: localize(p.name, 'en'), tables });
+      }
+      if (!cancelled) setUnnamed(out);
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [projectApi, draft]);
+
+  if (unnamed.length === 0) return null;
+  return (
+    <section className="card version-changes" aria-labelledby="unnamed-tables">
+      <h2 id="unnamed-tables">{t('studio.unnamed.title')}</h2>
+      <p className="meta">{t('studio.unnamed.intro')}</p>
+      <ul>
+        {unnamed.map((u) => (
+          <li key={u.platform}>
+            {u.platform}: {u.tables.map((n) => <code key={n}>{n}</code>).reduce<ReactNode[]>((all, c, i) => (i === 0 ? [c] : [...all, ', ', c]), [])}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

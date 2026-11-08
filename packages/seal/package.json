@@ -5,7 +5,9 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./names": "./src/names.ts",
+    "./payload": "./src/payload.ts"
   },
   "scripts": {
     "test": "vitest run",

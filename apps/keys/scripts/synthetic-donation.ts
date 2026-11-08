@@ -19,28 +19,20 @@ export async function main(server: string, project: string): Promise<void> {
   if ((await fingerprint(publicKey)) !== config.donation_key.fingerprint) throw new Error('The project key does not match its fingerprint.');
 
   const days = ['2026-10-01', '2026-10-02', '2026-10-03'];
-  const payload = encodePayload({
-    format: 'combray-donation/1',
-    tables: [
-      {
-        id: 'watch_history',
-        name: 'Watch history (synthetic)',
-        fields: [
-          { id: 'title', name: 'Title' },
-          { id: 'channel', name: 'Channel' },
-          { id: 'day', name: 'Day' },
-        ],
-      },
-    ],
-    // One value per field and row, in long format, as a participant's browser sends them.
+  const fields = ['title', 'channel', 'day'];
+  const payload = await encodePayload({
+    format: 'combray-donation/2',
+    // Each path once, with the names it is donated as and how its rows are told apart.
+    entries: fields.map((field) => ({
+      platform: 'youtube',
+      path: ['watch-history.json', '[*]', field],
+      table: 'watch_history',
+      field,
+      rows: [{ table: 'watch_history', steps: 2 }],
+    })),
+    // One value per field and row, as a participant's browser sends them: its entry and position.
     values: days.flatMap((day, row) =>
-      Object.entries({ title: `Synthetic video ${row + 1}`, channel: row % 2 ? 'Garden channel' : 'Cooking channel', day }).map(([field, value]) => ({
-        table: 'watch_history',
-        row,
-        field,
-        path: ['watch-history.json', `[${row}]`, field],
-        value,
-      })),
+      [`Synthetic video ${row + 1}`, row % 2 ? 'Garden channel' : 'Cooking channel', day].map((value, entry): [number, number[], string] => [entry, [row], value]),
     ),
     answers: { reflection: 'This is a synthetic donation.' },
   });

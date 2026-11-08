@@ -94,6 +94,11 @@ export interface TableDef {
   rows?: NodePath;
   /** True for a `{*}` table, whose rows have a key. */
   keyed?: true;
+  /**
+   * Lists side by side (`ProjectNode.sideBySide`): `node` is the object holding them, and row `i`
+   * holds item `i` of each list.
+   */
+  sideBySide?: true;
   /** Index of the parent table, for nested tables. */
   parent?: number;
   state: Exclude<EffectiveState, 'ignore'>;
@@ -113,6 +118,34 @@ export const KEY_COLUMN = '{key}';
 export const VALUE_COLUMN = '{value}';
 
 const isRepeated = (name: string) => name === ITEM_NAME || name === COLLAPSED_NAME;
+
+/** An object whose lists are read side by side, as one table (`ProjectNode.sideBySide`). */
+export const isSideBySide = (node: ProjectNode | undefined): boolean => node?.sideBySide === true && sideBySideProblem(node) === undefined;
+
+/**
+ * Whether a node's entries are the rows of a table: a list's items (unless they sit side by side
+ * with other lists, below a side-by-side object), a map whose keys are data, or a side-by-side
+ * object. `chain` is the node's ancestors, root first.
+ */
+function startsTable(node: ProjectNode, chain: ProjectNode[]): boolean {
+  if (isSideBySide(node) || node.name === COLLAPSED_NAME) return true;
+  return node.name === ITEM_NAME && !isLeaf(node) && !isSideBySide(chain.at(-2));
+}
+
+/**
+ * Why an object's lists cannot be read side by side, or undefined if they can: it needs two or
+ * more lists of its own, and no other lists below it (in their items or elsewhere).
+ */
+export function sideBySideProblem(node: ProjectNode): string | undefined {
+  if ((node.kind !== 'map' && node.kind !== 'element') || isLeaf(node) || isRepeated(node.name)) return 'only objects have lists side by side';
+  const lists = (node.children ?? []).filter((c) => c.kind === 'list');
+  if (lists.length < 2) return 'needs two or more lists';
+  const nested = (n: ProjectNode): boolean => (n.children ?? []).some((c) => c.kind === 'list' || c.collapsed === true || nested(c));
+  if (lists.some((l) => (l.children ?? []).some((item) => nested(item)))) return 'the items of its lists hold lists of their own';
+  // Its other parts may hold no lists either: they would be tables in a row that is no row.
+  if (node.collapsed || (node.children ?? []).some((c) => c.kind !== 'list' && (c.collapsed === true || nested(c)))) return 'it holds lists that are not side by side';
+  return undefined;
+}
 
 /** Shortest unique suffixes, over the names in each path without `[*]` and `{*}`. */
 function suffixNames(paths: NodePath[]): string[] {
@@ -330,8 +363,8 @@ export function treeNames(root: ProjectNode): TreeNames {
   const leaves = new Map<number, NodePath[]>();
   const visit = (node: ProjectNode, path: NodePath, chain: ProjectNode[], current: number) => {
     let table = current;
-    if (node.name === COLLAPSED_NAME || (node.name === ITEM_NAME && !isLeaf(node))) {
-      const source = nameSource([...chain, node]);
+    if (startsTable(node, chain)) {
+      const source = isSideBySide(node) && node.named !== undefined ? node : nameSource([...chain, node]);
       const at = source === undefined ? -1 : chain.indexOf(source);
       found.push({
         rows: path,
@@ -407,12 +440,12 @@ export function deriveTables(root: ProjectNode, labels?: Labels): TableDef[] {
   // Table 0 is the record of leaves outside any table; it is dropped below if it stays empty.
   const tables: TableDef[] = [{ id: '', name: '', where: [], node: [], state: 'show', columns: [] }];
   const leafPaths = new Map<number, NodePath[]>();
-  const visit = (node: ProjectNode, path: NodePath, current: number) => {
+  const visit = (node: ProjectNode, path: NodePath, current: number, chain: ProjectNode[]) => {
     const state = states.get(node)!;
     if (state === 'ignore') return;
     let table = current;
     const keyed = node.name === COLLAPSED_NAME;
-    if (keyed || (node.name === ITEM_NAME && !isLeaf(node))) {
+    if (startsTable(node, chain)) {
       const id = names.tables[tableIndex.get(pathKey(path))!]!.id;
       const description = labels?.description?.(id);
       tables.push({
@@ -423,6 +456,7 @@ export function deriveTables(root: ProjectNode, labels?: Labels): TableDef[] {
         node: path,
         rows: path,
         ...(keyed ? { keyed: true as const } : {}),
+        ...(isSideBySide(node) ? { sideBySide: true as const } : {}),
         ...(current !== 0 ? { parent: current } : {}),
         state,
         columns: [],
@@ -435,9 +469,9 @@ export function deriveTables(root: ProjectNode, labels?: Labels): TableDef[] {
       leafPaths.set(table, [...(leafPaths.get(table) ?? []), path]);
       return;
     }
-    for (const child of node.children ?? []) visit(child, [...path, child.id], table);
+    for (const child of node.children ?? []) visit(child, [...path, child.id], table, [...chain, node]);
   };
-  visit(root, [], 0);
+  visit(root, [], 0, []);
   if (!leafPaths.has(0)) {
     tables.shift();
     for (const t of tables) if (t.parent !== undefined) t.parent--;
@@ -465,8 +499,9 @@ export function deriveTables(root: ProjectNode, labels?: Labels): TableDef[] {
       name: labels?.label(table.id, field.id) ?? (unnamed ? field.suffix : defaultLabel(field.id)),
       path: rel,
       at: leaf,
-      // A list of plain values below the row (`tags/[*]`) is a list cell.
-      type: namesOf(root, leaf).slice(base.length).includes(ITEM_NAME) ? 'list' : 'value',
+      // A list of plain values below the row (`tags/[*]`) is a list cell; side by side, the
+      // first item step is the row's own.
+      type: namesOf(root, leaf).slice(base.length).filter((n) => n === ITEM_NAME).length > (table.sideBySide ? 1 : 0) ? 'list' : 'value',
       state,
       ...info,
       ...(unnamed ? { unnamed: true as const } : {}),
@@ -652,6 +687,33 @@ function keeps(table: TableDef, values: Record<string, unknown>): boolean {
   });
 }
 
+/**
+ * The rows of an object whose lists are read side by side: row `i` holds item `i` of each list,
+ * and the object's other fields (outside its lists) only the first row, so nothing is repeated.
+ * Each row is a function from a column's path to the tree nodes it has there.
+ */
+function sideBySideRows(node: TreeNode, project: ProjectNode, columns: ColumnDef[]): ((path: NodePath) => TreeNode[])[] {
+  const inList = (path: NodePath) => path.length >= 2 && getNode(project, path.slice(0, 1))?.kind === 'list';
+  const items = new Map<string, TreeNode[]>();
+  const itemsOf = (path: NodePath) => {
+    const key = pathKey(path.slice(0, 2));
+    let found = items.get(key);
+    if (!found) items.set(key, (found = resolve(node, project, path.slice(0, 2))));
+    return found;
+  };
+  let count = 0;
+  for (const column of columns) {
+    for (const path of [column.path, ...(column.alternatives ?? []).map((a) => a.path)]) {
+      count = Math.max(count, inList(path) ? itemsOf(path).length : resolve(node, project, path).length > 0 ? 1 : 0);
+    }
+  }
+  return Array.from({ length: count }, (_, i) => (path: NodePath) => {
+    if (!inList(path)) return i === 0 ? resolve(node, project, path) : [];
+    const item = itemsOf(path)[i];
+    return item ? resolve(item, getNode(project, path.slice(0, 2))!, path.slice(2)) : [];
+  });
+}
+
 export interface DeriveOptions {
   /** Keep values as in the file: no conversions, no row filters. */
   raw?: boolean;
@@ -690,7 +752,10 @@ export function deriveRows(
     const rowProject = getNode(root, rowPath)!;
     const filtered = new Set(options.raw ? [] : (table.filter ?? []).map((f) => f.column));
     const columns = [...table.columns, ...(options.raw ? [] : (table.hidden ?? []))];
-    for (const { node, parent } of candidates) {
+    // One row per candidate, or for lists side by side, one per item position.
+    const rowsIn = (node: TreeNode): ((path: NodePath) => TreeNode[])[] =>
+      table.sideBySide ? sideBySideRows(node, rowProject, columns) : [(path) => resolve(node, rowProject, path)];
+    for (const { node, parent, find } of candidates.flatMap((c) => rowsIn(c.node).map((find) => ({ ...c, find })))) {
       const values: Record<string, unknown> = {};
       const sources: Record<string, TreeNode[]> = {};
       for (const column of columns) {
@@ -698,15 +763,15 @@ export function deriveRows(
         if (column.type === 'table') {
           // Nested counts are filled in below; a filter on one needs it now.
           if (!filtered.has(column.id)) continue;
-          value = resolve(node, rowProject, column.path).length;
+          value = find(column.path).length;
         } else if (column.type === 'key') value = node.name;
         else {
           // The first of the leaves with this name that is in the row (`alternatives`).
           let used = column;
-          let matches = resolve(node, rowProject, column.path);
+          let matches = find(column.path);
           for (const other of column.alternatives ?? []) {
             if (matches.length > 0) break;
-            const found = resolve(node, rowProject, other.path);
+            const found = find(other.path);
             if (found.length > 0) [used, matches] = [other, found];
           }
           value = used.type === 'list' ? matches.map(leafValue) : matches.length > 0 ? leafValue(matches[0]!) : null;

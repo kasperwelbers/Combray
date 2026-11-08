@@ -189,6 +189,21 @@ describe('publishing', () => {
     expect(draft.unpublished_changes).toBe(false);
   });
 
+  it('is refused while a donated table is named only by its HTML structure', async () => {
+    const s = await startServer();
+    const ada = await setUpResearcher(s, ADA);
+    const studioSession = await studioSignIn(s, ada);
+    await s.main.post('/api/v1/projects', { id: 'birch', name: 'Birch study' }, studioSession);
+    await createProjectKey(s, ada.session, 'birch');
+    const put = (importer: unknown) => s.main.put('/api/v1/projects/birch/draft/platforms/tiktok', { name: 'TikTok', structure: STRUCTURE, importer }, studioSession);
+    expect((await put({ ...IMPORTER, unnamed: ['div_mdl_cell'] })).status).toBe(204);
+    const refused = await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session);
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({ error: 'unnamed_tables' });
+    expect((await put(IMPORTER)).status).toBe(204);
+    expect((await s.keys.post('/api/v1/projects/birch/publish', {}, ada.session)).status).toBe(200);
+  });
+
   it('copies the draft: later edits reach participants only after publishing again', async () => {
     const s = await startServer();
     const ada = await setUpResearcher(s, ADA);

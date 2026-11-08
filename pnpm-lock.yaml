@@ -143,6 +143,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@combray/seal':
+        specifier: workspace:*
+        version: link:../seal
       '@jitl/quickjs-wasmfile-release-sync':
         specifier: ^0.32.0
         version: 0.32.0

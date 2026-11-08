@@ -7,6 +7,7 @@
 export * from './bytes';
 export * from './envelope';
 export * from './hpke';
+export * from './names';
 export * from './payload';
 export * from './personal';
 export * from './project';

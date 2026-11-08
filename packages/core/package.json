@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@combray/seal": "workspace:*",
     "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",
     "domhandler": "^6.0.1",
     "fflate": "^0.8.3",

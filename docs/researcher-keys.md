@@ -151,7 +151,10 @@ The code comparison is what keeps a server from slipping in its own public key u
 
 1. lists the project's donations and withdrawals;
 2. fetches the sealed donation keys in batches, opens each with the project key, and downloads and opens each envelope ([key-design.md](key-design.md#5-analysing-fetch-on-use));
-3. drops the sealed keys, and offers one zip with one CSV per table (`table-{name}.csv`: the donated values pivoted into rows, with donation id, day and row number in front, and the row a nested row is in), `donations.csv` with each donation's day, the project version it was made with and the participant's language, one CSV with every value and the path where it was in the participant's files, CSVs of answers, questions and consent, and the full JSON.
+3. fetches the name map of the project's newest published version, and places every value under its names by the value's raw path ([ADR 0015](decisions/0015-raw-paths-and-relational-export.md));
+4. drops the sealed keys, and offers one zip with one CSV per platform and table (`{platform}-{table}.csv`: `.donation`, `.day`, `.version`, the row's `.id` and the `.{table}_id` of every row it is in, then a column per field), `donations.csv` with each donation's day, the project version it was made with and the participant's language, `values.csv` with every value and the path where it was in the participant's files, `fields.csv` with how each field was read per version, CSVs of answers, questions and consent, and the full JSON.
+
+Two options, both off by default: **include deprecated paths** puts values at paths the newest version no longer matches in `values.csv`, under the names they were donated with and marked; **include original names** adds the table and field each value was donated as to `values.csv`. Values are never converted again: a field whose reading changed between versions holds both readings in one column, and `.version` with `fields.csv` say which.
 
 Nothing is stored by the page. Values a spreadsheet would run as a formula (starting with `=`, `+`, `-`, `@`, tab or carriage return) get a leading apostrophe. Saved files are the researcher's responsibility under the GDPR, and the page says so.
 

@@ -11,7 +11,7 @@ import { resetExample } from './exampleApi';
 import { HelpProvider } from './Help';
 import { StoryEditor } from './StoryEditor';
 import { TextsEditor } from './TextsEditor';
-import { VersionChanges } from './VersionChanges';
+import { UnnamedTables, VersionChanges } from './VersionChanges';
 import type { Renamed } from './naming';
 import { Studio, type DraftStore } from './Studio';
 
@@ -78,6 +78,7 @@ export function Project({ projectId, tab: initialTab, account, keysUrl }: { proj
         {info && !projectApi.example && (
           <SetupSteps draft={draft} info={info} keysUrl={keysUrl} onData={() => open('data')} onConsent={() => open('consent')} />
         )}
+        <UnnamedTables draft={draft} />
         <VersionChanges draft={draft} />
         <nav className="tabs" aria-label={t('studio.project.tabsLabel')}>
           {STUDIO_TABS.map((key) => (
