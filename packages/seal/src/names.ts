@@ -43,7 +43,8 @@ export interface NameMap {
 
 /**
  * How the rows of a table are told apart, from a value's path: by its first `steps` steps, and
- * for a side-by-side table the step `item` (the item's position in each of the lists).
+ * for a side-by-side table the step `item` (the item's position in each of the lists; `-1` for
+ * the object's fields outside its lists, which are in the first row).
  */
 export interface RowGroup {
   table: string;
@@ -100,6 +101,8 @@ export function placements(map: NameMap | NameNode, path: readonly string[]): Pl
     if (node.l !== undefined) rows = [...rows, { table: node.l, steps: i }];
     if (node.z !== undefined) zip = { table: node.z, steps: i };
     if (i === path.length) {
+      // A field of a side-by-side object outside its lists: in the first row only.
+      if (zip && !rows.some((r) => r.table === zip!.table)) rows = [...rows, { ...zip, item: -1 }];
       const field = node.f ?? (node.k === '{*}' ? '{key}' : undefined);
       if (field !== undefined) out.push({ table: rows.at(-1)?.table ?? '', field, rows });
       // The key of a `{*}` row of plain values sits at the same path as its value.
@@ -132,7 +135,7 @@ export function placements(map: NameMap | NameNode, path: readonly string[]): Pl
 /** The key of the row a value is in, for one row group: steps of its path, joined. */
 export function rowKey(path: readonly string[], group: RowGroup): string {
   const head = path.slice(0, group.steps).join('/');
-  return group.item === undefined ? head : `${head}//${path[group.item] ?? ''}`;
+  return group.item === undefined ? head : `${head}//${path[group.item] ?? '[0]'}`;
 }
 
 // --- Checking maps from the server ------------------------------------------------------------

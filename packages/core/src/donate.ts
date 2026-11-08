@@ -141,6 +141,14 @@ function rowContent(node: TreeNode): string {
   return parts.sort().join('\n');
 }
 
+/** What a side-by-side row is: the values of its items, by column. */
+function sourcesContent(sources: Record<string, TreeNode[]>): string {
+  return Object.entries(sources)
+    .flatMap(([column, nodes]) => nodes.map((n) => `${column}=${JSON.stringify(leafValue(n))}`))
+    .sort()
+    .join('\n');
+}
+
 /**
  * The values a participant donates from their tree: the fields the researcher asks for (decision
  * `donate`), from the rows that pass the tables' filters. `tables` are `deriveTables(project)`;
@@ -171,6 +179,13 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
     const own = { table: table.id, steps: table.rows.length };
     return table.parent === undefined ? [own] : [...groupsOf(table.parent), own];
   };
+  // Side by side, a row is told apart by the position of its items in the lists (the step after
+  // the list's key); the object's fields outside its lists are in the first row (`RowGroup.item`).
+  const sideBySideGroups = (groups: RowGroup[], path: string[]): RowGroup[] => {
+    const own = groups.at(-1)!;
+    const item = /^\[\d+\]$/.test(path[own.steps + 1] ?? '') ? own.steps + 1 : -1;
+    return [...groups.slice(0, -1), { ...own, item }];
+  };
   // Tables with the same name are one table: their rows are numbered on from each other's.
   const next = new Map<string, number>();
   const offsets = tables.map((table, i) => {
@@ -189,7 +204,9 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
     rows[i]!.forEach((row, r) => {
       // Every row gets its hash, also rows with nothing asked: rows nested in them need it.
       const parentHash = parentTable && row.parent !== undefined ? rowHashes[table.parent!]![row.parent] : '';
-      const base = hash53([platform, general, parentHash, row.node ? rowContent(row.node) : ''].join('\u0000'));
+      // Side by side, every row has the same node: the row is its items.
+      const content = table.sideBySide ? sourcesContent(row.sources ?? {}) : row.node ? rowContent(row.node) : '';
+      const base = hash53([platform, general, parentHash, content].join('\u0000'));
       const n = seenHashes.get(base) ?? 0;
       seenHashes.set(base, n + 1);
       const rowHash = n === 0 ? base : `${base}.${n}`;
@@ -217,7 +234,7 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
           const path = paths.get(source) ?? [];
           // A list of plain values is a table of its own in the export, its rows told apart by the item.
           const item = column.type === 'list' ? path.findIndex((s, k) => k >= (table.rows?.length ?? 0) && /^\[\d+\]$/.test(s)) : -1;
-          const own = item >= 0 ? [...groups, { table: listTable(table.id, column.id), steps: item + 1 }] : groups;
+          const own = item >= 0 ? [...groups, { table: listTable(table.id, column.id), steps: item + 1 }] : table.sideBySide ? sideBySideGroups(groups, path) : groups;
           values.push({
             ...place,
             field: column.id,

@@ -1,4 +1,4 @@
-import { placements, valuePath } from '@combray/seal';
+import { placements, rowKey, valuePath } from '@combray/seal';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -12,6 +12,7 @@ import {
   normalizeTree,
   setDecision,
   setKeysAreData,
+  sideBySideProblem,
   unionShape,
   withoutRows,
   type DonationContent,
@@ -227,3 +228,70 @@ function rowsOf(tree: ReturnType<typeof jsonToTree>): unknown[] {
         : n.value;
   return plain(list as never) as unknown[];
 }
+
+describe('lists side by side', () => {
+  const engagement = jsonToTree('', {
+    'posts.json': [
+      { text: 'Tea', engagement: { count: '3', liked_by: ['bob', 'ann', 'kim'], shared_by: [{ name: 'eve' }] } },
+      { text: 'Cake', engagement: { count: 0, liked_by: [], shared_by: [] } },
+    ],
+  });
+
+  function sideBySide() {
+    let tree = keyedTree(extractShape(engagement));
+    for (const leaf of [['liked_by', '[*]'], ['shared_by', '[*]', 'name'], ['count']]) {
+      tree = setDecision(tree, at(tree, 'posts.json', '[*]', 'engagement', ...leaf), 'donate');
+    }
+    tree = setDecision(tree, at(tree, 'posts.json', '[*]', 'text'), 'donate');
+    nodeAt(tree, 'posts.json', '[*]', 'engagement').sideBySide = true;
+    return tree;
+  }
+
+  it('reads an object with two lists as one table, item i of each list in row i, nothing repeated', () => {
+    const tree = sideBySide();
+    const tables = deriveTables(tree);
+    const table = tables.find((t) => t.sideBySide)!;
+    expect(table.id).toBe('engagement');
+    expect(table.columns.map((c) => [c.id, c.type])).toEqual([
+      ['count', 'value'],
+      ['liked_by', 'value'],
+      ['name', 'value'],
+    ]);
+    const content = donationValues(engagement, tree, tables, 'x');
+    const rows = (row: number) => Object.fromEntries(content.values.filter((v) => v.table === 'engagement' && v.row === row).map((v) => [v.field, v.value]));
+    expect(rows(0)).toEqual({ count: '3', liked_by: 'bob', name: 'eve' });
+    expect(rows(1)).toEqual({ liked_by: 'ann' });
+    expect(rows(2)).toEqual({ liked_by: 'kim' });
+    // The second post has no items, but its count is a row of its own.
+    expect(rows(3)).toEqual({ count: '0' });
+    expect(content.values.find((v) => v.field === 'liked_by' && v.value === 'ann')?.parent).toEqual({ table: 'posts', row: 0 });
+    expectPlaced(content, tree);
+  });
+
+  it('places side-by-side values in the same rows on the key page', () => {
+    const tree = sideBySide();
+    const content = donationValues(engagement, tree, deriveTables(tree), 'x');
+    const map = nameMap(tree);
+    const key = (path: string[]) => {
+      const [p] = placements(map, path).filter((p) => p.table === 'engagement');
+      return p!.rows.map((g) => rowKey(path, g)).join('|');
+    };
+    const bob = content.values.find((v) => v.value === 'bob')!;
+    const eve = content.values.find((v) => v.value === 'eve')!;
+    const count = content.values.find((v) => v.field === 'count' && v.value === '3')!;
+    const ann = content.values.find((v) => v.value === 'ann')!;
+    expect(key(bob.path)).toBe(key(eve.path));
+    expect(key(bob.path)).toBe(key(count.path));
+    expect(key(ann.path)).not.toBe(key(bob.path));
+  });
+
+  it('gives each row its own hash, and is only offered for objects with two or more flat lists', () => {
+    const tree = sideBySide();
+    const content = donationValues(engagement, tree, deriveTables(tree), 'x');
+    const hashes = content.rows.filter((r) => r.table === 'engagement').map((r) => r.hash);
+    expect(new Set(hashes).size).toBe(hashes.length);
+    expect(sideBySideProblem(nodeAt(tree, 'posts.json', '[*]', 'engagement'))).toBeUndefined();
+    expect(sideBySideProblem(nodeAt(tree, 'posts.json', '[*]'))).toBeDefined();
+    expect(sideBySideProblem(nodeAt(tree, 'posts.json', '[*]', 'engagement', 'liked_by'))).toBeDefined();
+  });
+});

@@ -192,6 +192,10 @@ function checkNode(e: unknown, at: string, count: { nodes: number }, depth: numb
     check(e.textNames === 'pairs' || e.textNames === 'beside', `${at}: textNames must be pairs or beside`);
     check(e.kind === 'element' || e.kind === 'list', `${at}: only HTML elements and their tables have texts that are names`);
   }
+  if (e.sideBySide !== undefined) {
+    check(e.sideBySide === true, `${at}: sideBySide must be true`);
+    check(e.kind === 'map' || e.kind === 'element', `${at}: only objects have lists side by side`);
+  }
   if (e.newChildren !== undefined) {
     check(e.newChildren === 'ask' || e.newChildren === 'skip', `${at}: newChildren must be ask or skip`);
   }

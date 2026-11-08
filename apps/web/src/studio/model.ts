@@ -167,6 +167,7 @@ export type NodePatch = Partial<
     | 'undecided'
     | 'headerRow'
     | 'textNames'
+    | 'sideBySide'
   >
 >;
 
