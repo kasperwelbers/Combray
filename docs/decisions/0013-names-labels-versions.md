@@ -1,6 +1,6 @@
 # ADR 0013: Names, labels and versions
 
-- **Status:** accepted
+- **Status:** accepted; points 12, 14 and 15 amended by [ADR 0015](0015-raw-paths-and-relational-export.md) (names are matched on export, renames are safe, names no longer freeze)
 - **Date:** 2026-11-05
 - **Amends:** [ADR 0012](0012-names-and-matches.md) (points 2, 6 and 11)
 - **Plan:** the "Names, labels and translations" plan, and [plans/2026-11-05-researcher-experience.md](../plans/2026-11-05-researcher-experience.md)

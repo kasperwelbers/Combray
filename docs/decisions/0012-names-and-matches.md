@@ -1,6 +1,6 @@
 # ADR 0012: Names and matches
 
-- **Status:** accepted; points 2, 6 and 11 amended by [ADR 0013](0013-names-labels-versions.md) (names are ids, labels are texts, versions are kept)
+- **Status:** accepted; points 2, 6 and 11 amended by [ADR 0013](0013-names-labels-versions.md) (names are ids, labels are texts, versions are kept); point 8 amended by [ADR 0015](0015-raw-paths-and-relational-export.md) (raw paths, names matched on export)
 - **Date:** 2026-11-04
 - **Plan:** [plans/2026-11-04-names-and-matches.md](../plans/2026-11-04-names-and-matches.md)
 
