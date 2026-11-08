@@ -2928,3 +2928,321 @@ button.tag {
 .texts-fields li {
   padding-left: 1rem;
 }
+
+/* The files step (ADR 0016): a file browser, plainer than the extractor's tree on purpose. */
+.files-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .files-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.file-browser {
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) 70%, white);
+  overflow: hidden;
+  font-size: 0.95rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .file-browser {
+    background: var(--paper-deep);
+  }
+}
+
+.file-browser-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-deep);
+}
+
+.file-browser-bar .check {
+  margin: 0;
+}
+
+.file-tree,
+.file-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.file-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding-right: 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+
+.file-line:hover {
+  background: color-mix(in srgb, var(--dusk) 8%, transparent);
+}
+
+.file-toggle {
+  width: 1.4rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-line .file-name {
+  cursor: pointer;
+}
+
+.file-row-item:not(.is-read) > .file-line:not(.folder-line) .file-name {
+  color: var(--ink-soft);
+}
+
+.file-meta {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.file-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.file-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+}
+
+.folder-icon {
+  fill: var(--madeleine);
+}
+
+.file-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.doc-icon {
+  fill: var(--paper);
+  stroke: var(--ink-soft);
+  stroke-width: 1.2;
+}
+
+.doc-icon .doc-fold {
+  fill: none;
+}
+
+.file-ext {
+  position: absolute;
+  left: -0.2rem;
+  bottom: -0.15rem;
+  font-size: 0.5rem;
+  line-height: 1;
+  padding: 0.05rem 0.15rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 700;
+  background: var(--ink-soft);
+  color: var(--paper);
+}
+
+.file-ext.ext-json { background: var(--dusk); }
+.file-ext.ext-html,
+.file-ext.ext-htm { background: var(--terracotta); }
+.file-ext.ext-csv { background: var(--madeleine-deep); }
+
+/* A group as a chip in its colour (the six colours of shared names). */
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.05em 0.7em;
+  border-radius: 999px;
+  border: 1.5px solid var(--shared, var(--line));
+  background: color-mix(in srgb, var(--shared, var(--line)) 30%, var(--paper));
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.group-chip[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--shared, var(--line)) 60%, var(--paper));
+  box-shadow: 0 0 0 2px var(--shared, var(--line));
+  font-weight: 600;
+}
+
+span.group-chip {
+  cursor: default;
+  font-weight: 600;
+}
+
+.chip-note {
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.file-include {
+  font-size: 0.85rem;
+  padding: 0.05em 0.7em;
+}
+
+.file-popover {
+  left: auto;
+  right: 0;
+  width: min(24rem, calc(100vw - 3rem));
+}
+
+.popover-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.group-choices,
+.content-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.new-group,
+.group-pattern,
+.group-copy,
+.group-rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.new-group .field,
+.group-pattern .field,
+.group-copy .field {
+  flex: 1 1 12rem;
+  margin-bottom: 0.5rem;
+}
+
+.new-group .button,
+.group-pattern .button,
+.group-copy .button {
+  margin-bottom: 0.5rem;
+}
+
+.group-rename input {
+  padding: 0.3em 0.6em;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  font: inherit;
+}
+
+.file-groups h3 {
+  margin-top: 0;
+}
+
+.group-card {
+  border: 1.5px solid var(--line);
+  border-left: 5px solid var(--shared, var(--line));
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.95rem;
+}
+
+.group-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.group-open {
+  margin-left: auto;
+}
+
+.group-matches {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+.group-match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px dotted var(--line);
+}
+
+.match-text {
+  overflow-wrap: anywhere;
+}
+
+.group-match .check {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.group-settings {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.group-settings .check {
+  margin: 0.25rem 0;
+}
+
+.group-remove {
+  margin: 0.25rem 0 0;
+}
+
+.link-button.danger {
+  color: var(--terracotta);
+}
+
+.file-icon-wrap {
+  width: 1.6rem;
+}
+
+.group-match > .link-button {
+  margin-left: auto;
+}
+
+.group-more summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
+}
+
+.group-more[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.group-match .match-text {
+  flex: 1 1 12rem;
+}

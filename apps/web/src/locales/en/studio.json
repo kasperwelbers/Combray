@@ -1,6 +1,6 @@
 {
-  "intro": "Work out what participants see and are asked to donate from this platform: load a test package, decide what happens to each part of it, and check the preview.",
-  "filesIntro": "Save this platform's tree as structure.json and importer.json, or open files saved earlier or shared by another project.",
+  "intro": "Work out what participants see and are asked to donate from this platform, step by step: load test packages, pick the files to read, decide what happens to their contents, and check the preview.",
+  "filesIntro": "Save this platform's extractor as structure.json and importer.json, or open files saved earlier or shared by another project.",
   "open": "Open files",
   "save": "Save files",
   "startOver": "Start over",
@@ -108,7 +108,7 @@
   "hideIgnored": "Hide what is ignored",
   "viewHelp": {
     "named": "Only tables and their fields, by their names. A field belongs to the nearest table above it. Hover a name to see where it is in the files.",
-    "tree": "Everything in the files, including the folders, objects and HTML in between."
+    "tree": "Everything in the files of this group, including the objects, lists and HTML in between."
   },
   "chartIntro": "Count rows over time or per value, from the packages you loaded. This runs in your browser; it is a first step towards views participants can make themselves.",
   "readAs": "Read as",
@@ -316,12 +316,14 @@
   "signInFirstTime": "First time? The key page emails you a code, once, to confirm your address, and helps you set up your passkey and recovery code.",
   "noKeyPage": "This server has no key page set up, so researchers cannot sign in. Ask the server operator.",
   "tabs": {
-    "label": "Tree editor",
+    "label": "Steps of the extractor",
     "packages": "Test packages",
-    "decisions": "Decisions",
+    "files": "Files",
+    "contents": "Contents",
     "preview": "View as participant",
     "chart": "Charts",
-    "files": "Importer files",
+    "save": "Save and open",
+    "numbered": "{{number}}. {{name}}",
     "needsPackage": "This needs a tree to work on. Load a test package first, your own or one of the examples.",
     "toPackages": "Go to test packages"
   },
@@ -541,9 +543,13 @@
         "title": "Seen data",
         "body": "**Seen data** is the structure of the data packages seen so far: the names of folders, files and fields, never their contents. Every test package you load adds to it, and so do the structures participants share."
       },
+      "file-groups": {
+        "title": "Files and groups",
+        "body": "An extractor works in two steps. **Files**: which files of a package are read. Files that hold the same content are one **group**, such as watch-history.json and kijkgeschiedenis.json, or the JSON and the HTML version of a history. A file is read by one group only. **Contents**: what each group's files hold, as one tree, the union of its files.\n\nA group finds its files by their **exact path** (folders and name). Files in different folders can be in one group. When packages put a file in other folders, let the group **find it in any folder** by its name: only for names that occur once, since a name found in two folders reads neither. A **pattern** such as message_*.json reads files that are split in parts.\n\nGroup names are for you: they organise the studio and are never exported. Donations keep the real paths of the files."
+      },
       "extractor": {
         "title": "The extractor",
-        "body": "The **extractor** says what to take from the seen data. Each of its **nodes** matches one or more paths in the seen data, and has a **name** and a **decision**: show it to participants, ask them to donate it, or ignore it.\n\nPaths no node matches are **not matched**: nobody has looked at them yet, and they are left out. Click a part that is not matched to match it: give it a name and a decision. Matching a field also matches the folders, files and objects it is in, named by their keys."
+        "body": "The **extractor** says what to take from the seen data: which files to read (the files step), and what to take from them (the contents step). In the contents, each of its **nodes** matches one or more paths in the seen data, and has a **name** and a **decision**: show it to participants, ask them to donate it, or ignore it.\n\nPaths no node matches are **not matched**: nobody has looked at them yet, and they are left out. Click a part that is not matched to match it: give it a name and a decision. Matching a field also matches the objects and lists it is in, named by their keys."
       },
       "names": {
         "title": "Names",
@@ -559,7 +565,7 @@
       },
       "matches": {
         "title": "Matches and regular expressions",
-        "body": "A node matches keys in the files: exact keys, or regular expressions for keys that change, such as a date in a file name. A node with several matches takes the data of each, with the same settings.\n\nIf a regular expression matches several keys in one package, the node is split: one node per key, each with a copy of the settings. Find these under Advanced, in the dialog of a matched part."
+        "body": "A node matches keys in the files: exact keys, or regular expressions for keys that change, such as a date used as a key. (Files whose names change are read in the files step, by a name pattern.) A node with several matches takes the data of each, with the same settings.\n\nIf a regular expression matches several keys in one package, the node is split: one node per key, each with a copy of the settings. Find these under Advanced, in the dialog of a matched part."
       },
       "required": {
         "title": "Required",
@@ -746,5 +752,69 @@
     "careful": "privacy",
     "carefulHelp": "Texts marked privacy explain how participants’ data is kept safe and what they agree to. Change them only to make them clearer, never so they promise less or more than Combray does.",
     "text": "Text"
+  },
+  "files": {
+    "intro": "These are the files and folders seen in the test packages. Pick the files to read, and give files that hold the same content one group: the English and the Dutch history, or the JSON and the HTML export. Each group gets its own contents in the next step. Files no group reads are never opened.",
+    "browser": "Files seen in the test packages",
+    "counts_one": "{{count}} file seen, {{read}} read, in {{groups}} groups.",
+    "counts_other": "{{count}} files seen, {{read}} read, in {{groups}} groups.",
+    "onlyRead": "Only files that are read",
+    "readAll": "Read every file, each in a group of its own",
+    "none": "No files seen yet. Load a test package first.",
+    "folderCount_one": "{{count}} file, {{read}} read",
+    "folderCount_other": "{{count}} files, {{read}} read",
+    "inPackages": "in {{count}} of {{total}} packages",
+    "upload": "The uploaded file",
+    "suggest": "Looks like {{group}}",
+    "include": "Read this file",
+    "includeLabel": "Read {{name}}: choose a group",
+    "readByLabel": "{{name}} is read by {{group}}: change",
+    "anyFolderShort": "(any folder)",
+    "chooseTitle": "Which group reads {{name}}?",
+    "foundByName": "This file is found by its name, in any folder, by {{group}}. Change that in the group's settings.",
+    "newGroup": "Or a new group",
+    "addGroup": "Add",
+    "exclude": "Do not read this file",
+    "groupsTitle": "Groups",
+    "noGroups": "No group yet. Pick a file on the left to read it, in a new group or one you have.",
+    "rename": "Rename",
+    "renameLabel": "New name for {{name}}",
+    "renameSave": "Save",
+    "cancel": "Cancel",
+    "openContents": "Contents",
+    "readsNothing": "This group reads no files.",
+    "patternLabel": "Also read files named (use * for any text)",
+    "patternAdd": "Add",
+    "required": "Required: an upload only fits when it has one of these files",
+    "copyLabel": "Copy the content settings of",
+    "copyChoose": "Choose a group",
+    "copy": "Copy",
+    "copyConfirm": "Replace the content settings of {{to}} with a copy of those of {{from}}? Names, decisions and conversions are copied; the files each group reads stay their own.",
+    "remove": "Remove group",
+    "removeConfirm": "Remove the group {{name}}, with its content settings? Its files are no longer read.",
+    "anyFolder": "any folder",
+    "pattern": "pattern",
+    "notSeen": "not seen yet",
+    "foundTwice": "found in two folders",
+    "anyFolderToggle": "Find in any folder",
+    "anyFolderHelp": "Find this file by its name wherever it is, for packages where the folders are different. Only for names that occur once.",
+    "removeMatch": "Remove",
+    "settings": "Patterns, required, copy settings"
+  },
+  "contents": {
+    "groups": "Groups",
+    "noGroups": "No files are read yet. Pick the files to read first.",
+    "toFiles": "Go to files",
+    "branch": {
+      "list": "Files with a list",
+      "map": "Files with an object",
+      "element": "Web pages (HTML)",
+      "value": "Text files",
+      "text": "Text files",
+      "blob": "Other files",
+      "dir": "Folders"
+    },
+    "undecided_one": "{{count}} field not decided yet",
+    "undecided_other": "{{count}} fields not decided yet"
   }
 }

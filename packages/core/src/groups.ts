@@ -207,3 +207,24 @@ export function unseenMatches(config: ProjectConfig, seen: Shape | undefined, ke
 }
 
 export { ambiguousNames };
+
+const ESCAPE = /[.+^${}()|[\]\\]/g;
+const WILDCARD = /^\^((?:[^\\*?.]|\\[.+^${}()|[\]\\]|\.\*|\.)*)\$$/;
+
+/**
+ * A file name as a researcher writes it, as a match: `*` for any text and `?` for one character
+ * (`message_*.json`), ignoring case; without either, the name itself.
+ */
+export function namePattern(text: string): Match {
+  const name = text.trim();
+  if (!/[*?]/.test(name)) return name;
+  return { regex: `^${name.replace(ESCAPE, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`, flags: 'i' };
+}
+
+/** A name match as a researcher wrote it (`message_*.json`), or as the pattern it is. */
+export function patternText(match: Match): string {
+  if (typeof match === 'string') return match;
+  const wildcard = WILDCARD.exec(match.regex);
+  if (!wildcard) return `/${match.regex}/`;
+  return wildcard[1]!.replace(/\\(.)|\.\*|\./g, (all, escaped: string | undefined) => escaped ?? (all === '.*' ? '*' : '?'));
+}

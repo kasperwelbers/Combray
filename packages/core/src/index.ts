@@ -48,6 +48,8 @@ export {
   excludeFile,
   groupKey,
   groupsOf,
+  namePattern,
+  patternText,
   includeAll,
   includeFile,
   newGroupKey,

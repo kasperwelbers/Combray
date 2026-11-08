@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 /** The explanations, in order, by group. Their texts are `studio.helpTopics.topics.{id}`. */
 export const HELP_GROUPS = {
-  basics: ['seen-data', 'extractor', 'names', 'decisions', 'same-name'],
+  basics: ['seen-data', 'file-groups', 'extractor', 'names', 'decisions', 'same-name'],
   matching: ['matches', 'required', 'skip-new', 'keys-are-data', 'texts-are-names', 'side-by-side'],
   reading: ['read-as', 'clean', 'filter-rows', 'header-row'],
   packages: ['test-packages', 'keep-values'],

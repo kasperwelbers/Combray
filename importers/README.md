@@ -4,9 +4,10 @@ Platform packs, in two forms while we move from one to the other:
 
 - **Project trees** (`importer.json` and `structure.json` per platform), as described in
   [docs/tree-decisions.md](../docs/tree-decisions.md). `structure.json` is the union of the
-  platform's fixtures; `importer.json` holds names, matches, conversions, row filters and
-  decisions, and is what the researcher workspace (`/studio/`) opens and saves. Projects start
-  from these.
+  platform's fixtures; `importer.json` (`combray-importer@3`) holds the file groups (which files
+  are read, [ADR 0016](../docs/decisions/0016-file-groups.md)) and, per group, names, matches,
+  conversions, row filters and decisions. It is what the researcher workspace (`/studio/`)
+  opens and saves. Projects start from these.
 - **YAML importer specs**, one per file, as described in
   [docs/importer-spec.md](../docs/importer-spec.md). These are what participants' clients run
   today for projects without upload points; they are retired once nothing uses them.

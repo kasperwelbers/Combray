@@ -135,7 +135,7 @@ Layer 1 needs changes to `extractShape` (counts for repeated siblings, positiona
 A project defines **upload points**, each for one platform: "TikTok", "Google Takeout". Participants get **one uploader per upload point**, and each uploader only matches its own platform's tree. One tree could technically hold several platforms, but we recommend one platform per upload point: the messages to participants name the platform, and matching stays predictable.
 
 - **The upload is a nameless root.** The name of the uploaded file or folder is never recorded or sent, and nothing checks it. `kaspers_tiktok.json` and `mygoogledata/` reveal nothing, and renaming does not create a new tree.
-- **There are no file nodes.** Files and folders inside the root are ordinary nodes, matched by their matches like keys inside a file. Paths start at the root: `YouTube and YouTube Music/history/watch-history.json/[*]/title` for a Takeout, or `Activity/Like List/ItemFavoriteList/[*]/Date` for TikTok, whose root is the JSON file itself.
+- **Files are read by file groups.** The extractor's root holds file groups ([ADR 0016](decisions/0016-file-groups.md)): each reads some files (by exact path, by name in any folder, or by a name pattern), and its content is one tree, the union of those files. Paths in donations still start at the upload's root: `YouTube and YouTube Music/history/watch-history.json/[*]/title` for a Takeout, or `Activity/Like List/ItemFavoriteList/[*]/Date` for TikTok, whose root is the JSON file itself (read by the group `export`).
 - **The format comes from sniffing the content**, with the extension as a hint, not from the name.
 - **Split archives merge.** Google Takeout can come as `takeout-…-001.zip`, `-002.zip`. Picking several archives merges them into one root.
 - **Per-user names inside the root** (`messages/inbox/johnsmith_1234/`) go through the existing dictionary collapse and name screening, so they become `inbox/{*}/`.
@@ -160,11 +160,11 @@ A candidate fits the tree when:
 - **every required node is there**, by any of its matches, and
 - **something the study shows or asks for is there**: a path to a leaf with a `show` or `donate` decision.
 
-A folder is checked on names alone: a file in it must lead, through folders the tree knows, to a file the study uses, and required folders and files must be present. A file root (TikTok's JSON) has no name to check, so it is opened and its structure compared; it must be the same kind as the tree's root (a map, a list, an HTML page). Required nodes inside files are checked once the root is read.
+A folder is checked on names alone: a file in it must be read by a group whose content the study uses, and every required group must read a file there. A name in any folder that the folder has twice reads neither file (ADR 0016). A file root (TikTok's JSON) has no name to check, so it is opened and its structure compared; it must be the same kind as the tree's root (a map, a list, an HTML page). Required nodes inside files are checked once the root is read.
 
 There is no threshold to tune. Researchers who want a stricter match mark more nodes required.
 
-**Required nodes.** `required` is a toggle on any node. A combined node (matching `history` and `geschiedenis`) is satisfied by either key: a Dutch export with only `geschiedenis` still fits. Combining keeps the node required if either side was; taking a match off leaves the setting on the node. Use it for parts every export has. A participant whose export lacks a required part cannot add it, so a required leaf deep inside a list (every export must have at least one row with it) is rarely a good idea.
+**Required nodes.** `required` is a toggle on a file group (one of its files must be there) and on any node inside the contents. A combined node (matching `history` and `geschiedenis`) is satisfied by either key: a Dutch export with only `geschiedenis` still fits. Combining keeps the node required if either side was; taking a match off leaves the setting on the node. Use it for parts every export has. A participant whose export lacks a required part cannot add it, so a required leaf deep inside a list (every export must have at least one row with it) is rarely a good idea.
 
 ### Names first, and fixed limits
 
@@ -172,7 +172,7 @@ The order protects the participant:
 
 1. **Only names are listed.** Picked zips are read to list their entries, but nothing is inflated. Zips inside the upload are only opened when they are a wrapper or their name matches a pattern.
 2. **Only name matches are opened**, and only to check their structure.
-3. **Only the chosen root is read**, and in it only the files the tree wants: files in ignored parts are left out (unless they hold a required node), and so are files the tree does not know below a node that skips new children. The raw bytes kept on the device are those files only, never the rest of the upload.
+3. **Only the chosen root is read**, and in it only the files a file group reads. Every other file is left out, new ones included. The raw bytes kept on the device are those files only, never the rest of the upload.
 
 Combray sets hard limits that researchers cannot change (`UPLOAD_LIMITS` in `locate.ts`):
 
@@ -186,14 +186,14 @@ When nothing fits, the participant is told that this does not look like an expor
 
 ### New parts: ask or skip
 
-`newChildren: 'skip'` on an inner node means parts it has never seen below it (in the seen structures) are **not read, not shown, and not offered** for structure sharing. It is passed down: every node below follows it until one sets `ask` again. Known children are unaffected. The researcher accepts missing renamed or new parts there in return for a smaller, safer upload and shorter questions. New paths are never donated anyway (clients only get decided paths), so this only changes what is read, shown and asked about.
+New files are never read: only files a group reads are opened (ADR 0016). Inside the files, `newChildren: 'skip'` on an inner node means parts it has never seen below it (in the seen structures) are **not read, not shown, and not offered** for structure sharing. It is passed down: every node below follows it until one sets `ask` again. Known children are unaffected. The researcher accepts missing renamed or new parts there in return for a smaller, safer upload and shorter questions. New paths are never donated anyway (clients only get decided paths), so this only changes what is read, shown and asked about.
 
-The Takeout pack sets `skip` on the root, because a Takeout holds every Google product the participant exported, and `ask` on the products it knows (Chrome, My Activity, YouTube), so new files there still come up. We start with this plain toggle; a glob of allowed new names is parked until a case needs it.
+We start with this plain toggle; a glob of allowed new names is parked until a case needs it.
 
 ### Packs
 
-- **Google Takeout**: the root is the Takeout folder's contents; `find`: `Takeout`, `takeout-*.zip`; skips unknown products.
-- **TikTok**: the root is the JSON export itself, so `user_data.json` and `user_data_tiktok.json` need no matches; `find`: `user_data*.json`, for a JSON inside a bigger folder.
+- **Google Takeout**: the root is the Takeout folder's contents; `find`: `Takeout`, `takeout-*.zip`; groups for the browser history, YouTube searches, watch history and subscriptions, and Google searches, mostly found by name in any folder so translated folders need no matches.
+- **TikTok**: the root is the JSON export itself (the group `user_data` reads the upload), so `user_data.json` and `user_data_tiktok.json` need no matches; `find`: `user_data*.json`, for a JSON inside a bigger folder.
 
 How strict paths should be when packages change (exact paths versus the shortest unique path, and near matches that ask the participant) is discussed in [plans/2026-11-05-matching-robustness.md](plans/2026-11-05-matching-robustness.md).
 
@@ -205,7 +205,9 @@ The seen structures are facts: the union of every shape the project has seen, ne
 
 There are two ways to join variants, because both are common. In the studio both start from a part's name: giving a part a name another part has asks which one is meant ([the plan](plans/2026-11-05-researcher-experience.md#names-always)).
 
-- **Combine into one node** ("merge into that node"). Siblings of the same kind (`watch-history.json` and `kijkgeschiedenis.json`) become one node with all their matches, one set of settings and one subtree. Use it when the variants need the same settings. Where both had a setting, the kept node's wins and the studio lists the conflict. Taking a match off splits it again: the key it matched is unconfigured again.
+Files are joined in the files step instead: files with the same content are one group (ADR 0016). Inside the contents:
+
+- **Combine into one node** ("merge into that node"). Siblings of the same kind (`Watch History` and `Kijkgeschiedenis`) become one node with all their matches, one set of settings and one subtree. Use it when the variants need the same settings. Where both had a setting, the kept node's wins and the studio lists the conflict. Taking a match off splits it again: the key it matched is unconfigured again.
 - **Give the same name** ("a new node with the same name"). Nodes keep their own settings and subtrees (Dutch and English dates are written differently) and share a name, so participants see one table or one column.
 - **Nodes side by side are never combined.** A node that would match two keys in one structure is wrong. The studio checks every seen structure, not the union, and refuses with a count ("both are in 3 packages"); suggestions skip such pairs. Absence is no evidence: structures that have only one of the keys do not count. Giving the same name is always allowed.
 - **Every matching node gets the data.** If a regular expression on one node and an exact key on another match the same key, both get the value. That is rare and visible in the studio, and simpler than precedence rules.
@@ -253,7 +255,7 @@ When a study needs the value as it is in the file too, the researcher sets `raw`
 A project tree is kept as two JSON documents, combined into one tree in the browser:
 
 - **`structure.json`**: the seen structures, the union of every shape the project has seen. It grows as participants share their structure and researchers load test packages, and is never edited by hand.
-- **`importer.json`**, owned by the researcher: the names and the configuration tree (matches, decisions, conversions, filters, lifters and scripts as strings). This is the part that is shared between projects.
+- **`importer.json`**, owned by the researcher: the file groups (which files are read, [ADR 0016](decisions/0016-file-groups.md)) and, for each group, the configuration of its contents (matches, names, decisions, conversions, filters, lifters and scripts as strings). This is the part that is shared between projects.
 
 Keeping them apart means new structure never collides with the researcher's edits, and joining nodes changes only `importer.json`. Clients receive both. Next to these, the server keeps every structure participants shared, without any participant id, one copy per distinct structure with a count. See [structure-versions.md](structure-versions.md).
 
@@ -263,7 +265,7 @@ Platform packs become shared `importer.json` files plus a reference `structure.j
 
 | Current spec | Project tree |
 | --- | --- |
-| `match.file` with `{a,b}` | Nodes under the root with several matches |
+| `match.file` with `{a,b}` | A file group with several files |
 | `select.rows` | Nothing: the list it points at is a table anyway |
 | `fields.*.path` | Donated or shown leaves, with labels |
 | `as`, `format`, `transform`, `script` | The same, on the leaf |

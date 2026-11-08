@@ -79,3 +79,50 @@ describe('parseNameMap', () => {
     expect(() => parseNameMap({ format: 'combray-names/1', root: { k: '*' } })).toThrow('invalid name map node');
   });
 });
+
+// Version 2: file groups. A group reads files by exact path or by name in any folder; its
+// children are the content of those files, whatever their name.
+const groups: NameMap = {
+  format: 'combray-names/2',
+  root: {
+    c: [
+      {
+        g: [{ p: ['Takeout', 'YouTube', 'history', 'search-history.json'] }, { n: { regex: '^zoekgeschiedenis\\.json$', flags: 'i' } }],
+        c: [{ c: [{ k: '[*]', t: 'searches', c: [{ m: ['query'], f: 'query' }] }] }],
+      },
+      { g: [{ n: 'search-history.json' }], c: [{ c: [{ k: '[*]', t: 'other_searches', c: [{ m: ['query'], f: 'query' }] }] }] },
+      { g: [{ p: [] }], c: [{ c: [{ m: ['name'], f: 'name' }] }] },
+    ],
+  },
+};
+
+describe('placements in file groups', () => {
+  it('places files of one group from different folders in one table, rows counted on the raw path', () => {
+    expect(placements(groups, ['Takeout', 'YouTube', 'history', 'search-history.json', '[2]', 'query'])).toEqual([
+      { table: 'searches', field: 'query', rows: [{ table: 'searches', steps: 5 }] },
+    ]);
+    expect(placements(groups, ['Takeout', 'Mijn', 'ZoekGeschiedenis.json', '[0]', 'query'])).toEqual([
+      { table: 'searches', field: 'query', rows: [{ table: 'searches', steps: 4 }] },
+    ]);
+  });
+
+  it('prefers an exact path over a name in any folder', () => {
+    expect(placements(groups, ['Takeout', 'YouTube', 'history', 'search-history.json', '[0]', 'query']).map((p) => p.table)).toEqual(['searches']);
+    expect(placements(groups, ['elsewhere', 'search-history.json', '[0]', 'query']).map((p) => p.table)).toEqual(['other_searches']);
+  });
+
+  it('reads the upload itself when a group reads the empty path', () => {
+    expect(placements(groups, ['name'])).toEqual([{ table: '', field: 'name', rows: [] }]);
+  });
+
+  it('does not take a position inside a file for a folder', () => {
+    expect(placements(groups, ['Takeout', '[0]', 'search-history.json', 'query'])).toEqual([]);
+  });
+
+  it('still reads version 1 maps, and checks groups only in version 2', () => {
+    expect(parseNameMap(JSON.parse(JSON.stringify(groups)))).toEqual(groups);
+    expect(() => parseNameMap({ format: 'combray-names/1', root: { c: [{ g: [{ n: 'a.json' }] }] } })).toThrow();
+    expect(() => parseNameMap({ format: 'combray-names/2', root: { c: [{ g: [{ n: 3 }] }] } })).toThrow();
+    expect(() => parseNameMap({ format: 'combray-names/2', root: { c: [{ c: [{ g: [{ n: 'a.json' }] }] }] } })).toThrow();
+  });
+});

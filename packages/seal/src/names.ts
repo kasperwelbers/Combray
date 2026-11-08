@@ -100,6 +100,9 @@ function matchOne(match: NameMatch, key: string): boolean {
   return re?.test(key) ?? false;
 }
 
+/** What a file match reads: an exact path, a name in any folder, or the upload itself. */
+const fileMatchKind = (m: NameFileMatch) => ('n' in m ? 'name' : m.p.length === 0 ? 'upload' : 'path');
+
 /** How many steps of a path, from `start`, are the file a group's match reads; undefined if it does not. */
 function fileSteps(match: NameFileMatch, path: readonly string[], start: number): number | undefined {
   if ('p' in match) {
@@ -138,16 +141,17 @@ export function placements(map: NameMap | NameNode, path: readonly string[]): Pl
     }
     const step = path[i]!;
     const general = generalStep(step);
-    // File groups: exact paths first, else names in any folder; then the file's content.
+    // File groups: exact paths first, else names in any folder, else the upload itself (whose
+    // name is not in its paths, so it is told apart only by not being a file of a folder).
     const groups = (node.c ?? []).filter((c) => c.g !== undefined);
     if (groups.length > 0) {
-      const hits = (exact: boolean) =>
+      const hits = (kind: 'path' | 'name' | 'upload') =>
         groups.flatMap((g) => {
-          const lengths = g.g!.filter((m) => ('p' in m) === exact).flatMap((m) => fileSteps(m, path, i) ?? []);
+          const lengths = g.g!.filter((m) => fileMatchKind(m) === kind).flatMap((m) => fileSteps(m, path, i) ?? []);
           return lengths.length > 0 ? [{ g, steps: Math.min(...lengths) }] : [];
         });
-      const exact = hits(true);
-      for (const { g, steps } of exact.length > 0 ? exact : hits(false)) {
+      const found = [hits('path'), hits('name'), hits('upload')].find((h) => h.length > 0) ?? [];
+      for (const { g, steps } of found) {
         for (const file of g.c ?? []) visit(file, i + steps, rows, zip);
       }
     }
