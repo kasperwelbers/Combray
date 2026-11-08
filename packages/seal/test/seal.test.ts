@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   CHUNK_BYTES,
@@ -8,6 +8,8 @@ import {
   concat,
   decodePayload,
   encodePayload,
+  gunzip,
+  gzip,
   fingerprint,
   findRecoveryCode,
   fromBase32,
@@ -28,6 +30,7 @@ import {
   toBase32,
   toRecoveryCode,
   unwrapMaster,
+  valuePath,
   wrapMaster,
 } from '../src';
 
@@ -110,11 +113,15 @@ describe('project keys', () => {
 });
 
 describe('donation envelopes', () => {
-  const payload = encodePayload({
-    format: 'combray-donation/1',
-    tables: [{ id: 'watch', name: 'Watch history', fields: [{ id: 'title', name: 'Title' }] }],
-    values: [{ table: 'watch', row: 0, field: 'title', path: ['watch-history.json', '[0]', 'title'], value: 'A video' }],
+  const content = {
+    format: 'combray-donation/2' as const,
+    entries: [{ platform: 'youtube', path: ['watch-history.json', '[*]', 'title'], table: 'watch', field: 'title', rows: [{ table: 'watch', steps: 2 }] }],
+    values: [[0, [0], 'A video'] as [number, number[], string]],
     answers: { q1: 'yes' },
+  };
+  let payload: Uint8Array<ArrayBuffer>;
+  beforeAll(async () => {
+    payload = await encodePayload(content);
   });
 
   it('round trips, in several chunks', async () => {
@@ -128,34 +135,48 @@ describe('donation envelopes', () => {
     expect(opened.payload).toEqual(big);
   });
 
-  it('decodes the payload', async () => {
+  it('decodes the payload, gzipped', async () => {
     const project = await newProjectKey();
+    // gzip's magic number: the payload is compressed before it is sealed.
+    expect([...payload.slice(0, 2)]).toEqual([0x1f, 0x8b]);
     const d = await sealDonation(payload, { projectId: 'willow', projectPublicKey: project.publicKey });
     expect(d.header.chunkBytes).toBe(CHUNK_BYTES);
     const { payload: out } = await openDonation(d.envelope, d.sealedKey, project.seed, { projectId: 'willow', donationId: d.header.donation });
-    expect(decodePayload(out).values[0]?.value).toBe('A video');
+    const decoded = await decodePayload(out);
+    expect(decoded.values[0]?.[2]).toBe('A video');
+    expect(valuePath(decoded.entries[0]!, decoded.values[0]![1])).toEqual(['watch-history.json', '[0]', 'title']);
   });
 
-  it('refuses payloads that are not in the long format', () => {
-    const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
-    const base = { format: 'combray-donation/1', tables: [], values: [] };
-    expect(decodePayload(bytes(base)).values).toEqual([]);
+  it('refuses payloads that are not in the format, and gzip bombs', async () => {
+    const bytes = (value: unknown) => gzip(new TextEncoder().encode(JSON.stringify(value)));
+    const base = { format: 'combray-donation/2', entries: content.entries, values: [] };
+    const decode = async (value: unknown) => decodePayload(await bytes(value));
+    expect((await decode(base)).values).toEqual([]);
+    await expect(decodePayload(new TextEncoder().encode(JSON.stringify(base)))).rejects.toThrow('unknown payload format');
+    await expect(decode({ ...base, format: 'combray-donation/1' })).rejects.toThrow('unknown payload format');
     // The project version it was made with: a positive whole number, when there.
-    expect(decodePayload(bytes({ ...base, version: 4 })).version).toBe(4);
-    expect(() => decodePayload(bytes({ ...base, version: 0 }))).toThrow('invalid version');
-    expect(() => decodePayload(bytes({ ...base, version: '4' }))).toThrow('invalid version');
-    expect(() => decodePayload(bytes({ ...base, values: undefined, rows: [] }))).toThrow('unknown payload format');
-    expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: -1, field: 'f', path: [], value: 1 }] }))).toThrow('invalid value');
-    expect(() => decodePayload(bytes({ ...base, values: [{ table: 't', row: 0, field: 'f', path: [], value: { x: 1 } }] }))).toThrow('invalid value');
-    expect(() => decodePayload(bytes({ ...base, tables: [{ id: 't', name: 'T', columns: [] }] }))).toThrow('invalid table');
+    expect((await decode({ ...base, version: 4 })).version).toBe(4);
+    await expect(decode({ ...base, version: 0 })).rejects.toThrow('invalid version');
+    await expect(decode({ ...base, version: '4' })).rejects.toThrow('invalid version');
+    await expect(decode({ ...base, values: undefined, rows: [] })).rejects.toThrow('unknown payload format');
+    // A value names an entry, and gives exactly the positions its path needs.
+    expect((await decode({ ...base, values: [[0, [3], 'x', 'raw x']] })).values).toEqual([[0, [3], 'x', 'raw x']]);
+    await expect(decode({ ...base, values: [[1, [0], 'x']] })).rejects.toThrow('invalid value');
+    await expect(decode({ ...base, values: [[0, [], 'x']] })).rejects.toThrow('invalid value');
+    await expect(decode({ ...base, values: [[0, [-1], 'x']] })).rejects.toThrow('invalid value');
+    await expect(decode({ ...base, values: [[0, [0], { x: 1 }]] })).rejects.toThrow('invalid value');
+    await expect(decode({ ...base, entries: [{ ...content.entries[0], rows: [{ table: 't', steps: 9 }] }] })).rejects.toThrow('invalid entry');
+    await expect(decode({ ...base, entries: [{ ...content.entries[0], platform: 3 }] })).rejects.toThrow('invalid entry');
+    const bomb = await gzip(new Uint8Array(2 * 1024 * 1024));
+    await expect(gunzip(bomb, 1024 * 1024)).rejects.toThrow('payload too large');
     const consent = { language: 'nl', information: 'Over het onderzoek', statements: ['Ik ben 16 of ouder.'] };
-    expect(decodePayload(bytes({ ...base, consent })).consent).toEqual(consent);
-    expect(() => decodePayload(bytes({ ...base, consent: { language: 'nl', statements: [1] } }))).toThrow('invalid consent');
-    expect(() => decodePayload(bytes({ ...base, consent: { statements: [] } }))).toThrow('invalid consent');
+    expect((await decode({ ...base, consent })).consent).toEqual(consent);
+    await expect(decode({ ...base, consent: { language: 'nl', statements: [1] } })).rejects.toThrow('invalid consent');
+    await expect(decode({ ...base, consent: { statements: [] } })).rejects.toThrow('invalid consent');
     const questions = [{ id: 'q1', prompt: 'Hoe vaak?', options: ['Vaak', 'Soms'] }, { id: 'q2', prompt: 'Waarom?' }];
-    expect(decodePayload(bytes({ ...base, answers: { q1: 'Often', q2: 'Daarom' }, questions })).questions).toEqual(questions);
-    expect(() => decodePayload(bytes({ ...base, questions: [{ id: 'q1' }] }))).toThrow('invalid questions');
-    expect(() => decodePayload(bytes({ ...base, questions: [{ id: 'q1', prompt: 'x', options: [1] }] }))).toThrow('invalid questions');
+    expect((await decode({ ...base, answers: { q1: 'Often', q2: 'Daarom' }, questions })).questions).toEqual(questions);
+    await expect(decode({ ...base, questions: [{ id: 'q1' }] })).rejects.toThrow('invalid questions');
+    await expect(decode({ ...base, questions: [{ id: 'q1', prompt: 'x', options: [1] }] })).rejects.toThrow('invalid questions');
   });
 
   it('refuses tampering, truncation, the wrong key and the wrong donation', async () => {
@@ -188,10 +209,8 @@ describe('donation envelopes', () => {
     await expect(openDonation(d.envelope, e.sealedKey, project.seed, expect_)).rejects.toThrow();
   });
 
-  it('refuses payloads it does not understand', () => {
-    expect(() => decodePayload(new TextEncoder().encode('{"format":"other"}'))).toThrow();
-    expect(() =>
-      decodePayload(new TextEncoder().encode('{"format":"combray-donation/1","tables":[{"id":"a","name":"a","columns":[],"rows":[[{}]]}]}')),
-    ).toThrow();
+  it('refuses payloads it does not understand', async () => {
+    await expect(decodePayload(new TextEncoder().encode('{"format":"other"}'))).rejects.toThrow();
+    await expect(decodePayload(await gzip(new TextEncoder().encode('{"format":"other"}')))).rejects.toThrow('unknown payload format');
   });
 });

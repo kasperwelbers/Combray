@@ -87,7 +87,8 @@ export {
 export type { JoinConflict } from './joins';
 export { deriveTables, deriveRows, groupTables, headerNames, outline, treeNames, keyName, pathKey, valuesAt, convertValue, KEY_COLUMN, VALUE_COLUMN } from './derive';
 export type { TableDef, ColumnDef, DerivedRow, DeriveOptions, OutlineGroup, TreeNames, NamedTable, NamedField, Labels } from './derive';
-export { combineDonations, donationValues, withoutRows } from './donate';
+export { combineDonations, donationPayload, donationValues, generalPath, withoutRows } from './donate';
+export { listTable, nameMap } from './nameMap';
 export type { DonatedCell, DonatedRow, DonatedTableInfo, DonatedValue, DonationContent } from './donate';
 export {
   structureFile,
