@@ -3,8 +3,8 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { buildTree, combineNodes, emptyConfig, extractShape, jsonToTree, normalizeTree, parseEntries, suggestCombines } from '../src';
-import { keyedTree, rebuild } from './trees';
+import { combineNodes, extractShape, includeAll, jsonToTree, normalizeTree, parseEntries, suggestCombines, suggestGroups, unionShape } from '../src';
+import { fileOf, keyedTree, rebuild, treeOf } from './trees';
 
 const fixtures = new URL('../../../importers/fixtures/', import.meta.url).pathname;
 
@@ -26,13 +26,14 @@ describe('suggestCombines', () => {
   it('pairs a renamed key with the configured key it replaces', () => {
     const tree = keyedTree(extractShape(jsonToTree('a.json', [{ title: 'x', timestamp: '2024-01-01T10:00:00Z' }])));
     const shape = extractShape(jsonToTree('b.json', [{ title: 'y', date: '2024-02-01T11:00:00Z' }]));
-    expect(pairs(suggestCombines(tree, shape))).toEqual([['[*]/~value:date', '[*]/timestamp']]);
+    // Inside the content of the file that is the upload (the group `export`).
+    expect(pairs(suggestCombines(tree, shape))).toEqual([['export/export/[*]/~value:date', 'export/export/[*]/timestamp']]);
   });
 
   it('pairs with parts seen before that nobody has configured yet', () => {
-    const first = fixtureShape('tiktok-2023');
-    const tree = buildTree(emptyConfig(first.kind), first).tree;
-    expect(pairs(suggestCombines(tree, fixtureShape('tiktok-2025')))).toEqual([['~map:user_data_tiktok.json', '~map:user_data.json']]);
+    const tree = treeOf(extractShape(jsonToTree('a.json', [{ title: 'x', timestamp: '2024-01-01T10:00:00Z' }])));
+    const shape = extractShape(jsonToTree('b.json', [{ title: 'y', date: '2024-02-01T11:00:00Z' }]));
+    expect(pairs(suggestCombines(tree, shape))).toEqual([['g-export/~list:export/~map:[*]/~value:date', 'g-export/~list:export/~map:[*]/~value:timestamp']]);
   });
 
   it('does not pair values of different types, or nodes that are both present', () => {
@@ -41,9 +42,12 @@ describe('suggestCombines', () => {
     expect(suggestCombines(tree, extractShape(jsonToTree('b.json', [{ title: 'y', likes: 3, extra: 4 }])))).toEqual([]);
   });
 
-  it('pairs translated folders by what is inside them', () => {
-    const tree = keyedTree(fixtureShape('tiktok-2023'));
-    expect(pairs(suggestCombines(tree, fixtureShape('tiktok-2025')))).toEqual([['~map:user_data_tiktok.json', 'user_data.json']]);
+  it('suggests the group a renamed file belongs to, by what is inside it', () => {
+    const first = fixtureShape('tiktok-2023');
+    const seen = unionShape([first, fixtureShape('tiktok-2025')])!;
+    expect(suggestGroups(includeAll(first).root, seen)).toEqual([{ file: ['user_data_tiktok.json'], group: 'user_data', score: expect.any(Number) }]);
+    // Files every group reads get no suggestion.
+    expect(suggestGroups(includeAll(seen).root, seen)).toEqual([]);
   });
 
   it('gives paths in the tree laid over both, so combining can be applied, and suggests their keys next', () => {
@@ -51,13 +55,13 @@ describe('suggestCombines', () => {
     const second = extractShape(jsonToTree('b.json', { 'Watch history': [{ date: '2024-01-01 10:00:00', link: 'https://t.example/v/1' }] }));
     const tree = rebuild(keyedTree(first), second);
     const [suggestion] = suggestCombines(tree, second);
-    expect(suggestion).toMatchObject({ from: ['~list:Watch history'], into: ['Watch History'] });
+    expect(suggestion).toMatchObject({ from: ['export', 'export', '~list:Watch history'], into: ['export', 'export', 'Watch History'] });
     const combined = rebuild(combineNodes(tree, [suggestion!.into, suggestion!.from]).tree, second);
-    expect(combined.children!.map((c) => [c.name, c.match])).toEqual([['Watch History', ['Watch History', 'Watch history']]]);
+    expect(fileOf(combined).children!.map((c) => [c.name, c.match])).toEqual([['Watch History', ['Watch History', 'Watch history']]]);
     // Their keys now sit side by side below the one node.
     expect(pairs(suggestCombines(combined, second)).sort()).toEqual([
-      ['Watch History/[*]/~value:date', 'Watch History/[*]/Date'],
-      ['Watch History/[*]/~value:link', 'Watch History/[*]/Link'],
+      ['export/export/Watch History/[*]/~value:date', 'export/export/Watch History/[*]/Date'],
+      ['export/export/Watch History/[*]/~value:link', 'export/export/Watch History/[*]/Link'],
     ]);
   });
 });

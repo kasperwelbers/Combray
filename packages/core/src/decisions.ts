@@ -18,11 +18,13 @@ import {
   newId,
   SETTINGS,
   type ConfigNode,
+  type FileMatch,
   type LeafDecision,
   type Match,
   type NodeSettings,
   type ProjectConfig,
 } from './config';
+import { contentShape } from './files';
 import { collapseShape, COLLAPSED_NAME, ITEM_NAME, mergeAll, repeatOf, type Repeat, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
@@ -131,14 +133,16 @@ export function pathOf(root: ProjectNode, target: ProjectNode): NodePath | undef
 /**
  * Whether a config node (`child`) matches a real position with this kind and name, below a
  * parent. Below a map whose keys are data, only the `{*}` node matches, and it matches every key.
+ * Below a file group, a node matches every file of its kind (ADR 0016).
  */
 export function matchesPosition(
-  parent: { collapsed?: true },
+  parent: { collapsed?: true; files?: FileMatch[] },
   child: { kind: NodeKind; match: readonly Match[] },
   kind: NodeKind,
   name: string,
 ): boolean {
   if (child.kind !== kind) return false;
+  if (parent.files !== undefined) return true;
   if (isKeysNode(child)) return name === COLLAPSED_NAME || parent.collapsed === true;
   if (parent.collapsed) return false;
   if (isItemNode(child)) return name === ITEM_NAME;
@@ -383,8 +387,9 @@ export function buildTree(config: ProjectConfig, shape?: Shape, options: BuildOp
   };
 
   const root = fromConfig(config.root);
-  const seen = options.seen && unifyElementTwins(options.seen);
-  const start: Source[] = shape ? [{ shape: unifyElementTwins(shape), ...(seen ? { seen } : {}) }] : [];
+  // Configurations are laid over the content of an upload: its files, by group (ADR 0016).
+  const seen = options.seen && unifyElementTwins(contentShape(options.seen, config.root));
+  const start: Source[] = shape ? [{ shape: unifyElementTwins(contentShape(shape, config.root)), ...(seen ? { seen } : {}) }] : [];
   visit(root, config.root.children ?? [], start, [], false, false);
   root.name = '';
   return { tree: root, sources, conflicts, shared, unmatched, fresh };
@@ -424,9 +429,17 @@ export function configTree(config: ProjectConfig): ProjectNode {
   return buildTree(config).tree;
 }
 
-/** A configuration with only a root, for a structure nobody has configured yet. */
-export function emptyConfig(kind: NodeKind): ProjectConfig {
-  return { root: { id: 'root', kind, match: [] } };
+/** The group an upload that is one file starts with: that file (TikTok's JSON). */
+export const UPLOAD_GROUP = 'export';
+
+/**
+ * A configuration for a structure nobody has configured yet: no file groups, or, when the upload
+ * is one file (`kind` is not a folder), one group that reads it.
+ */
+export function emptyConfig(kind: NodeKind = 'dir'): ProjectConfig {
+  const root: ConfigNode = { id: 'root', kind: 'dir', match: [] };
+  if (kind !== 'dir') root.children = [{ id: `g-${UPLOAD_GROUP}`, kind: 'dir', match: [UPLOAD_GROUP], files: [{ path: [] }] }];
+  return { root };
 }
 
 /** Whether a virtual node was given something: a name or a setting, here or below. */
@@ -442,9 +455,11 @@ function touched(node: ProjectNode): boolean {
  * become config nodes with a new id and their key as their one match.
  */
 export function toConfig(tree: ProjectNode): ConfigNode {
-  const visit = (node: ProjectNode): ConfigNode => {
+  const visit = (node: ProjectNode, parent?: ProjectNode): ConfigNode => {
+    // The files of a group are matched by their kind, not their key.
+    const inGroup = parent?.files !== undefined;
     const out: ConfigNode = node.virtual
-      ? { id: newId(), kind: node.kind, match: [node.name] }
+      ? { id: newId(), kind: node.kind, match: inGroup ? [] : [node.name] }
       : { id: node.id, kind: node.kind, match: [...node.match] };
     if (node.named !== undefined) out.name = node.named;
     for (const key of SETTINGS) {
@@ -452,7 +467,7 @@ export function toConfig(tree: ProjectNode): ConfigNode {
       const value = node[key];
       if (value !== undefined) (out as unknown as Record<string, unknown>)[key] = structuredClone(value);
     }
-    const children = (node.children ?? []).filter((c) => !c.virtual || touched(c)).map(visit);
+    const children = (node.children ?? []).filter((c) => !c.virtual || touched(c)).map((c) => visit(c, node));
     if (children.length > 0) out.children = children;
     return out;
   };
@@ -471,13 +486,15 @@ export function materialise(tree: ProjectNode, path: NodePath): { tree: ProjectN
   const along = nodesAlong(copy, path);
   if (!along) throw new DecisionError(`no node at ${path.join('/')}`);
   const out: NodePath = [];
-  for (const node of along.slice(1)) {
+  along.slice(1).forEach((node, i) => {
     if (node.virtual) {
       delete node.virtual;
       node.id = newId();
+      // The files of a group are matched by their kind, not their key.
+      if (along[i]!.files !== undefined) node.match = [];
     }
     out.push(node.id);
-  }
+  });
   return { tree: copy, path: out };
 }
 
@@ -494,7 +511,7 @@ export function remapPath(before: ProjectNode, after: ProjectNode, path: NodePat
     if (!prev) return undefined;
     const next =
       now.children?.find((c) => c.id === id) ??
-      now.children?.find((c) => c.kind === prev.kind && !c.virtual && c.match.some((m) => m === prev.name));
+      now.children?.find((c) => c.kind === prev.kind && !c.virtual && (now.files !== undefined || c.match.some((m) => m === prev.name)));
     if (!next) return undefined;
     out.push(next.id);
     old = prev;

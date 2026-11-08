@@ -1,33 +1,214 @@
 {
-  "format": "combray-importer@2",
-  "name": {"en": "TikTok", "nl": "TikTok"},
-  "root":
-  {"id": "root", "kind": "map", "match": [], "find": ["user_data*.json"], "children": [
-    {"id": "Activity", "kind": "map", "match": ["Activity", "Your Activity", "Likes and Favorites"], "children": [
-      {"id": "Like List", "kind": "map", "match": ["Like List"], "children": [
-        {"id": "ItemFavoriteList", "kind": "list", "match": ["ItemFavoriteList", "itemFavoriteList"], "name": "tiktok_likes", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
-            {"id": "Date", "kind": "value", "match": ["Date", "date"], "name": "time", "decision": "show", "as": "datetime", "format": "YYYY-MM-DD HH:mm:ss", "role": "date"},
-            {"id": "Link", "kind": "value", "match": ["Link", "link", "VideoLink"], "name": "video", "decision": "show", "as": "url", "role": "url"}
-          ]}
-        ]}
-      ]},
-      {"id": "Search History", "kind": "map", "match": ["Search History", "Searches"], "children": [
-        {"id": "SearchList", "kind": "list", "match": ["SearchList", "searchList"], "name": "tiktok_searches", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
-            {"id": "Date", "kind": "value", "match": ["Date", "date"], "name": "time", "decision": "show", "as": "datetime", "format": "YYYY-MM-DD HH:mm:ss", "role": "date"},
-            {"id": "SearchTerm", "kind": "value", "match": ["SearchTerm", "searchTerm"], "name": "search", "decision": "show", "role": "title"}
-          ]}
-        ]}
-      ]},
-      {"id": "Video Browsing History", "kind": "map", "match": ["Video Browsing History", "Watch History"], "children": [
-        {"id": "VideoList", "kind": "list", "match": ["VideoList", "videoList"], "name": "tiktok_watch_history", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
-            {"id": "Date", "kind": "value", "match": ["Date", "date"], "name": "time", "decision": "show", "as": "datetime", "format": "YYYY-MM-DD HH:mm:ss", "role": "date"},
-            {"id": "Link", "kind": "value", "match": ["Link", "link", "VideoLink"], "name": "video", "decision": "show", "as": "url", "role": "url"}
-          ]}
-        ]}
-      ]}
-    ]}
-  ]}
+  "format": "combray-importer@3",
+  "name": {
+    "en": "TikTok",
+    "nl": "TikTok"
+  },
+  "root": {
+    "id": "root",
+    "kind": "dir",
+    "match": [],
+    "find": [
+      "user_data*.json"
+    ],
+    "children": [
+      {
+        "id": "g-user_data",
+        "kind": "dir",
+        "match": [
+          "user_data"
+        ],
+        "files": [
+          {
+            "path": []
+          }
+        ],
+        "children": [
+          {
+            "id": "user_data",
+            "kind": "map",
+            "match": [],
+            "children": [
+              {
+                "id": "Activity",
+                "kind": "map",
+                "match": [
+                  "Activity",
+                  "Your Activity",
+                  "Likes and Favorites"
+                ],
+                "children": [
+                  {
+                    "id": "Like List",
+                    "kind": "map",
+                    "match": [
+                      "Like List"
+                    ],
+                    "children": [
+                      {
+                        "id": "ItemFavoriteList",
+                        "kind": "list",
+                        "match": [
+                          "ItemFavoriteList",
+                          "itemFavoriteList"
+                        ],
+                        "name": "tiktok_likes",
+                        "children": [
+                          {
+                            "id": "[*]",
+                            "kind": "map",
+                            "match": [
+                              "[*]"
+                            ],
+                            "children": [
+                              {
+                                "id": "Date",
+                                "kind": "value",
+                                "match": [
+                                  "Date",
+                                  "date"
+                                ],
+                                "name": "time",
+                                "decision": "show",
+                                "as": "datetime",
+                                "format": "YYYY-MM-DD HH:mm:ss",
+                                "role": "date"
+                              },
+                              {
+                                "id": "Link",
+                                "kind": "value",
+                                "match": [
+                                  "Link",
+                                  "link",
+                                  "VideoLink"
+                                ],
+                                "name": "video",
+                                "decision": "show",
+                                "as": "url",
+                                "role": "url"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "Search History",
+                    "kind": "map",
+                    "match": [
+                      "Search History",
+                      "Searches"
+                    ],
+                    "children": [
+                      {
+                        "id": "SearchList",
+                        "kind": "list",
+                        "match": [
+                          "SearchList",
+                          "searchList"
+                        ],
+                        "name": "tiktok_searches",
+                        "children": [
+                          {
+                            "id": "[*]",
+                            "kind": "map",
+                            "match": [
+                              "[*]"
+                            ],
+                            "children": [
+                              {
+                                "id": "Date",
+                                "kind": "value",
+                                "match": [
+                                  "Date",
+                                  "date"
+                                ],
+                                "name": "time",
+                                "decision": "show",
+                                "as": "datetime",
+                                "format": "YYYY-MM-DD HH:mm:ss",
+                                "role": "date"
+                              },
+                              {
+                                "id": "SearchTerm",
+                                "kind": "value",
+                                "match": [
+                                  "SearchTerm",
+                                  "searchTerm"
+                                ],
+                                "name": "search",
+                                "decision": "show",
+                                "role": "title"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "Video Browsing History",
+                    "kind": "map",
+                    "match": [
+                      "Video Browsing History",
+                      "Watch History"
+                    ],
+                    "children": [
+                      {
+                        "id": "VideoList",
+                        "kind": "list",
+                        "match": [
+                          "VideoList",
+                          "videoList"
+                        ],
+                        "name": "tiktok_watch_history",
+                        "children": [
+                          {
+                            "id": "[*]",
+                            "kind": "map",
+                            "match": [
+                              "[*]"
+                            ],
+                            "children": [
+                              {
+                                "id": "Date",
+                                "kind": "value",
+                                "match": [
+                                  "Date",
+                                  "date"
+                                ],
+                                "name": "time",
+                                "decision": "show",
+                                "as": "datetime",
+                                "format": "YYYY-MM-DD HH:mm:ss",
+                                "role": "date"
+                              },
+                              {
+                                "id": "Link",
+                                "kind": "value",
+                                "match": [
+                                  "Link",
+                                  "link",
+                                  "VideoLink"
+                                ],
+                                "name": "video",
+                                "decision": "show",
+                                "as": "url",
+                                "role": "url"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -19,7 +19,7 @@ import { deriveRows, KEY_COLUMN, leafValue, matchesChild, convertValue, type Col
 import { getNode, matchesPosition, type ProjectNode } from './decisions';
 import { isItemNode } from './config';
 import { listTable } from './nameMap';
-import { elementName, screenName } from './shape';
+import { contentTree, stepOf } from './files';
 import { childrenOf, type TreeNode } from './tree';
 
 export type DonatedCell = string | number | boolean | null;
@@ -82,9 +82,6 @@ const cell = (value: unknown): DonatedCell =>
 
 const text = (name: Localized) => localize(name, 'en');
 
-/** A path step of a key, as shapes write it: screened, and HTML elements by their shape name. */
-const stepOf = (node: TreeNode) => (node.kind === 'element' ? elementName(node.name, node.attrs) : screenName(node.name));
-
 /** `[*]` and `{*}` for positions: the path without where in the lists it is. */
 export const generalPath = (path: readonly string[]) => path.map((s) => (/^\[\d+\]$/.test(s) ? '[*]' : /^\{\d+\}$/.test(s) ? '{*}' : s));
 
@@ -96,7 +93,9 @@ function pathsOf(tree: TreeNode, project: ProjectNode): Map<TreeNode, string[]> 
     childrenOf(node).forEach((child, i) => {
       const target = (at.children ?? []).find((c) => matchesChild(at, node, child, c));
       if (target) {
-        visit(child, target, [...path, node.kind === 'list' ? `[${i}]` : at.collapsed ? `{${i}}` : stepOf(child)]);
+        // The root of a file in a group: its path is where the file is, not the group (ADR 0016).
+        const step = node.kind === 'list' ? `[${i}]` : at.collapsed ? `{${i}}` : stepOf(child);
+        visit(child, target, (child.kind !== 'dir' ? child.origin : undefined) ?? [...path, step]);
         return;
       }
       // A single element where other files have a list of them: the list's only item (as `resolve`).
@@ -154,7 +153,8 @@ function sourcesContent(sources: Record<string, TreeNode[]>): string {
  * `donate`), from the rows that pass the tables' filters. `tables` are `deriveTables(project)`;
  * `platform` is the upload point the tree is from.
  */
-export function donationValues(tree: TreeNode, project: ProjectNode, tables: TableDef[], platform = ''): DonationContent {
+export function donationValues(upload: TreeNode, project: ProjectNode, tables: TableDef[], platform = ''): DonationContent {
+  const tree = contentTree(upload, project);
   const rows = deriveRows(tree, project, tables, { sources: true });
   const paths = pathsOf(tree, project);
   const values: DonatedValue[] = [];
@@ -172,12 +172,15 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
     }
     return id;
   };
-  // How the rows of each table are told apart: by the steps of its rows' path, and its parents'.
-  const groupsOf = (index: number): RowGroup[] => {
+  // How the rows of each table are told apart: by the steps of its rows' raw path, and its
+  // parents'. Counted on the raw path, since files of one group can sit at different depths.
+  const rowPaths: string[][][] = tables.map(() => []);
+  const groupsOf = (index: number, row: number): RowGroup[] => {
     const table = tables[index]!;
     if (table.rows === undefined) return [];
-    const own = { table: table.id, steps: table.rows.length };
-    return table.parent === undefined ? [own] : [...groupsOf(table.parent), own];
+    const own = { table: table.id, steps: rowPaths[index]![row]!.length };
+    const parent = rows[index]![row]!.parent;
+    return table.parent === undefined || parent === undefined ? [own] : [...groupsOf(table.parent, parent), own];
   };
   // Side by side, a row is told apart by the position of its items in the lists (the step after
   // the list's key); the object's fields outside its lists are in the first row (`RowGroup.item`).
@@ -197,11 +200,14 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
   const seenHashes = new Map<string, number>();
 
   tables.forEach((table, i) => {
-    const groups = groupsOf(i);
     const columns = table.columns.filter(donated);
     const parentTable = table.parent === undefined ? undefined : tables[table.parent]!;
-    const general = table.rows ? generalPath(getNodeNames(project, table.rows)).join('/') : '';
     rows[i]!.forEach((row, r) => {
+      const rowPath = row.node ? (paths.get(row.node) ?? []) : [];
+      rowPaths[i]![r] = rowPath;
+      const groups = groupsOf(i, r);
+      // What the row is, wherever it is in the lists: the general raw path of its table's rows.
+      const general = table.rows ? generalPath(rowPath).join('/') : '';
       // Every row gets its hash, also rows with nothing asked: rows nested in them need it.
       const parentHash = parentTable && row.parent !== undefined ? rowHashes[table.parent!]![row.parent] : '';
       // Side by side, every row has the same node: the row is its items.
@@ -217,7 +223,6 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
         row: offsets[i]! + r,
         ...(parentTable && row.parent !== undefined ? { parent: { table: parentTable.id, row: offsets[table.parent!]! + row.parent } } : {}),
       };
-      const rowPath = row.node ? (paths.get(row.node) ?? []) : [];
       donatedRows.push({ ...place, path: rowPath, hash: rowHash });
       const info = infos.get(table.id) ?? { id: table.id, name: text(table.name), fields: [] };
       for (const c of columns) if (!info.fields.some((f) => f.id === c.id)) info.fields.push({ id: c.id, name: text(c.name) || c.id });
@@ -233,7 +238,7 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
           const value = cell(convertValue(raw, column));
           const path = paths.get(source) ?? [];
           // A list of plain values is a table of its own in the export, its rows told apart by the item.
-          const item = column.type === 'list' ? path.findIndex((s, k) => k >= (table.rows?.length ?? 0) && /^\[\d+\]$/.test(s)) : -1;
+          const item = column.type === 'list' ? path.findIndex((s, k) => k >= rowPath.length && /^\[\d+\]$/.test(s)) : -1;
           const own = item >= 0 ? [...groups, { table: listTable(table.id, column.id), steps: item + 1 }] : table.sideBySide ? sideBySideGroups(groups, path) : groups;
           values.push({
             ...place,
@@ -249,11 +254,6 @@ export function donationValues(tree: TreeNode, project: ProjectNode, tables: Tab
     });
   });
   return { tables: [...infos.values()], values, rows: donatedRows, entries };
-}
-
-/** The names (keys) along a path of ids, as shapes write them. */
-function getNodeNames(root: ProjectNode, path: string[]): string[] {
-  return path.map((_, i) => getNode(root, path.slice(0, i + 1))?.name ?? '');
 }
 
 const rowKey = (table: string, row: number) => `${table}\u0000${row}`;

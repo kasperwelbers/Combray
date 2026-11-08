@@ -20,7 +20,7 @@ import {
   toConfig,
   unionShape,
 } from '../src';
-import { at, nodeAt, rebuild, treeOf } from './trees';
+import { at, fileOf, nodeAt, rebuild, treeOf } from './trees';
 
 // One export in English and one in Dutch: the same history, with translated keys.
 const english = jsonToTree('', { 'watch-history.json': [{ title: 'Madeleines', timestamp: '2024-03-01 10:00' }] });
@@ -35,8 +35,8 @@ describe('combining into one node', () => {
     tree = rebuild(tree, seen);
     const { tree: combined, path } = combineNodes(tree, [at(tree, 'watch-history.json'), at(tree, 'kijkgeschiedenis.json')]);
     const again = rebuild(combined, seen);
-    expect(again.children!.map((c) => [c.name, c.match, c.virtual])).toEqual([['watch-history.json', ['watch-history.json', 'kijkgeschiedenis.json'], undefined]]);
-    expect(again.children![0]!.id).toBe(path[0]);
+    expect(fileOf(again).children!.map((c) => [c.name, c.match, c.virtual])).toEqual([['watch-history.json', ['watch-history.json', 'kijkgeschiedenis.json'], undefined]]);
+    expect(fileOf(again).children![0]!.id).toBe(path[2]);
     // The children of both files are below the one node: the title once, both time keys virtual.
     expect(nodeAt(again, 'watch-history.json', '[*]').children!.map((c) => [c.name, c.decision])).toEqual([
       ['title', 'show'],
@@ -66,23 +66,23 @@ describe('combining into one node', () => {
     const tree = treeOf(seen);
     const combined = rebuild(combineNodes(tree, [at(tree, 'watch-history.json'), at(tree, 'kijkgeschiedenis.json')]).tree, seen);
     const split = rebuild(removeMatch(combined, at(combined, 'watch-history.json'), 'kijkgeschiedenis.json'), seen);
-    expect(split.children!.map((c) => [c.name, c.virtual])).toEqual([
+    expect(fileOf(split).children!.map((c) => [c.name, c.virtual])).toEqual([
       ['watch-history.json', undefined],
       ['kijkgeschiedenis.json', true],
     ]);
     // Taking off the last match removes the node: the real one is unmatched again.
     const gone = rebuild(removeMatch(split, at(split, 'watch-history.json'), 'watch-history.json'), seen);
-    expect(gone.children!.every((c) => c.virtual)).toBe(true);
+    expect(fileOf(gone).children!.every((c) => c.virtual)).toBe(true);
   });
 
   it('adds a match by hand, and splits a node with several keys into one per key', () => {
     const tree = treeOf(seen);
     const { tree: matched } = addMatch(tree, at(tree, 'watch-history.json'), { regex: '^kijk' });
     const built = rebuild(matched, seen);
-    expect(built.children!.map((c) => c.name)).toEqual(['watch-history.json']);
-    expect(built.children![0]!.keys).toEqual(['kijkgeschiedenis.json', 'watch-history.json']);
+    expect(fileOf(built).children!.map((c) => c.name)).toEqual(['watch-history.json']);
+    expect(fileOf(built).children![0]!.keys).toEqual(['kijkgeschiedenis.json', 'watch-history.json']);
     const split = rebuild(splitByKey(built, at(built, 'watch-history.json')), seen);
-    expect(split.children!.map((c) => [c.name, c.match, c.virtual])).toEqual([
+    expect(fileOf(split).children!.map((c) => [c.name, c.match, c.virtual])).toEqual([
       ['kijkgeschiedenis.json', ['kijkgeschiedenis.json'], undefined],
       ['watch-history.json', ['watch-history.json'], undefined],
     ]);
@@ -95,7 +95,7 @@ describe('giving the same name', () => {
     const named = setName(tree, [at(tree, 'watch-history.json'), at(tree, 'kijkgeschiedenis.json')], 'watch_history');
     const built = buildTree({ root: toConfig(named) }, seen).tree;
     expect(nameGroup(built, at(built, 'watch-history.json'))).toHaveLength(2);
-    const both = { kind: 'dir' as const, name: '', children: [...(english as unknown as { children: [] }).children, ...(dutch as unknown as { children: [] }).children] };
+    const both = { kind: 'map' as const, name: '', children: [...(english as unknown as { children: [] }).children, ...(dutch as unknown as { children: [] }).children] };
     const tables = deriveTables(built);
     const grouped = groupTables(tables, deriveRows(both, built, tables));
     expect(grouped.tables.map((t) => [t.id, t.name])).toEqual([['watch_history', 'Watch history']]);

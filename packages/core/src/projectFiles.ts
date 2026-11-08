@@ -1,7 +1,7 @@
 /**
  * Project files: `structure.json` (the seen tree: the union of the structures seen so far) and
- * `importer.json` (the researcher's configuration: config nodes with their matches, names and
- * settings).
+ * `importer.json` (the researcher's configuration: file groups, and config nodes with their
+ * matches, names and settings; ADR 0016).
  *
  * See docs/decisions/0012-names-and-matches.md and 0013-names-labels-versions.md. The two are independent: the configuration never
  * records what the data looked like, and the seen structures are never changed by it. In the
@@ -9,24 +9,29 @@
  */
 import { parseNameMap, type NameMap } from '@combray/seal/names';
 
-import { buildTree } from './decisions';
+import { buildTree, UPLOAD_GROUP } from './decisions';
+import { keyName } from './derive';
 import { isFormat, MAX_FORMATS } from './formats';
 import { nameMap, structureOnlyTables } from './nameMap';
 import {
   regexProblem,
   ROLES,
   type ConfigNode,
+  type FileMatch,
+  type Match,
   type ProjectConfig,
   type Role,
 } from './config';
 import { checkTransform, FIELD_TYPES, SpecError, type FieldType, type Localized } from './importer/spec';
 import { findPatternProblem } from './locate';
-import { isName } from './names';
+import { freeName, isName } from './names';
 import { COLLAPSED_NAME, ITEM_NAME, type Shape } from './shape';
 import type { NodeKind, ValueType } from './tree';
 
 export const STRUCTURE_FORMAT = 'combray-structure@1';
-export const IMPORTER_FORMAT = 'combray-importer@2';
+export const IMPORTER_FORMAT = 'combray-importer@3';
+/** Configurations without file groups: folders and files in one tree. Read, and upgraded (`upgradeConfig`). */
+const IMPORTER_FORMAT_2 = 'combray-importer@2';
 
 /** The seen tree: the union of the structures (shapes) seen so far. Structure only. */
 export interface StructureFile {
@@ -78,6 +83,8 @@ const REPEAT_VALUES = new Set(['once', 'many']);
 /** Limits that keep a file a configuration, not a dump. */
 const MAX_NODES = 20_000;
 const MAX_MATCHES = 50;
+const MAX_FILE_MATCHES = 200;
+const MAX_FILE_STEPS = 30;
 const MAX_KEY = 500;
 const MAX_ID = 100;
 
@@ -167,7 +174,18 @@ function checkMatch(m: unknown, at: string): void {
   check(problem === undefined, `${at}: regular expression ${problem}`);
 }
 
-function checkNode(e: unknown, at: string, count: { nodes: number }, depth: number, root: boolean, parentKind?: string): void {
+function checkFileMatch(m: unknown, at: string): void {
+  check(isObject(m), `${at}: a file match is { path } or { name }`);
+  if (m.path !== undefined) {
+    check(m.name === undefined && Array.isArray(m.path) && m.path.length <= MAX_FILE_STEPS, `${at}: a file match is { path } or { name }`);
+    m.path.forEach((step, i) => checkMatch(step, `${at}: step ${i}`));
+  } else {
+    check(m.name !== undefined, `${at}: a file match is { path } or { name }`);
+    checkMatch(m.name, `${at}: name`);
+  }
+}
+
+function checkNode(e: unknown, at: string, count: { nodes: number }, depth: number, root: boolean, parentKind?: string, inGroup = false): void {
   check(depth < 200, 'configuration is nested too deeply');
   check(++count.nodes <= MAX_NODES, 'configuration has too many nodes');
   check(isObject(e), `${at}: expected an object`);
@@ -175,8 +193,22 @@ function checkNode(e: unknown, at: string, count: { nodes: number }, depth: numb
   check(typeof e.kind === 'string' && KINDS.has(e.kind as NodeKind), `${at}: unknown kind`);
   check(Array.isArray(e.match) && e.match.length <= MAX_MATCHES, `${at}: match must be a list`);
   e.match.forEach((m, i) => checkMatch(m, `${at}: match ${i}`));
-  if (root) check(e.match.length === 0, `${at}: the root matches the upload itself and has no match`);
-  else check(e.match.length > 0, `${at}: a node needs at least one match`);
+  const group = depth === 1;
+  if (root) {
+    check(e.match.length === 0, `${at}: the root matches the upload itself and has no match`);
+    check(e.kind === 'dir', `${at}: the root holds file groups`);
+  } else if (group) {
+    check(e.kind === 'dir' && Array.isArray(e.files), `${at}: the root holds file groups only`);
+    check(e.match.length === 1 && typeof e.match[0] === 'string' && isName(e.match[0]), `${at}: a file group has one name, of lowercase letters, digits and underscores`);
+  } else if (inGroup) {
+    check(e.match.length === 0, `${at}: the files of a group are matched by their kind, without a match`);
+    check(e.kind !== 'dir', `${at}: the files of a group are files, not folders`);
+  } else check(e.match.length > 0, `${at}: a node needs at least one match`);
+  if (e.files !== undefined) {
+    check(group, `${at}: only file groups have files`);
+    check(Array.isArray(e.files) && e.files.length <= MAX_FILE_MATCHES, `${at}: files must be a list`);
+    e.files.forEach((m, i) => checkFileMatch(m, `${at}: file ${i}`));
+  }
   const special = e.match.filter((m) => m === ITEM_NAME || m === COLLAPSED_NAME);
   check(special.length === 0 || e.match.length === 1, `${at}: [*] and {*} are matches of their own`);
   if (e.match[0] === ITEM_NAME) check(parentKind === 'list', `${at}: [*] is only below a list`);
@@ -244,7 +276,7 @@ function checkNode(e: unknown, at: string, count: { nodes: number }, depth: numb
     const ids = new Set<string>();
     e.children.forEach((c, i) => {
       const where = `${at}/${i}`;
-      checkNode(c, where, count, depth + 1, false, e.kind as string);
+      checkNode(c, where, count, depth + 1, false, e.kind as string, group);
       const id = (c as { id: string }).id;
       check(!ids.has(id), `${where}: id ${id} is used twice among siblings`);
       ids.add(id);
@@ -253,8 +285,14 @@ function checkNode(e: unknown, at: string, count: { nodes: number }, depth: numb
 }
 
 export function parseImporterFile(json: unknown): ImporterFile {
-  check(isObject(json) && json.format === IMPORTER_FORMAT, `not a ${IMPORTER_FORMAT} file`);
+  check(isObject(json) && (json.format === IMPORTER_FORMAT || json.format === IMPORTER_FORMAT_2), `not a ${IMPORTER_FORMAT} file`);
   if (json.name !== undefined) checkLocalized(json.name, 'name');
+  if (json.format === IMPORTER_FORMAT_2) {
+    // The old tree is checked as it was (by the rules it was made with), then upgraded.
+    checkOldNode(json.root);
+    json = { ...json, format: IMPORTER_FORMAT, root: upgradeConfig(json.root as ConfigNode).root };
+    if (!isObject(json)) throw new ProjectFileError('invalid importer file');
+  }
   checkNode(json.root, 'root', { nodes: 0 }, 0, true);
   if (json.names !== undefined) {
     try {
@@ -265,4 +303,74 @@ export function parseImporterFile(json: unknown): ImporterFile {
   }
   if (json.unnamed !== undefined) check(Array.isArray(json.unnamed) && json.unnamed.every((n) => typeof n === 'string'), 'unnamed must be a list of names');
   return json as unknown as ImporterFile;
+}
+
+// --- Upgrading configurations without file groups ----------------------------------------------
+
+/** A version 2 tree: any node may be a folder or a file, so only its basic shape is checked here. */
+function checkOldNode(e: unknown, depth = 0): void {
+  check(depth < 200 && isObject(e) && typeof e.kind === 'string' && KINDS.has(e.kind as NodeKind) && Array.isArray(e.match), 'root: invalid configuration');
+  if (e.children !== undefined) {
+    check(Array.isArray(e.children), 'root: invalid configuration');
+    for (const c of e.children) checkOldNode(c, depth + 1);
+  }
+}
+
+/** File matches for every combination of a path's alternatives, at most this many per file. */
+const MAX_UPGRADE_PATHS = 64;
+
+function paths(steps: Match[][]): FileMatch[] {
+  let out: Match[][] = [[]];
+  for (const alternatives of steps) {
+    out = out.flatMap((head) => alternatives.map((m) => [...head, m])).slice(0, MAX_UPGRADE_PATHS);
+  }
+  return out.map((path) => ({ path }));
+}
+
+/**
+ * A configuration from before file groups (`combray-importer@2`), with them (ADR 0016). Every file
+ * the old tree configured becomes a group that reads it at every path the old folders matched;
+ * files with the same table name and different kinds (a JSON and an HTML history) share one
+ * group. The upload itself, when it was one file, is the group `export`. Settings of folders
+ * are left out: a group reads only its files, so `newChildren`, `ignore` and `required` on folders
+ * no longer say anything. A required file makes its group required.
+ */
+export function upgradeConfig(old: ConfigNode): ProjectConfig {
+  const root: ConfigNode = { id: old.id, kind: 'dir', match: [] };
+  for (const key of ['find', 'undecided'] as const) if (old[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = old[key];
+  const files: { node: ConfigNode; steps: Match[][] }[] = [];
+  if (old.kind !== 'dir') files.push({ node: old, steps: [] });
+  else {
+    const visit = (dir: ConfigNode, steps: Match[][]) => {
+      for (const child of dir.children ?? []) {
+        if (child.decision === 'ignore') continue;
+        if (child.kind === 'dir') visit(child, [...steps, child.match]);
+        else files.push({ node: child, steps: [...steps, child.match] });
+      }
+    };
+    visit(old, []);
+  }
+  const groups: ConfigNode[] = [];
+  const taken = new Set<string>();
+  for (const { node, steps } of files) {
+    const first = node.match.find((m): m is string => typeof m === 'string');
+    const name = old.kind !== 'dir' ? UPLOAD_GROUP : (node.name ?? keyName(first ?? '', 'file'));
+    const { find: _find, undecided: _undecided, required, ...settings } = node;
+    const file: ConfigNode = { ...settings, match: [] };
+    const fileMatches = old.kind !== 'dir' ? [{ path: [] }] : paths(steps);
+    // A file of another kind with the same table name: the same content, another format.
+    const same = groups.find((g) => g.match[0] === name && !g.children!.some((c) => c.kind === node.kind));
+    if (same) {
+      if (!same.children!.some((c) => c.id === file.id)) same.children!.push(file);
+      else same.children!.push({ ...file, id: `${file.id}-${same.children!.length}` });
+      same.files = [...same.files!, ...fileMatches];
+      if (required) same.required = true;
+      continue;
+    }
+    const key = freeName(name, taken);
+    taken.add(key);
+    groups.push({ id: `g-${key}`, kind: 'dir', match: [key], files: fileMatches, ...(required ? { required } : {}), children: [file] });
+  }
+  if (groups.length > 0) root.children = groups;
+  return { root };
 }

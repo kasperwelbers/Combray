@@ -8,9 +8,9 @@
  * donated, and a donated path that no configured node matches any more is deprecated.
  * Structure only: keys, regular expressions and names.
  */
-import { NAME_MAP_FORMAT, type NameMap, type NameNode } from '@combray/seal/names';
+import { NAME_MAP_FORMAT, type NameFileMatch, type NameMap, type NameMatch, type NameNode } from '@combray/seal/names';
 
-import { isItemNode, isKeysNode } from './config';
+import { isItemNode, isKeysNode, type FileMatch, type Match } from './config';
 import { getNode, isLeaf, type NodePath, type ProjectNode } from './decisions';
 import { deriveTables, pathKey, treeNames, type TreeNames } from './derive';
 import { COLLAPSED_NAME, ITEM_NAME } from './shape';
@@ -25,16 +25,23 @@ function tableAt(names: TreeNames, path: NodePath) {
   return names.tables.find((t) => t.rows.length > 0 && pathKey(t.rows) === key);
 }
 
+const nameMatch = (m: Match): NameMatch => (typeof m === 'string' ? m : { regex: m.regex, ...(m.flags ? { flags: m.flags } : {}) });
+const fileMatch = (m: FileMatch): NameFileMatch => ('path' in m ? { p: m.path.map(nameMatch) } : { n: nameMatch(m.name) });
+
 /** The name map of a project tree (`buildTree` of a configuration over the seen structures). */
 export function nameMap(root: ProjectNode): NameMap {
   const names = treeNames(root);
-  const visit = (node: ProjectNode, path: NodePath): NameNode | undefined => {
+  const visit = (node: ProjectNode, path: NodePath, parent?: ProjectNode): NameNode | undefined => {
     if (node.virtual) return undefined;
     const out: NameNode = {};
     if (path.length > 0) {
-      if (isItemNode(node)) out.k = ITEM_NAME;
+      // A group matches its files; the files below it are matched by being in it (ADR 0016).
+      if (node.files !== undefined) out.g = node.files.map(fileMatch);
+      else if (parent?.files !== undefined) {
+        // Nothing to match: the file itself.
+      } else if (isItemNode(node)) out.k = ITEM_NAME;
       else if (isKeysNode(node)) out.k = COLLAPSED_NAME;
-      else out.m = node.match.map((m) => (typeof m === 'string' ? m : { regex: m.regex, ...(m.flags ? { flags: m.flags } : {}) }));
+      else out.m = node.match.map(nameMatch);
     }
     const table = tableAt(names, path);
     if (table) {
@@ -52,7 +59,7 @@ export function nameMap(root: ProjectNode): NameMap {
         if (node.name === ITEM_NAME && !sideBySide) out.l = listTable(own?.id ?? '', field.id);
       }
     } else {
-      const children = (node.children ?? []).flatMap((c) => visit(c, [...path, c.id]) ?? []);
+      const children = (node.children ?? []).flatMap((c) => visit(c, [...path, c.id], node) ?? []);
       if (children.length > 0) out.c = children;
       if (node.kind === 'list' && node.children?.some((c) => c.name === ITEM_NAME && c.kind === 'element')) out.one = true;
     }

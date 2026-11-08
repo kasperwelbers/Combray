@@ -38,6 +38,8 @@ export interface TreeActions {
 
 interface Props {
   tree: ProjectNode;
+  /** The part of the tree shown: the content of one file group (paths stay from the root). */
+  base: NodePath;
   /** Parts that share a name with others, by their path (`/`-joined): their number and colour. */
   shared: Map<string, SharedName>;
   /** Notes per row: not seen, conflicts, shared data, names with different decisions. */
@@ -73,16 +75,24 @@ const SHORTCUTS = new Set<string>(['1', '2', '3']);
 export function DecisionTree(props: Props) {
   const { t } = useTranslation(undefined, { lng: 'en' });
   if (props.view === 'named') return <NamedView {...props} />;
-  const children = props.tree.children ?? [];
+  const base = getNode(props.tree, props.base);
+  if (!base) return null;
+  const children = base.children ?? [];
   return (
     <ul className="decision-tree" aria-label={t('studio.tree')}>
-      {isLeaf(props.tree) ? (
-        <Row {...props} node={props.tree} path={[]} />
+      {isLeaf(base) ? (
+        <Row {...props} node={base} path={props.base} />
       ) : (
-        withSameNamesTogether(children).map((child) => <Row key={child.id} {...props} node={child} path={[child.id]} />)
+        withSameNamesTogether(children).map((child) => <Row key={child.id} {...props} node={child} path={[...props.base, child.id]} />)
       )}
     </ul>
   );
+}
+
+/** The files of a group in one format each: named by what they hold, not by the group again. */
+function branchLabel(props: Props, node: ProjectNode, path: NodePath, t: (key: string) => string): string | undefined {
+  const parent = getNode(props.tree, path.slice(0, -1));
+  return parent?.files !== undefined ? t(`studio.contents.branch.${node.kind}`) : undefined;
 }
 
 function stateClass(node: ProjectNode, states: Map<ProjectNode, EffectiveState>): string {
@@ -415,7 +425,8 @@ function Row(props: Props & { node: ProjectNode; path: NodePath }) {
   const isOpen = open.has(key);
   const name = chain.map((c) => displayName(c.node.name, t)).join(' / ');
   const children = leaf ? [] : (node.children ?? []);
-  const shown = chainName(props.tree, chain, t);
+  const branch = branchLabel(props, top.node, top.path, t);
+  const shown = branch && chain.length === 1 ? { text: branch, more: false } : chainName(props.tree, chain, t);
   const own = rowName(node, t);
   const mark = props.shared.get(path.join('/'));
 
@@ -524,9 +535,13 @@ function chainName(
   return { text, more: chain.length > (file ? 2 : 1) || own?.shortened === true };
 }
 
-/** The full path of a node for people: `tweets / each item / stats / likes`. */
+/**
+ * The full path of a node for people: `tweets / each item / stats / likes`. A file group is
+ * named once, by its files (which carry the group's name).
+ */
 function fullPath(tree: ProjectNode, path: NodePath, t: (key: string) => string): string {
-  return pathNames(tree, path).map((n) => displayName(n, t)).join(' / ');
+  const names = pathNames(tree, path).filter((_, i) => getNode(tree, path.slice(0, i + 1))?.files === undefined);
+  return names.map((n) => displayName(n, t)).join(' / ');
 }
 
 /** The names along a path of ids. */
@@ -539,7 +554,8 @@ const pathNames = (tree: ProjectNode, path: NodePath) => path.map((id, i) => get
  */
 function NamedView(props: Props) {
   const { t } = useTranslation(undefined, { lng: 'en' });
-  const groups = useMemo(() => outline(props.tree), [props.tree]);
+  // Only the part shown (a file group), with paths from the root.
+  const groups = useMemo(() => outline(scoped(props.tree, props.base)), [props.tree, props.base]);
   // The keys behind each field, as short as they can be while telling the fields of a table apart.
   const keys = useMemo(() => {
     const out = new Map<string, ShortName>();
@@ -556,6 +572,14 @@ function NamedView(props: Props) {
       <GroupBody {...props} keys={keys} group={groups} />
     </ul>
   );
+}
+
+/** The tree with only the nodes along `base` and below it: what a view of part of it outlines. */
+function scoped(tree: ProjectNode, base: NodePath): ProjectNode {
+  if (base.length === 0) return tree;
+  const [id, ...rest] = base;
+  const child = tree.children?.find((c) => c.id === id);
+  return { ...tree, children: child ? [scoped(child, rest)] : [] };
 }
 
 function visibleField(props: Props, path: NodePath): ProjectNode | undefined {

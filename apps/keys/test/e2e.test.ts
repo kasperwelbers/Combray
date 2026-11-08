@@ -425,13 +425,15 @@ describe.skipIf(!enabled)('key page', () => {
     expect(await description.inputValue()).toBe('Tried in the e2e test.');
     // The tree editor: a part that is not matched gets a name and a decision in one step.
     await page.getByRole('link', { name: 'Data explorer' }).click();
-    await page.getByRole('tab', { name: 'Decisions', selected: true }).waitFor();
+    await page.getByRole('tab', { name: '3. Contents', selected: true }).waitFor();
+    // Each file group has its own contents: the watch history has parts nobody matched yet.
+    await page.locator('.content-groups button', { hasText: 'youtube_watch_history' }).click();
     await page.locator('.decision-row.virtual button.decision-name').first().click();
-    await page.getByRole('combobox', { name: 'Name' }).fill('Archive title');
+    await page.getByRole('combobox', { name: 'Name' }).fill('Video details');
     await page.locator('.match-dialog').getByRole('button', { name: 'Show', exact: true }).click();
     await page.locator('.match-dialog').getByRole('button', { name: 'Match', exact: true }).click();
     // Names are lowercase words joined by underscores: what is typed becomes one.
-    await page.locator('.decision-row strong', { hasText: 'archive_title' }).waitFor();
+    await page.locator('.decision-row strong', { hasText: 'video_details' }).waitFor();
     // Help is in one dialog, opened at the topic asked for.
     await page.getByRole('button', { name: 'Help', exact: true }).click();
     await page.getByRole('dialog', { name: 'Help with the studio' }).waitFor();

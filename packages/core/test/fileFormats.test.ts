@@ -2,15 +2,15 @@
 // case describes what happens today; it changes when the case is solved.
 import { describe, expect, it } from 'vitest';
 
-import { extractShape, normalizeTree, parseEntries, parseFile, mergeDirs, prepareTree, type Shape, type TreeNode } from '../src';
+import { extractShape, normalizeTree, parseEntries, parseFile, mergeDirs, prepareTree, uploadTree, type Shape, type TreeNode } from '../src';
 import { treeOf } from './trees';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 const file = (name: string, text: string) => parseFile(name, bytes(text));
 /** As the studio reads a researcher's own export: any header text may be a name. */
 const studio = (tree: TreeNode) => normalizeTree(tree, { keys: () => true });
-/** As a participant's device reads it for a project that knows nothing yet. */
-const participant = (tree: TreeNode) => prepareTree(tree, treeOf(extractShape(studio(tree)))).shape;
+/** As a participant's device reads it for a project that knows nothing yet (put back as the upload, to compare). */
+const participant = (tree: TreeNode) => extractShape(uploadTree(prepareTree(tree, treeOf(extractShape(studio(tree)))).prepared));
 
 /** The shape at a path of names. */
 function at(shape: Shape, ...names: string[]): Shape {

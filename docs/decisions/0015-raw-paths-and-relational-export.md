@@ -1,6 +1,6 @@
 # ADR 0015: Raw paths, names on export, relational tables
 
-- **Status:** accepted
+- **Status:** accepted; the name map matches files through file groups since [ADR 0016](0016-file-groups.md)
 - **Date:** 2026-11-08
 - **Amends:** [ADR 0012](0012-names-and-matches.md) (point 8, what a donation holds), [ADR 0013](0013-names-labels-versions.md) (points 12, 14 and 15: no rematching, names freeze, renames are breaking)
 - **Discussion:** the thread "Decide on relational tables from raw paths" (2026-11-08)

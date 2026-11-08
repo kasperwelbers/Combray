@@ -1,6 +1,6 @@
 # Plan: exact paths and near matches
 
-Status: **plan, for discussion** (written 2026-11-05 with Kasper). Nothing here is built. Before we decide, we want to see many more real data download packages ([what to look for](#what-to-look-for-in-real-packages)), because the right balance depends on which problems actually happen.
+Status: **plan, for discussion** (written 2026-11-05 with Kasper). **Update 2026-11-08:** the first step (folders may differ) and the single-file case (rule 8) are replaced by file groups ([ADR 0016](../decisions/0016-file-groups.md)): a group can find a file by its name in any folder, only for names that occur once in the seen packages, and a name found in two folders reads neither. The researcher chooses it per file instead of a switch per platform, and nothing is asked of the participant, since the file is the one the researcher picked. Near matches inside files (the second step) are still open. The rest is not built. Before we decide, we want to see many more real data download packages ([what to look for](#what-to-look-for-in-real-packages)), because the right balance depends on which problems actually happen.
 
 ## The question
 

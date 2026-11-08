@@ -99,23 +99,27 @@ describe('importing through an upload point', () => {
     expect(valueAt(watch.rows[0]!, 'channels/channel')).toEqual([nested[0]!.channel]);
   });
 
-  it('shows new parts where the pack asks about them, marked new, and skips them elsewhere', async () => {
-    const notes = JSON.stringify([{ note: 'hi' }]);
+  it('shows new parts of the files it reads, marked new, and reads no files it does not know', async () => {
+    const search = 'Takeout/YouTube and YouTube Music/history/search-history.json';
+    const searches = [{ header: 'YouTube', title: 'Searched for tea', time: '2024-02-28T20:01:00.000Z', notes: [{ note: 'hi' }] }];
     const result = await derived(
       TAKEOUT,
       fixtureListing('google-takeout-en', {
-        'Takeout/YouTube and YouTube Music/history/notes.json': notes,
-        // The Takeout pack skips Google products it does not know.
-        'Takeout/Drive/plans.json': notes,
+        [search]: JSON.stringify(searches),
+        // A file no group reads, next to one that is read: not read at all.
+        'Takeout/YouTube and YouTube Music/history/notes.json': JSON.stringify([{ note: 'hi' }]),
       }),
       showingUndecided(TAKEOUT),
     );
     const added = result.tables.filter((t) => t.table.new);
     expect(added).toHaveLength(1);
-    expect(added[0]!.table.path).toEqual(['YouTube and YouTube Music', 'history', 'notes.json', '[*]']);
-    expect(added[0]!.table.collection).toBe(false);
+    // Shown where it is in the upload, not under the name of the group that reads it.
+    expect(added[0]!.table.path).toEqual(['YouTube and YouTube Music', 'history', 'search-history.json', '[*]']);
     // Parts nobody configured are called by the name their key gives.
-    expect(added[0]!.table.columns[0]).toMatchObject({ id: 'note', new: true, undecided: true });
+    const notes = added[0]!.table.columns.find((c) => c.type === 'table')!;
+    expect(notes).toMatchObject({ id: 'notes', new: true });
+    expect(notes.columns![0]).toMatchObject({ id: 'note', new: true, undecided: true });
+    expect(result.tables.some((t) => t.table.path.includes('notes.json'))).toBe(false);
     // Known but undecided parts are other data, not new.
     const tiktok = await derived(TIKTOK, fixtureListing('tiktok-2023'), showingUndecided(TIKTOK));
     const profile = tiktok.tables.find((t) => !t.table.collection)!;
@@ -124,16 +128,17 @@ describe('importing through an upload point', () => {
   });
 
   it('leaves out undecided parts, columns and values, unless the tree lets participants see them', async () => {
-    const notes = JSON.stringify([{ note: 'hi' }]);
+    const searches = [{ header: 'YouTube', title: 'Searched for tea', time: '2024-02-28T20:01:00.000Z', notes: [{ note: 'hi' }] }];
     const listing = () =>
-      fixtureListing('google-takeout-en', { 'Takeout/YouTube and YouTube Music/history/notes.json': notes });
+      fixtureListing('google-takeout-en', { 'Takeout/YouTube and YouTube Music/history/search-history.json': JSON.stringify(searches) });
     const hidden = await derived(TAKEOUT, listing());
     const shown = await derived(TAKEOUT, listing(), showingUndecided(TAKEOUT));
     // Tables with nothing decided go, new parts included.
     expect(hidden.tables.every((t) => t.table.collection)).toBe(true);
     expect(hidden.tables.some((t) => t.table.new)).toBe(false);
-    expect(shown.tables.some((t) => !t.table.collection)).toBe(true);
     expect(shown.tables.some((t) => t.table.new)).toBe(true);
+    const notesIn = (d: DerivedImport) => d.tables.some((t) => t.table.columns.some((c) => c.id === 'notes'));
+    expect([notesIn(hidden), notesIn(shown)]).toEqual([false, true]);
     // In the tables that stay, no undecided column and none of its values, nested ones too.
     const undecidedIn = (columns: ColumnInfo[]): boolean =>
       columns.some((c) => c.undecided === true || undecidedIn(c.columns ?? []));
@@ -236,10 +241,15 @@ describe('importing through an upload point', () => {
     expect(viaFolder.tables.map((t) => t.rows.length)).toEqual(viaZip.tables.map((t) => t.rows.length));
   });
 
-  it('does not fit an export of another platform, or a single file from inside an export', async () => {
+  it('does not fit an export of another platform, or a single file that is read by its path only', async () => {
     expect(await through(TAKEOUT, fixtureListing('tiktok-2023'))).toBe('no-fit');
-    const watch = fixtureFiles('google-takeout-en')['Takeout/YouTube and YouTube Music/history/watch-history.json']!;
-    expect(await through(TAKEOUT, UploadListing.open(uploadFiles({ 'watch-history.json': watch })))).toBe('no-fit');
+    const files = fixtureFiles('google-takeout-en');
+    const browser = files['Takeout/Chrome/BrowserHistory.json']!;
+    expect(await through(TAKEOUT, UploadListing.open(uploadFiles({ 'BrowserHistory.json': browser })))).toBe('no-fit');
+    // A file the pack finds in any folder is read when it is picked on its own.
+    const watch = files['Takeout/YouTube and YouTube Music/history/watch-history.json']!;
+    const single = await derived(TAKEOUT, UploadListing.open(uploadFiles({ 'watch-history.json': watch })));
+    expect(single.tables.filter((t) => t.table.collection).map(english)).toEqual(['YouTube watch history']);
   });
 });
 

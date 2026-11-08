@@ -23,6 +23,7 @@ import {
   type Role,
   type RowFilter,
 } from './decisions';
+import { contentTree } from './files';
 import { defaultLabel, freeName, toName } from './names';
 import { COLLAPSED_NAME, elementName, ITEM_NAME, screenName } from './shape';
 import { childrenOf, type TreeNode, type ValueType } from './tree';
@@ -275,6 +276,21 @@ function namesOf(root: ProjectNode, path: NodePath): string[] {
   return out;
 }
 
+/**
+ * Where a node is, for people: the names along its path, with the files of a group named once,
+ * by the group (`watch_history / [*]`, not `watch_history / watch_history / [*]`).
+ */
+function whereOf(root: ProjectNode, path: NodePath): string[] {
+  const out: string[] = [];
+  let node: ProjectNode | undefined = root;
+  for (const id of path) {
+    const parent: ProjectNode | undefined = node;
+    node = node?.children?.find((c) => c.id === id);
+    if (parent?.files === undefined) out.push(node?.name ?? id);
+  }
+  return out;
+}
+
 /** All leaves below a table's rows (ignored ones too), not those of the tables nested in them. */
 function leavesOfRows(rows: ProjectNode, path: NodePath): NodePath[] {
   const out: NodePath[] = [];
@@ -452,7 +468,7 @@ export function deriveTables(root: ProjectNode, labels?: Labels): TableDef[] {
         id,
         name: tableLabel(id),
         ...(description !== undefined ? { description } : {}),
-        where: namesOf(root, path),
+        where: whereOf(root, path),
         node: path,
         rows: path,
         ...(keyed ? { keyed: true as const } : {}),
@@ -664,7 +680,7 @@ export function leafValue(node: TreeNode): unknown {
  * (`{*}`), the keys are its values.
  */
 export function valuesAt(tree: TreeNode, root: ProjectNode, path: NodePath): unknown[] {
-  return resolve(tree, root, path).map((node) => (isLeaf({ kind: node.kind }) ? leafValue(node) : node.name));
+  return resolve(contentTree(tree, root), root, path).map((node) => (isLeaf({ kind: node.kind }) ? leafValue(node) : node.name));
 }
 
 /** A value converted as its column says: transforms, then `as`. Unconverted columns pass through. */
@@ -728,11 +744,13 @@ export interface DeriveOptions {
  * left out, with the rows nested in them.
  */
 export function deriveRows(
-  tree: TreeNode,
+  upload: TreeNode,
   root: ProjectNode,
   tables: TableDef[],
   options: DeriveOptions = {},
 ): DerivedRow[][] {
+  // Rows are read from the files the groups read (ADR 0016); a content tree is used as it is.
+  const tree = contentTree(upload, root);
   const out: DerivedRow[][] = tables.map(() => []);
   // Tree nodes of each table's rows, so nested tables can find their parent row.
   const rowNodes: TreeNode[][] = tables.map(() => []);

@@ -19,6 +19,7 @@ import {
   normalizeTree,
   readSpot,
   runQuery,
+  uploadTree,
   valuesAt,
   type DerivedRow,
   type ProjectNode,
@@ -166,7 +167,8 @@ const api: StudioApi = {
   },
 
   async readShapes(projectTree) {
-    return readExports(projectTree).map(([, tree]) => extractShape(tree));
+    // As uploads, as the structures seen are kept: read texts move to where their files came from.
+    return readExports(projectTree).map(([, tree]) => extractShape(uploadTree(tree)));
   },
 
   async removeExport(id) {

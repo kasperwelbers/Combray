@@ -22,12 +22,13 @@ import {
   setKeysAreData,
   toConfig,
   unionShape,
+  upgradeConfig,
   type ConfigNode,
   type ProjectNode,
 } from '../src';
 import { parseMarkup } from '../src/parse/html';
 import { watchHistory } from './fixtures';
-import { at, nodeAt, rebuild, treeOf } from './trees';
+import { at, fileOf, filePath, nodeAt, rebuild, treeOf } from './trees';
 
 const shape = extractShape(watchHistory);
 const base = () => treeOf(shape);
@@ -40,7 +41,7 @@ const decide = (tree: ProjectNode, names: string[], decision: Parameters<typeof 
   setDecision(tree, at(tree, ...names), decision);
 
 /** A configuration with one root and these children. */
-const config = (kind: ConfigNode['kind'], children: ConfigNode[]) => ({ root: { id: 'root', kind, match: [], children } });
+const config = (kind: ConfigNode['kind'], children: ConfigNode[]) => upgradeConfig({ id: 'root', kind, match: [], children });
 
 describe('buildTree', () => {
   it('lays an empty configuration over a shape: every position virtual, with its structure', () => {
@@ -56,7 +57,7 @@ describe('buildTree', () => {
       formats: ['YYYY-MM-DDTHH:mm:ss.SSSZ'],
     });
     expect(JSON.stringify(tree)).not.toContain('decision');
-    expect(buildTree(emptyConfig('list'), shape).unmatched).toEqual([['~map:[*]']]);
+    expect(buildTree(emptyConfig('list'), shape).unmatched).toEqual([['g-export', '~list:export']]);
   });
 
   it('matches config nodes by exact key or regular expression, and keeps unmatched siblings virtual', () => {
@@ -67,11 +68,11 @@ describe('buildTree', () => {
       ]),
       extractShape(jsonToTree('a.json', { tijd: '2024-01-01', Link: 'https://example.com', other: 'x' })),
     );
-    const [time, link, other] = built.tree.children!;
+    const [time, link, other] = fileOf(built.tree).children!;
     expect(time).toMatchObject({ id: 'a', name: 'time', keys: ['tijd'] });
     expect(link).toMatchObject({ id: 'b', name: 'Link', keys: ['Link'] });
     expect(other).toMatchObject({ id: '~value:other', virtual: true });
-    expect(built.unmatched).toEqual([['~value:other']]);
+    expect(built.unmatched).toEqual([[...filePath(built.tree), '~value:other']]);
   });
 
   it('puts siblings in the order of the structure on request, unmatched config nodes after the one before them', () => {
@@ -81,14 +82,14 @@ describe('buildTree', () => {
       { id: 'c', kind: 'value', match: ['channel'] },
     ]);
     const data = extractShape(jsonToTree('a.json', { title: 'x', url: 'u', channel: 'c', about: 'a' }));
-    const ids = (structureOrder: boolean) => buildTree(cfg, data, { structureOrder }).tree.children!.map((c) => c.id);
+    const ids = (structureOrder: boolean) => fileOf(buildTree(cfg, data, { structureOrder }).tree).children!.map((c) => c.id);
     expect(ids(false)).toEqual(['t', 'gone', 'c', '~value:about', '~value:url']);
     expect(ids(true)).toEqual(['~value:about', 'c', 't', 'gone', '~value:url']);
   });
 
   it('keeps config nodes the shape does not have, without structure', () => {
     const tree = buildTree(config('map', [{ id: 'a', kind: 'value', match: ['gone'], decision: 'show' }]), extractShape(jsonToTree('a.json', {}))).tree;
-    expect(tree.children).toEqual([{ id: 'a', kind: 'value', name: 'gone', match: ['gone'], decision: 'show' }]);
+    expect(fileOf(tree).children).toEqual([{ id: 'a', kind: 'value', name: 'gone', match: ['gone'], decision: 'show' }]);
   });
 
   it('gives a real position to every config node that matches it (duplication)', () => {
@@ -99,8 +100,8 @@ describe('buildTree', () => {
       ]),
       extractShape(jsonToTree('a.json', { time: '2024-01-01' })),
     );
-    const [a, b] = built.tree.children!;
-    expect(built.tree.children).toHaveLength(2);
+    const [a, b] = fileOf(built.tree).children!;
+    expect(fileOf(built.tree).children).toHaveLength(2);
     expect(built.shared.get(a!)).toEqual([b]);
     expect(built.shared.get(b!)).toEqual([a]);
   });
@@ -108,10 +109,10 @@ describe('buildTree', () => {
   it('flags a node that matches two keys side by side in one position, not in different ones', () => {
     const regex = config('map', [{ id: 'r', kind: 'value', match: [{ regex: '^ti' }] }]);
     const both = buildTree(regex, extractShape(jsonToTree('a.json', { time: 'x', title: 'y' })));
-    expect(both.conflicts.has(both.tree.children![0]!)).toBe(true);
+    expect(both.conflicts.has(fileOf(both.tree).children![0]!)).toBe(true);
     const one = buildTree(regex, extractShape(jsonToTree('a.json', { time: 'x' })));
     expect(one.conflicts.size).toBe(0);
-    // A combined folder: its two files each have `url`, in different positions.
+    // Two files that once had to be one node by their keys now share a group: no conflict.
     const files = buildTree(
       config('dir', [{ id: 'f', kind: 'list', match: ['watch-history.json', 'kijkgeschiedenis.json'], children: [{ id: 'i', kind: 'map', match: ['[*]'], children: [{ id: 'u', kind: 'value', match: ['url'] }] }] }]),
       unionShape([
@@ -119,15 +120,14 @@ describe('buildTree', () => {
         extractShape({ kind: 'dir', name: '', children: [jsonToTree('kijkgeschiedenis.json', [{ url: 'b' }])] }),
       ]),
     );
-    expect(files.conflicts.size).toBe(1); // the file node itself: two keys in one folder of the union
-    expect([...files.conflicts][0]!.id).toBe('f');
+    expect(files.conflicts.size).toBe(0);
   });
 
   it('keeps a node\'s name, and gives it back in the configuration', () => {
-    const config = { root: { id: 'root', kind: 'map' as const, match: [], children: [{ id: 'a', kind: 'value' as const, match: ['time'], name: 'watched_at' }] } };
+    const config = upgradeConfig({ id: 'root', kind: 'map' as const, match: [], children: [{ id: 'a', kind: 'value' as const, match: ['time'], name: 'watched_at' }] });
     const tree = buildTree(config, extractShape(jsonToTree('a.json', { time: 'x' }))).tree;
-    expect(tree.children![0]).toMatchObject({ name: 'time', named: 'watched_at' });
-    expect(toConfig(tree).children![0]).toMatchObject({ name: 'watched_at' });
+    expect(fileOf(tree).children![0]).toMatchObject({ name: 'time', named: 'watched_at' });
+    expect(toConfig(fileOf(tree)).children![0]).toMatchObject({ name: 'watched_at' });
   });
 
   it('marks positions the seen structures lack as fresh, and skips them below closed nodes', () => {
@@ -136,25 +136,26 @@ describe('buildTree', () => {
     const open = buildTree(emptyConfig('list'), withExtra, { seen: seenShape });
     expect([...open.fresh].map((n) => n.name)).toEqual(['extra']);
     expect(at(open.tree, '[*]', 'title')).toBeDefined();
-    const closed = { root: { id: 'root', kind: 'list' as const, match: [], newChildren: 'skip' as const } };
+    const closed = upgradeConfig({ id: 'root', kind: 'list' as const, match: [], newChildren: 'skip' as const });
     const skipped = buildTree(closed, withExtra, { seen: seenShape });
     // Seen but unmatched positions stay; only the new one is left out.
-    expect(skipped.tree.children!.map((c) => c.name)).toEqual(['[*]']);
-    expect(skipped.tree.children![0]!.children!.map((c) => c.name)).toEqual(['title']);
+    expect(fileOf(skipped.tree).children!.map((c) => c.name)).toEqual(['[*]']);
+    expect(fileOf(skipped.tree).children![0]!.children!.map((c) => c.name)).toEqual(['title']);
     // Without a seen structure (the studio), everything is seen.
-    expect(buildTree(closed, withExtra).unmatched).toEqual([['~map:[*]']]);
+    expect(buildTree(closed, withExtra).unmatched).toEqual([[...filePath(skipped.tree), '~map:[*]']]);
   });
 });
 
 describe('toConfig and materialise', () => {
   it('keep only config nodes, and make the virtual nodes along a path real', () => {
     const tree = base();
-    expect(toConfig(tree)).toEqual({ id: 'root', kind: 'list', match: [] });
+    expect(toConfig(tree)).toEqual({ id: 'root', kind: 'dir', match: [], children: [{ id: 'g-export', kind: 'dir', match: ['export'], files: [{ path: [] }] }] });
     const { tree: real, path } = materialise(tree, at(tree, '[*]', 'time'));
-    const config = toConfig(real);
-    expect(config.children![0]).toMatchObject({ kind: 'map', match: ['[*]'], children: [{ kind: 'value', match: ['time'] }] });
+    const file = toConfig(real).children![0]!.children![0]!;
+    // The file of a group is matched by its kind, not its key.
+    expect(file).toMatchObject({ kind: 'list', match: [], children: [{ kind: 'map', match: ['[*]'], children: [{ kind: 'value', match: ['time'] }] }] });
     expect(getNode(real, path)!.virtual).toBeUndefined();
-    expect(path[0]).not.toBe('~map:[*]');
+    expect(path[2]).not.toBe('~map:[*]');
     // The selection follows the node.
     expect(remapPath(tree, rebuild(real, shape), at(tree, '[*]', 'time'))).toEqual(path);
   });
@@ -162,7 +163,7 @@ describe('toConfig and materialise', () => {
   it('keep virtual nodes an edit gave a setting, as config nodes matching their key', () => {
     const tree = structuredClone(base());
     nodeAt(tree, '[*]', 'time').as = 'datetime';
-    const config = toConfig(tree);
+    const config = toConfig(tree).children![0]!.children![0]!;
     expect(config.children![0]).toMatchObject({ kind: 'map', match: ['[*]'], children: [{ kind: 'value', match: ['time'], as: 'datetime' }] });
     expect(config.children![0]!.children).toHaveLength(1);
     expect(config.children![0]!.id).not.toMatch(/^~/);
@@ -255,11 +256,12 @@ describe('knownKeys', () => {
 describe('new children', () => {
   it('are passed down until a node sets its own', () => {
     const tree = buildTree(
-      { root: { id: 'root', kind: 'map', match: [], newChildren: 'skip', children: [{ id: 'a', kind: 'map', match: ['a'], children: [{ id: 'b', kind: 'map', match: ['b'], newChildren: 'ask' }] }] } },
+      upgradeConfig({ id: 'root', kind: 'map', match: [], newChildren: 'skip', children: [{ id: 'a', kind: 'map', match: ['a'], children: [{ id: 'b', kind: 'map', match: ['b'], newChildren: 'ask' }] }] }),
     ).tree;
     const closed = closedNodes(tree);
-    expect([tree, getNode(tree, ['a'])!].every((n) => closed.has(n))).toBe(true);
-    expect(closed.has(getNode(tree, ['a', 'b'])!)).toBe(false);
+    const file = filePath(tree);
+    expect([fileOf(tree), getNode(tree, [...file, 'a'])!].every((n) => closed.has(n))).toBe(true);
+    expect(closed.has(getNode(tree, [...file, 'a', 'b'])!)).toBe(false);
   });
 });
 

@@ -11,9 +11,12 @@ const shape = extractShape(jsonToTree('a.json', [{ title: 'x', titleText: 'y', t
 const rebuild = (tree: ProjectNode) => buildTree({ root: toConfig(tree) }, shape, { structureOrder: true }).tree;
 
 const start = () => buildTree(emptyConfig('list'), shape, { structureOrder: true }).tree;
-const item = (tree: ProjectNode) => tree.children![0]!;
+/** The group that reads the upload, and its file. */
+const file = (tree: ProjectNode) => tree.children![0]!.children![0]!;
+const item = (tree: ProjectNode) => file(tree).children![0]!;
 const child = (tree: ProjectNode, key: string) => item(tree).children!.find((c) => c.keys?.includes(key))!;
-const pathTo = (tree: ProjectNode, key: string) => [item(tree).id, child(tree, key).id];
+const itemPath = (tree: ProjectNode) => [tree.children![0]!.id, file(tree).id, item(tree).id];
+const pathTo = (tree: ProjectNode, key: string) => [...itemPath(tree), child(tree, key).id];
 
 describe('names in the tree editor', () => {
   it('matches a field by its key: the name its key gives, and a decision', () => {
@@ -33,7 +36,7 @@ describe('names in the tree editor', () => {
   it('gives a field a name of its own, and shows the key behind it', () => {
     const tree = start();
     const out = saveMatch(tree, pathTo(tree, 'titleText'), { name: 'video_title', decision: 'donate' });
-    expect(out.renamed).toEqual({ kind: 'field', from: 'title_text', to: 'video_title', table: 'table', references: true });
+    expect(out.renamed).toEqual({ kind: 'field', from: 'title_text', to: 'video_title', table: 'export', references: true });
     const after = rebuild(out.tree);
     const node = child(after, 'titleText');
     expect(rowName(node, t)).toBe('video_title');
@@ -43,7 +46,7 @@ describe('names in the tree editor', () => {
 
   it('has no name for parts that are not tables or fields', () => {
     const tree = start();
-    expect(nameInfo(tree, [item(tree).id])).toBeUndefined();
+    expect(nameInfo(tree, itemPath(tree))).toBeUndefined();
     expect(nameInfo(tree, pathTo(tree, 'comments'))).toMatchObject({ kind: 'table', name: 'comments' });
   });
 

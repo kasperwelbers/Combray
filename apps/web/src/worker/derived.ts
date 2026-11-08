@@ -10,6 +10,8 @@
 import {
   buildTree,
   configOf,
+  contentFiles,
+  contentTree,
   deriveRows,
   deriveTables,
   getNode,
@@ -205,7 +207,10 @@ export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project
   const added = new Set(freshPaths(tree, built.fresh).map(pathKey));
   // Tables of nodes that share a name are one table, with the rows of each.
   const ungrouped = deriveTables(tree, project.labels);
-  const { tables: defs, rows } = groupTables(ungrouped, deriveRows(root.prepared, tree, ungrouped));
+  // The files each group reads, made once: rows are read from it, and paths shown by it.
+  const content = contentTree(root.prepared, tree);
+  const places = filePlaces(content);
+  const { tables: defs, rows } = groupTables(ungrouped, deriveRows(content, tree, ungrouped));
   // Undecided parts are hidden unless the researcher lets participants see them.
   const hideUndecided = tree.undecided !== 'show';
   const nested = nest(defs, rows);
@@ -234,7 +239,7 @@ export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project
       key: def.id,
       name: def.name,
       ...(def.description !== undefined ? { description: def.description } : {}),
-      path: def.where,
+      path: placeOf(def.where, places),
       record: def.rows === undefined,
       collection,
       requested: def.state === 'donate',
@@ -246,6 +251,27 @@ export function deriveImport(root: { prepared: TreeNode; shape: Shape }, project
     tables.push({ table, rows: nested[i]! });
   });
   return { point, tables };
+}
+
+/**
+ * Where the files of each group are in this upload, for people: the path of the first file the
+ * group reads. A table is shown at its own file, not under the group's name, which is the
+ * researcher's.
+ */
+function filePlaces(content: TreeNode): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  if (content.kind !== 'dir') return out;
+  for (const group of content.children) {
+    const [first] = group.kind === 'dir' ? contentFiles({ ...content, children: [group] }) : [];
+    if (first) out.set(group.name, first.origin);
+  }
+  return out;
+}
+
+/** A table's place in the upload: its group's file, then the steps inside it. */
+function placeOf(where: string[], places: Map<string, string[]>): string[] {
+  const file = where[0] === undefined ? undefined : places.get(where[0]);
+  return file ? [...file, ...where.slice(1)] : where;
 }
 
 /** The paths of the fresh nodes in a tree. */

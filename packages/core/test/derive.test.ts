@@ -11,6 +11,7 @@ import {
   outline,
   setDecision,
   toConfig,
+  upgradeConfig,
   VALUE_COLUMN,
   valuesAt,
   type ConfigNode,
@@ -51,8 +52,9 @@ describe('deriveTables', () => {
     const tree = base();
     const tables = deriveTables(tree);
     expect(tables.map((t) => [t.id, t.name, t.where, t.parent])).toEqual([
-      ['table', 'Table', ['[*]'], undefined],
-      ['subtitles', 'Subtitles', ['[*]', 'subtitles', '[*]'], 0],
+      // A file that is the whole upload is read by the group `export`, which names its table.
+      ['export', 'Export', ['export', '[*]'], undefined],
+      ['subtitles', 'Subtitles', ['export', '[*]', 'subtitles', '[*]'], 0],
     ]);
     // Without names of their own, tables and columns are called by the names their keys give.
     expect(tables[0]!.columns.map((c) => [c.id, c.name, c.type])).toEqual([
@@ -69,8 +71,8 @@ describe('deriveTables', () => {
     const tables = deriveTables(tweetTree());
     expect(tables.map((t) => [t.id, t.where, t.parent])).toEqual([
       ['', [], undefined],
-      ['tweets', ['tweets', '[*]'], undefined],
-      ['comments', ['tweets', '[*]', 'comments', '[*]'], 1],
+      ['tweets', ['export', 'tweets', '[*]'], undefined],
+      ['comments', ['export', 'tweets', '[*]', 'comments', '[*]'], 1],
     ]);
     expect(tables[0]!.columns.map((c) => c.id)).toEqual(['joined', 'name']);
     expect(tables[1]!.columns.map((c) => [c.id, c.type])).toEqual([
@@ -150,7 +152,7 @@ describe('deriveTables', () => {
     );
     const tables = deriveTables(tree);
     expect(tables.map((t) => [t.id, t.keyed, t.parent])).toEqual([
-      ['table', undefined, undefined],
+      ['export', undefined, undefined],
       ['comments', true, 0],
     ]);
     expect(tables[1]!.columns.map((c) => [c.id, c.type])).toEqual([
@@ -262,7 +264,7 @@ describe('deriveRows', () => {
         },
       ],
     };
-    const tree = buildTree({ root: config }, extractShape(watchHistory)).tree;
+    const tree = buildTree(upgradeConfig(config), extractShape(watchHistory)).tree;
     const tables = deriveTables(tree);
     const rows = deriveRows(watchHistory, tree, tables)[0]!;
     expect(rows[0]!.values).toMatchObject({ date: '2024-03-01T09:15:00.000Z', hour: '09' });
@@ -303,7 +305,7 @@ describe('names that join tables and columns', () => {
   };
 
   it('are one table for participants, with one column per name and the rest side by side', () => {
-    const tree: ProjectNode = buildTree({ root: config }, extractShape(folder)).tree;
+    const tree: ProjectNode = buildTree(upgradeConfig(config), extractShape(folder)).tree;
     const tables = deriveTables(tree);
     expect(tables.map((t) => t.id)).toEqual(['watch_history', 'watch_history']);
     const grouped = groupTables(tables, deriveRows(folder, tree, tables));
@@ -334,7 +336,7 @@ describe('names that join tables and columns', () => {
       children: [{ id: `${file}-rows`, kind: 'map', match: ['[*]'], children: [{ id: `${file}-x`, kind: 'value', match: ['x'], name: 'x' }, { id: `${file}-tags`, kind: 'list', match: ['tags'], name: 'tags' }] }],
     });
     const tree = buildTree(
-      { root: { id: 'root', kind: 'dir', match: [], children: [nested('a.json'), nested('b.json')] } },
+      upgradeConfig({ id: 'root', kind: 'dir', match: [], children: [nested('a.json'), nested('b.json')] }),
       extractShape(data),
     ).tree;
     const tables = deriveTables(tree);
@@ -355,7 +357,7 @@ describe('names that join tables and columns', () => {
 
 describe('column names for HTML', () => {
   const html = (cells: ConfigNode[]): ProjectNode =>
-    buildTree({ root: { id: 'root', kind: 'list', match: [], children: [{ id: 'row', kind: 'element', match: ['[*]'], children: cells }] } }).tree;
+    buildTree(upgradeConfig({ id: 'root', kind: 'list', match: [], children: [{ id: 'row', kind: 'element', match: ['[*]'], children: cells }] })).tree;
   const cell = (name: string): ConfigNode => ({ id: name, kind: 'element', match: [name], children: [{ id: `${name}-t`, kind: 'value', match: ['#text[0]'] }] });
 
   it('shorten element names to tag and first class when that keeps them unique', () => {
@@ -399,6 +401,6 @@ describe('valuesAt', () => {
     const tree = tweetTree();
     nodeAt(tree, 'user', 'name').match = ['name', 'joined'];
     expect(valuesAt(tweets, tree, at(tree, 'user', 'name')).sort()).toEqual(['2020-01-01', 'Leonie']);
-    expect(toConfig(tree).children).toBeUndefined();
+    expect(toConfig(tree).children![0]!.children).toBeUndefined();
   });
 });

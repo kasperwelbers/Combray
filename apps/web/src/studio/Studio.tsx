@@ -41,6 +41,7 @@ import type { ImportProgress, Upload } from '../worker/api';
 import type { FieldValues as FieldValuesSummary, PackageStore, PreviewTable, StoredPackage, StudioExport } from './api';
 import { addExport, studio } from './client';
 import { DecisionTree, type TreeActions } from './DecisionTree';
+import { FilesView } from './FilesView';
 import { HelpButton, HelpLink } from './Help';
 import { MatchDialog, type MatchHint } from './MatchDialog';
 import {
@@ -78,9 +79,22 @@ import { Preview } from './Preview';
 /** The studio shows rows in the order of the structure, so they stay put when matched. */
 const ORDER = { structureOrder: true } as const;
 
-/** The tabs of the tree editor. */
-const STUDIO_SECTIONS = ['packages', 'decisions', 'preview', 'chart', 'files'] as const;
+/**
+ * The tabs of the extractor: numbered steps, then the charts and the files to save. A platform
+ * whose packages are one file has no files step (ADR 0016).
+ */
+const STUDIO_SECTIONS = ['packages', 'files', 'contents', 'preview', 'chart', 'save'] as const;
 type StudioSection = (typeof STUDIO_SECTIONS)[number];
+const STEPS: readonly StudioSection[] = ['packages', 'files', 'contents', 'preview'];
+
+/** Where the contents of a group are shown from: its file, when it reads files of one kind. */
+function groupBase(tree: ProjectNode, key: string | undefined): NodePath | undefined {
+  const groups = (tree.children ?? []).filter((c) => c.files !== undefined);
+  const group = groups.find((g) => g.match[0] === key) ?? groups.find((g) => (g.children?.length ?? 0) > 0) ?? groups[0];
+  if (!group) return undefined;
+  const files = group.children ?? [];
+  return files.length === 1 ? [group.id, files[0]!.id] : [group.id];
+}
 
 
 /** Suggestions without repeats: a pair counts once, whichever way round. */
@@ -166,17 +180,24 @@ export function Studio({
   const [storedOf, setStoredOf] = useState<Map<number, string>>(new Map());
   const [keepValues, setKeepValues] = useState(false);
   const [loadingKept, setLoadingKept] = useState(false);
-  const [tab, setTab] = useState<StudioSection>(initial ? 'decisions' : 'packages');
+  const [tab, setTab] = useState<StudioSection>(initial ? 'contents' : 'packages');
+  /** The group whose contents are shown. */
+  const [group, setGroup] = useState<string>();
+  /** A platform whose packages are one file reads that file: there are no files to pick. */
+  const oneFile = seen !== undefined && seen.kind !== 'dir';
+  const sections = STUDIO_SECTIONS.filter((s) => !(oneFile && s === 'files'));
+  const base = useMemo(() => (tree ? groupBase(tree, group) : undefined), [tree, group]);
+  const groupNodes = useMemo(() => (tree?.children ?? []).filter((c) => c.files !== undefined), [tree]);
 
   /** Every structure seen one by one: the loaded packages and those kept with the platform. */
   const structures = useMemo(() => [...shapes.values(), ...storedShapes], [shapes, storedShapes]);
 
-  // The first package gives a tree: go on to deciding what happens to it.
+  // The first package gives a tree: go on to picking its files, or to its content when it is one file.
   const hadTree = useRef(initial !== undefined);
   useEffect(() => {
-    if (tree && !hadTree.current) setTab('decisions');
+    if (tree && !hadTree.current) setTab(oneFile ? 'contents' : 'files');
     hadTree.current = tree !== undefined;
-  }, [tree]);
+  }, [tree, oneFile]);
 
   // Save changes, not the draft as it was loaded (saving marks the draft as changed).
   const loaded = useRef(true);
@@ -337,7 +358,11 @@ export function Studio({
 
   const states = useMemo(() => (tree ? effectiveStates(tree) : new Map()), [tree]);
   const undecided = useMemo(() => (tree ? undecidedBelow(tree, states) : new Map()), [tree, states]);
-  const counts = useMemo(() => (tree ? countDecisions(tree, states) : undefined), [tree, states]);
+  /** The fields of the group shown, by decision. */
+  const counts = useMemo(() => {
+    const shown = tree && base && getNode(tree, base.slice(0, 1));
+    return shown ? countDecisions(shown, states) : undefined;
+  }, [tree, base, states]);
   const shared = useMemo(() => (tree ? sharedNames(tree) : new Map<string, SharedName>()), [tree]);
   const info = useMemo(() => (built && config ? rowInfo(built, config, structures) : new Map<ProjectNode, RowInfo>()), [built, config, structures]);
   /** Rows that may be the same as another part, by `pathKey`: the other part's name. */
@@ -370,6 +395,12 @@ export function Studio({
     }
     setConfig(nextConfig);
     return after;
+  }
+
+  /** A change to which files are read (the files step): the content settings stay as they are. */
+  function changeFiles(next: ProjectConfig) {
+    setPanel(undefined);
+    setConfig(next);
   }
 
   /** Run an edit, and say why when it cannot be done. */
@@ -710,7 +741,7 @@ export function Studio({
       )}
 
       <div className="tabs" role="tablist" aria-label={t('studio.tabs.label')}>
-        {STUDIO_SECTIONS.map((id) => (
+        {sections.map((id) => (
           <button
             key={id}
             type="button"
@@ -723,7 +754,9 @@ export function Studio({
               setMessage(undefined);
             }}
           >
-            {t(`studio.tabs.${id}`)}
+            {STEPS.includes(id)
+              ? t('studio.tabs.numbered', { number: sections.filter((s) => STEPS.includes(s)).indexOf(id) + 1, name: t(`studio.tabs.${id}`) })
+              : t(`studio.tabs.${id}`)}
           </button>
         ))}
       </div>
@@ -816,11 +849,59 @@ export function Studio({
           </>
         )}
 
-        {tab === 'decisions' &&
-          (tree && counts ? (
+        {tab === 'files' &&
+          (config && seen ? (
+            <section className="studio-section">
+              <TemporaryUpload busy={busy} onFiles={async (files) => void (await addFiles(files))} />
+              <FilesView
+                config={config}
+                seen={seen}
+                structures={structures}
+                onChange={changeFiles}
+                onOpenGroup={(key) => {
+                  setGroup(key);
+                  setTab('contents');
+                }}
+              />
+            </section>
+          ) : (
+            needsPackage
+          ))}
+
+        {tab === 'contents' &&
+          (tree && !base ? (
+            <p className="meta">
+              {t('studio.contents.noGroups')}{' '}
+              <button type="button" className="link-button" onClick={() => setTab('files')}>
+                {t('studio.contents.toFiles')}
+              </button>
+            </p>
+          ) : tree && counts && base ? (
             <>
               <section className="studio-section">
                 <TemporaryUpload busy={busy} onFiles={async (files) => void (await addFiles(files))} />
+                {!oneFile && (
+                  <div className="content-groups" role="group" aria-label={t('studio.contents.groups')}>
+                    {groupNodes.map((g, i) => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        className={`group-chip shared-${i % 6}`}
+                        aria-pressed={base[0] === g.id}
+                        onClick={() => setGroup(g.match[0] as string)}
+                      >
+                        {g.match[0] as string}
+                        {(undecided.get(g) ?? 0) > 0 && (
+                          <span className="chip-note" title={t('studio.contents.undecided', { count: undecided.get(g) })}>
+                            {' · '}
+                            {undecided.get(g)}
+                            <span className="visually-hidden"> {t('studio.contents.undecided', { count: undecided.get(g) })}</span>
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <p className="meta">
                   {t('studio.counts', { ...counts })}
                   {counts.undecided > 0 && ` ${t('studio.undecidedLeft', { count: counts.undecided })}`}
@@ -878,6 +959,7 @@ export function Studio({
                 </div>
                 <DecisionTree
                   tree={tree}
+                  base={base}
                   shared={shared}
                   info={info}
                   states={states}
@@ -962,7 +1044,7 @@ export function Studio({
             needsPackage
           ))}
 
-        {tab === 'files' && (
+        {tab === 'save' && (
           <section className="card">
             <p className="meta">{t('studio.filesIntro')}</p>
             <div className="actions">
