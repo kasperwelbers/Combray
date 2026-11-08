@@ -32,6 +32,7 @@
 import type { ConfigNode, ProjectConfig } from './config';
 import { buildTree, knownKeys, unifyElementTwins, type ProjectNode } from './decisions';
 import { matchesChild } from './derive';
+import { contentShape, contentTree, originalShapes } from './files';
 import { inferType } from './infer';
 import { normalizeTree } from './normalize';
 import { collapseShape, extractShape, ITEM_NAME, mergeAll, type Shape } from './shape';
@@ -182,10 +183,12 @@ function marked(root: ProjectNode): Set<ProjectNode> {
 
 /**
  * Read the names written as text in the elements a project marks (`textNames`), in a normalised
- * tree. `keys` says which text may become a name (`knownKeys` on a participant's device; any text
- * in the studio). The tree is not changed; unmarked parts are returned as they are.
+ * tree, and return its content (`contentTree`): the files its groups read. `keys` says which
+ * text may become a name (`knownKeys` on a participant's device; any text in the studio). The
+ * tree is not changed; unmarked parts are returned as they are.
  */
-export function applyTextNames(tree: TreeNode, root: ProjectNode, keys: (text: string) => boolean): TreeNode {
+export function applyTextNames(upload: TreeNode, root: ProjectNode, keys: (text: string) => boolean): TreeNode {
+  const tree = contentTree(upload, root);
   const walk = marked(root);
   if (walk.size === 0) return tree;
   const read = (el: TreeNode, how: TextNames): TreeNode => {
@@ -219,8 +222,9 @@ export function applyTextNames(tree: TreeNode, root: ProjectNode, keys: (text: s
 }
 
 /**
- * A participant's tree, prepared for a project: normalised, with the names written as text read
- * as names, and its shape. Text from the file only becomes a name when the project knows it.
+ * A participant's tree, prepared for a project: normalised, as content (the files its groups
+ * read, ADR 0016), with the names written as text read as names, and its shape. Text from the
+ * file only becomes a name when the project knows it.
  */
 export function prepareTree(raw: TreeNode, root: ProjectNode): { prepared: TreeNode; shape: Shape } {
   const keys = knownKeys(root);
@@ -268,11 +272,12 @@ const hasCorrections = (node: ConfigNode): boolean =>
 export function correctedShape(config: ProjectConfig, shape: Shape): Shape {
   if (!hasCorrections(config.root)) return shape;
   const unified = unifyElementTwins(shape);
-  const { sources } = buildTree(config, unified);
+  // Laid over the files one by one, so what each node matched is a part of `unified`.
+  const { sources } = buildTree(config, contentShape(unified, config.root, { merge: false }));
   const collapse = new Set<Shape>();
   const texts = new Map<Shape, TextNames>();
   for (const [node, shapes] of sources) {
-    for (const s of shapes) {
+    for (const s of shapes.flatMap(originalShapes)) {
       if (node.collapsed && !s.collapsed) collapse.add(s);
       if (node.textNames) texts.set(s, node.textNames);
     }

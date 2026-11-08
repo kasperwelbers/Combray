@@ -35,6 +35,15 @@ export type NewChildren = 'ask' | 'skip';
  */
 export type Match = string | { regex: string; flags?: string };
 
+/**
+ * Which files a file group reads (ADR 0016). A path is one match per step from the upload's root,
+ * the folders and then the file (`[]` is the upload itself, when it is one file). A name is the
+ * file's own name in any folder: for names that occur once in a package, so a file that moved
+ * to another folder is still found. When a name is found in more than one folder of an upload,
+ * none of them is read by it.
+ */
+export type FileMatch = { path: Match[] } | { name: Match };
+
 /** The settings a config node can have. Settings belong to the node, never to one of its matches. */
 export interface NodeSettings {
   /**
@@ -93,6 +102,12 @@ export interface NodeSettings {
    * grouped changes, never the paths (ADR 0015).
    */
   sideBySide?: true;
+  /**
+   * File groups only (the children of the root): the files whose content this group reads. Every
+   * file it matches is a part of the group's content, whatever it is called: below a group, a
+   * node matches every file of its kind (ADR 0016).
+   */
+  files?: FileMatch[];
 }
 
 export interface ConfigNode extends NodeSettings {
@@ -108,6 +123,9 @@ export interface ConfigNode extends NodeSettings {
   name?: string;
   children?: ConfigNode[];
 }
+
+/** Whether a node is a file group: a child of the root that reads files. */
+export const isGroup = (node: { files?: FileMatch[] }): boolean => node.files !== undefined;
 
 /** A platform's configuration: what an importer file holds. */
 export interface ProjectConfig {
@@ -132,6 +150,7 @@ export const SETTINGS = [
   'collapsed',
   'textNames',
   'sideBySide',
+  'files',
 ] as const satisfies readonly (keyof NodeSettings)[];
 
 const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';

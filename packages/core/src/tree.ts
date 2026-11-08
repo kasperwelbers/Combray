@@ -20,22 +20,31 @@ export interface DirNode {
   children: TreeNode[];
 }
 
+/**
+ * Where a file came from, on the root of a file inside a file group's content (`contentTree`):
+ * the raw path steps of the file from the upload's root (ADR 0016). Values below it carry this
+ * path, never the group's.
+ */
+interface FileOrigin {
+  origin?: string[];
+}
+
 /** A JSON object or CSV row; children are keyed by name. */
-export interface MapNode {
+export interface MapNode extends FileOrigin {
   kind: 'map';
   name: string;
   children: TreeNode[];
 }
 
 /** A JSON array, CSV file, JSON Lines file or text file; children are named by index. */
-export interface ListNode {
+export interface ListNode extends FileOrigin {
   kind: 'list';
   name: string;
   children: TreeNode[];
 }
 
 /** A primitive value: the raw string plus an inferred type. */
-export interface ValueNode {
+export interface ValueNode extends FileOrigin {
   kind: 'value';
   name: string;
   value: string;
@@ -46,7 +55,7 @@ export interface ValueNode {
  * An HTML or XML element; `name` is the tag. The root of a parsed HTML file is an element
  * named after the file, so paths read `MyActivity.html/html/body/...`.
  */
-export interface ElementNode {
+export interface ElementNode extends FileOrigin {
   kind: 'element';
   name: string;
   attrs: Record<string, string>;
@@ -54,14 +63,14 @@ export interface ElementNode {
 }
 
 /** Text content of an element. `name` is always `#text`. */
-export interface TextNode {
+export interface TextNode extends FileOrigin {
   kind: 'text';
   name: '#text';
   value: string;
 }
 
 /** A binary file: type and size only, contents are not parsed. */
-export interface BlobNode {
+export interface BlobNode extends FileOrigin {
   kind: 'blob';
   name: string;
   mime: string;

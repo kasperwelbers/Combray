@@ -6,8 +6,10 @@
  * Suggestions are pairs of siblings: one the shape has and no config node matches, and one the
  * configuration has and the shape lacks, of the same kind. They are ranked by how alike their
  * structure and names are, and each node is suggested at most once. The researcher decides.
+ * Files are compared the same way to suggest the group a new file belongs to (`suggestGroups`).
  */
 import { buildTree, toConfig, type NodePath, type ProjectNode } from './decisions';
+import { assignFiles, fileGroups, shapeFiles, type GroupsHolder } from './files';
 import { COLLAPSED_NAME, ITEM_NAME, type Shape } from './shape';
 
 export interface CombineSuggestion {
@@ -133,4 +135,41 @@ function asShape(node: ProjectNode): Node {
     ...(node.formats ? { formats: node.formats } : {}),
     ...(node.children ? { children: node.children.map(asShape) as Shape[] } : {}),
   };
+}
+
+/** A group a seen file that no group reads may belong to: its content looks like the group's. */
+export interface GroupSuggestion {
+  /** The file, as `shapeFiles` gives it. */
+  file: string[];
+  group: string;
+  /** 0 to 1: how alike they are. */
+  score: number;
+}
+
+/**
+ * Suggest a group for each seen file that no group reads, by how alike its content and name are
+ * to the files the group reads (the Dutch `kijkgeschiedenis.html` next to `watch-history.html`,
+ * or TikTok's `user_data_tiktok.json` after `user_data.json`). Files of a kind the group does not
+ * read yet are compared by name only, at a discount. The researcher decides (ADR 0016).
+ */
+export function suggestGroups(root: GroupsHolder, seen: Shape): GroupSuggestion[] {
+  const files = shapeFiles(seen);
+  const groups = fileGroups(root);
+  const read = assignFiles(files, groups);
+  const out: GroupSuggestion[] = [];
+  files.forEach((file, i) => {
+    if (read[i] !== undefined) return;
+    let best: GroupSuggestion | undefined;
+    groups.forEach((group, g) => {
+      const own = files.filter((_, j) => read[j] === g);
+      for (const other of own) {
+        const name = { ...file.shape, name: file.steps.at(-1) ?? '' };
+        const theirs = { ...other.shape, name: other.steps.at(-1) ?? '' };
+        const score = other.shape.kind === file.shape.kind ? similarity(name, theirs) : 0.6 * nameSimilarity(name.name, theirs.name);
+        if (score >= MIN_SCORE && score > (best?.score ?? 0)) best = { file: file.steps, group: group.key, score: Math.round(score * 100) / 100 };
+      }
+    });
+    if (best) out.push(best);
+  });
+  return out;
 }

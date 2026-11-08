@@ -83,16 +83,15 @@ describe.each(PACK_IDS)('pack %s', (id) => {
   });
 });
 
-const MA = ['My Activity', 'Search'];
-const YT = ['YouTube and YouTube Music'];
+const MA = ['google_searches'];
 const HTML_ROWS = ['html', 'body', 'div.mdl-grid', 'div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell', '[*]'];
 const BODY = 'div.mdl-grid/div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1';
-const TIKTOK = ['Activity'];
+const TIKTOK = ['g-user_data', 'user_data', 'Activity'];
 
-/** Where each YAML importer's rows are in the pack's tree (by ids), and the path of each field. */
+/** Where each YAML importer's rows are in the pack's tree (by ids: a group, its file, then inside), and the path of each field. */
 const OLD: Record<string, { rows: string[]; fields: Record<string, string> }> = {
   'google-takeout/browser-history': {
-    rows: ['Chrome', 'BrowserHistory.json', 'Browser History', '[*]'],
+    rows: ['browser_history', 'BrowserHistory.json', 'Browser History', '[*]'],
     fields: { title: 'title', url: 'url', date: 'time_usec', transition: 'page_transition' },
   },
   'google-takeout/search-history': {
@@ -104,19 +103,19 @@ const OLD: Record<string, { rows: string[]; fields: Record<string, string> }> = 
     fields: { query: `${BODY}/a[0]/#text[0]`, url: `${BODY}/a[0]/@href`, date: `${BODY}/#text[1]` },
   },
   'google-takeout/youtube-search-history': {
-    rows: [...YT, 'history', 'search-history.json', '[*]'],
+    rows: ['youtube_searches', 'search-history.json', '[*]'],
     fields: { query: 'title', url: 'titleUrl', date: 'time' },
   },
   'google-takeout/youtube-subscriptions': {
-    rows: [...YT, 'subscriptions', 'subscriptions.csv', '[*]'],
+    rows: ['youtube_subscriptions', 'subscriptions.csv', '[*]'],
     fields: { channel: 'Channel title', channel_url: 'Channel URL' },
   },
   'google-takeout/youtube-watch-history': {
-    rows: [...YT, 'history', 'watch-history.json', '[*]'],
+    rows: ['youtube_watch_history', 'watch-history.json', '[*]'],
     fields: { title: 'title', url: 'titleUrl', date: 'time', channel: 'subtitles/[*]/name', channel_url: 'subtitles/[*]/url' },
   },
   'google-takeout/youtube-watch-history-html': {
-    rows: [...YT, 'history', 'kijkgeschiedenis.html', ...HTML_ROWS],
+    rows: ['youtube_watch_history', 'kijkgeschiedenis.html', ...HTML_ROWS],
     fields: {
       title: `${BODY}/a[0]/#text[0]`,
       url: `${BODY}/a[0]/@href`,

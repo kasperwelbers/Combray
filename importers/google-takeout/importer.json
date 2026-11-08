@@ -1,130 +1,941 @@
 {
-  "format": "combray-importer@2",
-  "name": {"en": "Google Takeout", "nl": "Google Takeout"},
-  "root":
-  {"id": "root", "kind": "dir", "match": [], "newChildren": "skip", "find": ["Takeout", "takeout-*.zip"], "children": [
-    {"id": "Chrome", "kind": "dir", "match": ["Chrome"], "newChildren": "ask", "children": [
-      {"id": "BrowserHistory.json", "kind": "map", "match": ["BrowserHistory.json", "History.json"], "children": [
-        {"id": "Browser History", "kind": "list", "match": ["Browser History"], "name": "chrome_browsing_history", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "filter": [{"column": "link", "test": {"matches": "google\\.[a-z.]+/search", "flags": "i"}, "not": true}], "children": [
-            {"id": "title", "kind": "value", "match": ["title"], "name": "page", "decision": "show", "role": "title"},
-            {"id": "url", "kind": "value", "match": ["url"], "name": "link", "decision": "show", "as": "url", "role": "url"},
-            {"id": "time_usec", "kind": "value", "match": ["time_usec"], "name": "time", "decision": "show", "as": "datetime", "format": "epoch-us", "role": "date"},
-            {"id": "page_transition", "kind": "value", "match": ["page_transition"], "name": "how_you_got_there", "decision": "show"},
-            {"id": "client_id", "kind": "value", "match": ["client_id"], "decision": "ignore"},
-            {"id": "favicon_url", "kind": "value", "match": ["favicon_url"], "decision": "ignore"},
-            {"id": "ptoken", "kind": "map", "match": ["ptoken"], "decision": "ignore"}
-          ]}
-        ]}
-      ]}
-    ]},
-    {"id": "YouTube and YouTube Music", "kind": "dir", "match": ["YouTube and YouTube Music", "YouTube en YouTube Music", "YouTube und YouTube Music"], "newChildren": "ask", "children": [
-      {"id": "history", "kind": "dir", "match": ["history", "geschiedenis", "Verlauf"], "children": [
-        {"id": "search-history.json", "kind": "list", "match": ["search-history.json", "zoekgeschiedenis.json", "Suchverlauf.json"], "name": "youtube_searches", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
-            {"id": "title", "kind": "value", "match": ["title"], "name": "search", "decision": "show", "transform": [{"replace": {"pattern": "^(Searched for|Gezocht naar|Gesucht nach) ", "with": ""}}], "role": "title"},
-            {"id": "titleUrl", "kind": "value", "match": ["titleUrl"], "name": "link", "decision": "show", "as": "url", "role": "url"},
-            {"id": "time", "kind": "value", "match": ["time"], "name": "time", "decision": "show", "as": "datetime", "role": "date"},
-            {"id": "header", "kind": "value", "match": ["header"], "decision": "ignore"}
-          ]}
-        ]},
-        {"id": "watch-history.json", "kind": "list", "match": ["watch-history.json", "kijkgeschiedenis.json", "Wiedergabeverlauf.json", "historique-des-vidéos.json"], "name": "youtube_watch_history", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "filter": [{"column": "details", "test": {"equals": 0}}], "children": [
-            {"id": "title", "kind": "value", "match": ["title"], "name": "video", "decision": "show", "transform": [{"replace": {"pattern": "^(Watched|Bekeken|Angesehen|Vous avez regardé) ", "with": ""}}], "role": "title"},
-            {"id": "titleUrl", "kind": "value", "match": ["titleUrl"], "name": "link", "decision": "show", "as": "url", "role": "url"},
-            {"id": "time", "kind": "value", "match": ["time"], "name": "time", "decision": "show", "as": "datetime", "role": "date"},
-            {"id": "subtitles", "kind": "list", "match": ["subtitles"], "name": "channels", "children": [
-              {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
-                {"id": "name", "kind": "value", "match": ["name"], "name": "channel", "decision": "show", "role": "group"},
-                {"id": "url", "kind": "value", "match": ["url"], "name": "channel_link", "decision": "show", "as": "url"}
-              ]}
-            ]},
-            {"id": "details", "kind": "list", "match": ["details"], "decision": "ignore", "children": [
-              {"id": "[*]", "kind": "map", "match": ["[*]"]}
-            ]},
-            {"id": "header", "kind": "value", "match": ["header"], "decision": "ignore"},
-            {"id": "products", "kind": "list", "match": ["products"], "decision": "ignore"},
-            {"id": "activityControls", "kind": "list", "match": ["activityControls"], "decision": "ignore"}
-          ]}
-        ]},
-        {"id": "kijkgeschiedenis.html", "kind": "element", "match": ["kijkgeschiedenis.html", "watch-history.html", "Wiedergabeverlauf.html"], "children": [
-          {"id": "html", "kind": "element", "match": ["html"], "children": [
-            {"id": "body", "kind": "element", "match": ["body"], "children": [
-              {"id": "div.mdl-grid", "kind": "element", "match": ["div.mdl-grid"], "children": [
-                {"id": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell", "kind": "list", "match": ["div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell"], "name": "youtube_watch_history_older_export", "children": [
-                  {"id": "[*]", "kind": "element", "match": ["[*]"], "filter": [{"column": "caption", "test": {"empty": true}}], "children": [
-                    {"id": "div.mdl-grid", "kind": "element", "match": ["div.mdl-grid"], "children": [
-                      {"id": "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1", "kind": "element", "match": ["div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1"], "children": [
-                        {"id": "#text[0]", "kind": "value", "match": ["#text[0]"], "decision": "ignore"},
-                        {"id": "#text[1]", "kind": "value", "match": ["#text[1]"], "name": "time", "decision": "show", "as": "datetime", "role": "date"},
-                        {"id": "a[0]", "kind": "element", "match": ["a[0]"], "children": [
-                          {"id": "#text[0]", "kind": "value", "match": ["#text[0]"], "name": "video", "decision": "show", "role": "title"},
-                          {"id": "@href", "kind": "value", "match": ["@href"], "name": "link", "decision": "show", "as": "url", "role": "url"}
-                        ]},
-                        {"id": "a[1]", "kind": "element", "match": ["a[1]"], "children": [
-                          {"id": "#text[0]", "kind": "value", "match": ["#text[0]"], "name": "channel", "decision": "show", "role": "group"},
-                          {"id": "@href", "kind": "value", "match": ["@href"], "name": "channel_link", "decision": "show", "as": "url"}
-                        ]}
-                      ]},
-                      {"id": "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption", "kind": "element", "match": ["div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption"], "decision": "ignore", "children": [
-                        {"id": "#text[1]", "kind": "value", "match": ["#text[1]"], "name": "caption"}
-                      ]},
-                      {"id": "div.header-cell.mdl-cell.mdl-cell--12-col", "kind": "element", "match": ["div.header-cell.mdl-cell.mdl-cell--12-col"], "decision": "ignore"}
-                    ]}
-                  ]}
-                ]}
-              ]}
-            ]}
-          ]}
-        ]}
-      ]},
-      {"id": "subscriptions", "kind": "dir", "match": ["subscriptions", "abonnementen", "Abos"], "children": [
-        {"id": "subscriptions.csv", "kind": "list", "match": ["subscriptions.csv", "abonnementen.csv", "Abos.csv"], "name": "youtube_subscriptions", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "children": [
-            {"id": "Channel title", "kind": "value", "match": ["Channel title", "Kanaaltitel", "Kanaltitel"], "name": "channel", "decision": "show", "role": "title"},
-            {"id": "Channel URL", "kind": "value", "match": ["Channel URL", "Kanaal-URL", "Kanal-URL"], "name": "link", "decision": "show", "as": "url", "role": "url"},
-            {"id": "Channel Id", "kind": "value", "match": ["Channel Id", "Kanaal-ID", "Kanal-ID"], "decision": "ignore"}
-          ]}
-        ]}
-      ]}
-    ]},
-    {"id": "My Activity", "kind": "dir", "match": ["My Activity", "Mijn activiteit", "Meine Aktivitäten"], "newChildren": "ask", "children": [
-      {"id": "Search", "kind": "dir", "match": ["Search", "Zoeken", "Suche"], "children": [
-        {"id": "MyActivity.json", "kind": "list", "match": ["MyActivity.json", "MijnActiviteit.json", "MeineAktivitäten.json"], "name": "google_searches", "children": [
-          {"id": "[*]", "kind": "map", "match": ["[*]"], "filter": [{"column": "link", "test": {"matches": "google\\.[a-z.]+/search", "flags": "i"}}], "children": [
-            {"id": "title", "kind": "value", "match": ["title"], "name": "search", "decision": "show", "transform": [{"replace": {"pattern": "^(Searched for|Gezocht naar|Gesucht nach) ", "with": ""}}], "role": "title"},
-            {"id": "titleUrl", "kind": "value", "match": ["titleUrl"], "name": "link", "decision": "show", "as": "url", "role": "url"},
-            {"id": "time", "kind": "value", "match": ["time"], "name": "time", "decision": "show", "as": "datetime", "role": "date"},
-            {"id": "header", "kind": "value", "match": ["header"], "decision": "ignore"},
-            {"id": "products", "kind": "list", "match": ["products"], "decision": "ignore"}
-          ]}
-        ]},
-        {"id": "MijnActiviteit.html", "kind": "element", "match": ["MijnActiviteit.html", "MyActivity.html", "MeineAktivitäten.html"], "children": [
-          {"id": "html", "kind": "element", "match": ["html"], "children": [
-            {"id": "body", "kind": "element", "match": ["body"], "children": [
-              {"id": "div.mdl-grid", "kind": "element", "match": ["div.mdl-grid"], "children": [
-                {"id": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell", "kind": "list", "match": ["div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell"], "name": "google_searches_older_export", "children": [
-                  {"id": "[*]", "kind": "element", "match": ["[*]"], "filter": [{"column": "action", "test": {"matches": "^(Searched for|Gezocht naar|Gesucht nach)", "flags": "i"}}], "children": [
-                    {"id": "div.mdl-grid", "kind": "element", "match": ["div.mdl-grid"], "children": [
-                      {"id": "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1", "kind": "element", "match": ["div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1"], "children": [
-                        {"id": "#text[0]", "kind": "value", "match": ["#text[0]"], "name": "action", "decision": "ignore"},
-                        {"id": "#text[1]", "kind": "value", "match": ["#text[1]"], "name": "time", "decision": "show", "as": "datetime", "role": "date"},
-                        {"id": "a[0]", "kind": "element", "match": ["a[0]"], "children": [
-                          {"id": "#text[0]", "kind": "value", "match": ["#text[0]"], "name": "search", "decision": "show", "role": "title"},
-                          {"id": "@href", "kind": "value", "match": ["@href"], "name": "link", "decision": "show", "as": "url", "role": "url"}
-                        ]}
-                      ]},
-                      {"id": "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption", "kind": "element", "match": ["div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption"], "decision": "ignore"},
-                      {"id": "div.header-cell.mdl-cell.mdl-cell--12-col", "kind": "element", "match": ["div.header-cell.mdl-cell.mdl-cell--12-col"], "decision": "ignore"}
-                    ]}
-                  ]}
-                ]}
-              ]}
-            ]}
-          ]}
-        ]}
-      ]}
-    ]},
-    {"id": "archive_browser.html", "kind": "element", "match": ["archive_browser.html"], "decision": "ignore"}
-  ]}
+  "format": "combray-importer@3",
+  "name": {
+    "en": "Google Takeout",
+    "nl": "Google Takeout"
+  },
+  "root": {
+    "id": "root",
+    "kind": "dir",
+    "match": [],
+    "find": [
+      "Takeout",
+      "takeout-*.zip"
+    ],
+    "children": [
+      {
+        "id": "browser_history",
+        "kind": "dir",
+        "match": [
+          "browser_history"
+        ],
+        "files": [
+          {
+            "path": [
+              "Chrome",
+              "BrowserHistory.json"
+            ]
+          },
+          {
+            "path": [
+              "Chrome",
+              "History.json"
+            ]
+          }
+        ],
+        "children": [
+          {
+            "id": "BrowserHistory.json",
+            "kind": "map",
+            "match": [],
+            "children": [
+              {
+                "id": "Browser History",
+                "kind": "list",
+                "match": [
+                  "Browser History"
+                ],
+                "name": "chrome_browsing_history",
+                "children": [
+                  {
+                    "id": "[*]",
+                    "kind": "map",
+                    "match": [
+                      "[*]"
+                    ],
+                    "filter": [
+                      {
+                        "column": "link",
+                        "test": {
+                          "matches": "google\\.[a-z.]+/search",
+                          "flags": "i"
+                        },
+                        "not": true
+                      }
+                    ],
+                    "children": [
+                      {
+                        "id": "title",
+                        "kind": "value",
+                        "match": [
+                          "title"
+                        ],
+                        "name": "page",
+                        "decision": "show",
+                        "role": "title"
+                      },
+                      {
+                        "id": "url",
+                        "kind": "value",
+                        "match": [
+                          "url"
+                        ],
+                        "name": "link",
+                        "decision": "show",
+                        "as": "url",
+                        "role": "url"
+                      },
+                      {
+                        "id": "time_usec",
+                        "kind": "value",
+                        "match": [
+                          "time_usec"
+                        ],
+                        "name": "time",
+                        "decision": "show",
+                        "as": "datetime",
+                        "format": "epoch-us",
+                        "role": "date"
+                      },
+                      {
+                        "id": "page_transition",
+                        "kind": "value",
+                        "match": [
+                          "page_transition"
+                        ],
+                        "name": "how_you_got_there",
+                        "decision": "show"
+                      },
+                      {
+                        "id": "client_id",
+                        "kind": "value",
+                        "match": [
+                          "client_id"
+                        ],
+                        "decision": "ignore"
+                      },
+                      {
+                        "id": "favicon_url",
+                        "kind": "value",
+                        "match": [
+                          "favicon_url"
+                        ],
+                        "decision": "ignore"
+                      },
+                      {
+                        "id": "ptoken",
+                        "kind": "map",
+                        "match": [
+                          "ptoken"
+                        ],
+                        "decision": "ignore"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "youtube_searches",
+        "kind": "dir",
+        "match": [
+          "youtube_searches"
+        ],
+        "files": [
+          {
+            "name": "search-history.json"
+          },
+          {
+            "name": "zoekgeschiedenis.json"
+          },
+          {
+            "name": "Suchverlauf.json"
+          }
+        ],
+        "children": [
+          {
+            "id": "search-history.json",
+            "kind": "list",
+            "match": [],
+            "name": "youtube_searches",
+            "children": [
+              {
+                "id": "[*]",
+                "kind": "map",
+                "match": [
+                  "[*]"
+                ],
+                "children": [
+                  {
+                    "id": "title",
+                    "kind": "value",
+                    "match": [
+                      "title"
+                    ],
+                    "name": "search",
+                    "decision": "show",
+                    "transform": [
+                      {
+                        "replace": {
+                          "pattern": "^(Searched for|Gezocht naar|Gesucht nach) ",
+                          "with": ""
+                        }
+                      }
+                    ],
+                    "role": "title"
+                  },
+                  {
+                    "id": "titleUrl",
+                    "kind": "value",
+                    "match": [
+                      "titleUrl"
+                    ],
+                    "name": "link",
+                    "decision": "show",
+                    "as": "url",
+                    "role": "url"
+                  },
+                  {
+                    "id": "time",
+                    "kind": "value",
+                    "match": [
+                      "time"
+                    ],
+                    "name": "time",
+                    "decision": "show",
+                    "as": "datetime",
+                    "role": "date"
+                  },
+                  {
+                    "id": "header",
+                    "kind": "value",
+                    "match": [
+                      "header"
+                    ],
+                    "decision": "ignore"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "youtube_watch_history",
+        "kind": "dir",
+        "match": [
+          "youtube_watch_history"
+        ],
+        "files": [
+          {
+            "name": "watch-history.json"
+          },
+          {
+            "name": "kijkgeschiedenis.json"
+          },
+          {
+            "name": "Wiedergabeverlauf.json"
+          },
+          {
+            "name": "historique-des-vidéos.json"
+          },
+          {
+            "name": "watch-history.html"
+          },
+          {
+            "name": "kijkgeschiedenis.html"
+          },
+          {
+            "name": "Wiedergabeverlauf.html"
+          }
+        ],
+        "children": [
+          {
+            "id": "watch-history.json",
+            "kind": "list",
+            "match": [],
+            "name": "youtube_watch_history",
+            "children": [
+              {
+                "id": "[*]",
+                "kind": "map",
+                "match": [
+                  "[*]"
+                ],
+                "filter": [
+                  {
+                    "column": "details",
+                    "test": {
+                      "equals": 0
+                    }
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "title",
+                    "kind": "value",
+                    "match": [
+                      "title"
+                    ],
+                    "name": "video",
+                    "decision": "show",
+                    "transform": [
+                      {
+                        "replace": {
+                          "pattern": "^(Watched|Bekeken|Angesehen|Vous avez regardé) ",
+                          "with": ""
+                        }
+                      }
+                    ],
+                    "role": "title"
+                  },
+                  {
+                    "id": "titleUrl",
+                    "kind": "value",
+                    "match": [
+                      "titleUrl"
+                    ],
+                    "name": "link",
+                    "decision": "show",
+                    "as": "url",
+                    "role": "url"
+                  },
+                  {
+                    "id": "time",
+                    "kind": "value",
+                    "match": [
+                      "time"
+                    ],
+                    "name": "time",
+                    "decision": "show",
+                    "as": "datetime",
+                    "role": "date"
+                  },
+                  {
+                    "id": "subtitles",
+                    "kind": "list",
+                    "match": [
+                      "subtitles"
+                    ],
+                    "name": "channels",
+                    "children": [
+                      {
+                        "id": "[*]",
+                        "kind": "map",
+                        "match": [
+                          "[*]"
+                        ],
+                        "children": [
+                          {
+                            "id": "name",
+                            "kind": "value",
+                            "match": [
+                              "name"
+                            ],
+                            "name": "channel",
+                            "decision": "show",
+                            "role": "group"
+                          },
+                          {
+                            "id": "url",
+                            "kind": "value",
+                            "match": [
+                              "url"
+                            ],
+                            "name": "channel_link",
+                            "decision": "show",
+                            "as": "url"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "details",
+                    "kind": "list",
+                    "match": [
+                      "details"
+                    ],
+                    "decision": "ignore",
+                    "children": [
+                      {
+                        "id": "[*]",
+                        "kind": "map",
+                        "match": [
+                          "[*]"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "header",
+                    "kind": "value",
+                    "match": [
+                      "header"
+                    ],
+                    "decision": "ignore"
+                  },
+                  {
+                    "id": "products",
+                    "kind": "list",
+                    "match": [
+                      "products"
+                    ],
+                    "decision": "ignore"
+                  },
+                  {
+                    "id": "activityControls",
+                    "kind": "list",
+                    "match": [
+                      "activityControls"
+                    ],
+                    "decision": "ignore"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "kijkgeschiedenis.html",
+            "kind": "element",
+            "match": [],
+            "children": [
+              {
+                "id": "html",
+                "kind": "element",
+                "match": [
+                  "html"
+                ],
+                "children": [
+                  {
+                    "id": "body",
+                    "kind": "element",
+                    "match": [
+                      "body"
+                    ],
+                    "children": [
+                      {
+                        "id": "div.mdl-grid",
+                        "kind": "element",
+                        "match": [
+                          "div.mdl-grid"
+                        ],
+                        "children": [
+                          {
+                            "id": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell",
+                            "kind": "list",
+                            "match": [
+                              "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell"
+                            ],
+                            "name": "youtube_watch_history_older_export",
+                            "children": [
+                              {
+                                "id": "[*]",
+                                "kind": "element",
+                                "match": [
+                                  "[*]"
+                                ],
+                                "filter": [
+                                  {
+                                    "column": "caption",
+                                    "test": {
+                                      "empty": true
+                                    }
+                                  }
+                                ],
+                                "children": [
+                                  {
+                                    "id": "div.mdl-grid",
+                                    "kind": "element",
+                                    "match": [
+                                      "div.mdl-grid"
+                                    ],
+                                    "children": [
+                                      {
+                                        "id": "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1",
+                                        "kind": "element",
+                                        "match": [
+                                          "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1"
+                                        ],
+                                        "children": [
+                                          {
+                                            "id": "#text[0]",
+                                            "kind": "value",
+                                            "match": [
+                                              "#text[0]"
+                                            ],
+                                            "decision": "ignore"
+                                          },
+                                          {
+                                            "id": "#text[1]",
+                                            "kind": "value",
+                                            "match": [
+                                              "#text[1]"
+                                            ],
+                                            "name": "time",
+                                            "decision": "show",
+                                            "as": "datetime",
+                                            "role": "date"
+                                          },
+                                          {
+                                            "id": "a[0]",
+                                            "kind": "element",
+                                            "match": [
+                                              "a[0]"
+                                            ],
+                                            "children": [
+                                              {
+                                                "id": "#text[0]",
+                                                "kind": "value",
+                                                "match": [
+                                                  "#text[0]"
+                                                ],
+                                                "name": "video",
+                                                "decision": "show",
+                                                "role": "title"
+                                              },
+                                              {
+                                                "id": "@href",
+                                                "kind": "value",
+                                                "match": [
+                                                  "@href"
+                                                ],
+                                                "name": "link",
+                                                "decision": "show",
+                                                "as": "url",
+                                                "role": "url"
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "id": "a[1]",
+                                            "kind": "element",
+                                            "match": [
+                                              "a[1]"
+                                            ],
+                                            "children": [
+                                              {
+                                                "id": "#text[0]",
+                                                "kind": "value",
+                                                "match": [
+                                                  "#text[0]"
+                                                ],
+                                                "name": "channel",
+                                                "decision": "show",
+                                                "role": "group"
+                                              },
+                                              {
+                                                "id": "@href",
+                                                "kind": "value",
+                                                "match": [
+                                                  "@href"
+                                                ],
+                                                "name": "channel_link",
+                                                "decision": "show",
+                                                "as": "url"
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "id": "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption",
+                                        "kind": "element",
+                                        "match": [
+                                          "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption"
+                                        ],
+                                        "decision": "ignore",
+                                        "children": [
+                                          {
+                                            "id": "#text[1]",
+                                            "kind": "value",
+                                            "match": [
+                                              "#text[1]"
+                                            ],
+                                            "name": "caption"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "id": "div.header-cell.mdl-cell.mdl-cell--12-col",
+                                        "kind": "element",
+                                        "match": [
+                                          "div.header-cell.mdl-cell.mdl-cell--12-col"
+                                        ],
+                                        "decision": "ignore"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "youtube_subscriptions",
+        "kind": "dir",
+        "match": [
+          "youtube_subscriptions"
+        ],
+        "files": [
+          {
+            "name": "subscriptions.csv"
+          },
+          {
+            "name": "abonnementen.csv"
+          },
+          {
+            "name": "Abos.csv"
+          }
+        ],
+        "children": [
+          {
+            "id": "subscriptions.csv",
+            "kind": "list",
+            "match": [],
+            "name": "youtube_subscriptions",
+            "children": [
+              {
+                "id": "[*]",
+                "kind": "map",
+                "match": [
+                  "[*]"
+                ],
+                "children": [
+                  {
+                    "id": "Channel title",
+                    "kind": "value",
+                    "match": [
+                      "Channel title",
+                      "Kanaaltitel",
+                      "Kanaltitel"
+                    ],
+                    "name": "channel",
+                    "decision": "show",
+                    "role": "title"
+                  },
+                  {
+                    "id": "Channel URL",
+                    "kind": "value",
+                    "match": [
+                      "Channel URL",
+                      "Kanaal-URL",
+                      "Kanal-URL"
+                    ],
+                    "name": "link",
+                    "decision": "show",
+                    "as": "url",
+                    "role": "url"
+                  },
+                  {
+                    "id": "Channel Id",
+                    "kind": "value",
+                    "match": [
+                      "Channel Id",
+                      "Kanaal-ID",
+                      "Kanal-ID"
+                    ],
+                    "decision": "ignore"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "google_searches",
+        "kind": "dir",
+        "match": [
+          "google_searches"
+        ],
+        "files": [
+          {
+            "path": [
+              "My Activity",
+              "Search",
+              "MyActivity.json"
+            ]
+          },
+          {
+            "path": [
+              "My Activity",
+              "Search",
+              "MyActivity.html"
+            ]
+          },
+          {
+            "path": [
+              "Mijn activiteit",
+              "Zoeken",
+              "MijnActiviteit.json"
+            ]
+          },
+          {
+            "path": [
+              "Mijn activiteit",
+              "Zoeken",
+              "MijnActiviteit.html"
+            ]
+          },
+          {
+            "path": [
+              "Meine Aktivitäten",
+              "Suche",
+              "MeineAktivitäten.json"
+            ]
+          },
+          {
+            "path": [
+              "Meine Aktivitäten",
+              "Suche",
+              "MeineAktivitäten.html"
+            ]
+          }
+        ],
+        "children": [
+          {
+            "id": "MyActivity.json",
+            "kind": "list",
+            "match": [],
+            "name": "google_searches",
+            "children": [
+              {
+                "id": "[*]",
+                "kind": "map",
+                "match": [
+                  "[*]"
+                ],
+                "filter": [
+                  {
+                    "column": "link",
+                    "test": {
+                      "matches": "google\\.[a-z.]+/search",
+                      "flags": "i"
+                    }
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "title",
+                    "kind": "value",
+                    "match": [
+                      "title"
+                    ],
+                    "name": "search",
+                    "decision": "show",
+                    "transform": [
+                      {
+                        "replace": {
+                          "pattern": "^(Searched for|Gezocht naar|Gesucht nach) ",
+                          "with": ""
+                        }
+                      }
+                    ],
+                    "role": "title"
+                  },
+                  {
+                    "id": "titleUrl",
+                    "kind": "value",
+                    "match": [
+                      "titleUrl"
+                    ],
+                    "name": "link",
+                    "decision": "show",
+                    "as": "url",
+                    "role": "url"
+                  },
+                  {
+                    "id": "time",
+                    "kind": "value",
+                    "match": [
+                      "time"
+                    ],
+                    "name": "time",
+                    "decision": "show",
+                    "as": "datetime",
+                    "role": "date"
+                  },
+                  {
+                    "id": "header",
+                    "kind": "value",
+                    "match": [
+                      "header"
+                    ],
+                    "decision": "ignore"
+                  },
+                  {
+                    "id": "products",
+                    "kind": "list",
+                    "match": [
+                      "products"
+                    ],
+                    "decision": "ignore"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "MijnActiviteit.html",
+            "kind": "element",
+            "match": [],
+            "children": [
+              {
+                "id": "html",
+                "kind": "element",
+                "match": [
+                  "html"
+                ],
+                "children": [
+                  {
+                    "id": "body",
+                    "kind": "element",
+                    "match": [
+                      "body"
+                    ],
+                    "children": [
+                      {
+                        "id": "div.mdl-grid",
+                        "kind": "element",
+                        "match": [
+                          "div.mdl-grid"
+                        ],
+                        "children": [
+                          {
+                            "id": "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell",
+                            "kind": "list",
+                            "match": [
+                              "div.mdl-cell.mdl-cell--12-col.mdl-shadow--2dp.outer-cell"
+                            ],
+                            "name": "google_searches_older_export",
+                            "children": [
+                              {
+                                "id": "[*]",
+                                "kind": "element",
+                                "match": [
+                                  "[*]"
+                                ],
+                                "filter": [
+                                  {
+                                    "column": "action",
+                                    "test": {
+                                      "matches": "^(Searched for|Gezocht naar|Gesucht nach)",
+                                      "flags": "i"
+                                    }
+                                  }
+                                ],
+                                "children": [
+                                  {
+                                    "id": "div.mdl-grid",
+                                    "kind": "element",
+                                    "match": [
+                                      "div.mdl-grid"
+                                    ],
+                                    "children": [
+                                      {
+                                        "id": "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1",
+                                        "kind": "element",
+                                        "match": [
+                                          "div.content-cell.mdl-cell.mdl-cell--6-col.mdl-typography--body-1"
+                                        ],
+                                        "children": [
+                                          {
+                                            "id": "#text[0]",
+                                            "kind": "value",
+                                            "match": [
+                                              "#text[0]"
+                                            ],
+                                            "name": "action",
+                                            "decision": "ignore"
+                                          },
+                                          {
+                                            "id": "#text[1]",
+                                            "kind": "value",
+                                            "match": [
+                                              "#text[1]"
+                                            ],
+                                            "name": "time",
+                                            "decision": "show",
+                                            "as": "datetime",
+                                            "role": "date"
+                                          },
+                                          {
+                                            "id": "a[0]",
+                                            "kind": "element",
+                                            "match": [
+                                              "a[0]"
+                                            ],
+                                            "children": [
+                                              {
+                                                "id": "#text[0]",
+                                                "kind": "value",
+                                                "match": [
+                                                  "#text[0]"
+                                                ],
+                                                "name": "search",
+                                                "decision": "show",
+                                                "role": "title"
+                                              },
+                                              {
+                                                "id": "@href",
+                                                "kind": "value",
+                                                "match": [
+                                                  "@href"
+                                                ],
+                                                "name": "link",
+                                                "decision": "show",
+                                                "as": "url",
+                                                "role": "url"
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "id": "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption",
+                                        "kind": "element",
+                                        "match": [
+                                          "div.content-cell.mdl-cell.mdl-cell--12-col.mdl-typography--caption"
+                                        ],
+                                        "decision": "ignore"
+                                      },
+                                      {
+                                        "id": "div.header-cell.mdl-cell.mdl-cell--12-col",
+                                        "kind": "element",
+                                        "match": [
+                                          "div.header-cell.mdl-cell.mdl-cell--12-col"
+                                        ],
+                                        "decision": "ignore"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

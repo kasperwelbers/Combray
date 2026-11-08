@@ -119,7 +119,8 @@ export function remapAfter(tree: ProjectNode, path: NodePath): NodePath {
     if (!next) {
       // `~kind:key` became a config node matching that key.
       const [, kind, key] = /^~([a-z]+):(.*?)'*$/.exec(id) ?? [];
-      const real = node.children?.find((c) => c.kind === kind && c.match.some((m) => m === key));
+      // Below a group, files are matched by their kind.
+      const real = node.children?.find((c) => c.kind === kind && (node.files !== undefined || c.match.some((m) => m === key)));
       if (!real) throw new DecisionError(`no node at ${path.join('/')}`);
       out.push(real.id);
       node = real;

@@ -10,15 +10,27 @@
  * map, and the key page places every donation's values with the newest one. Structure only:
  * never a value.
  *
+ * File groups (`combray-names/2`, ADR 0016): the root's children are the groups, each with the
+ * files it reads (`g`: exact paths, or a file name in any folder). The steps of a path up to the
+ * file are matched against those, and the rest against the group's children, which stand for the
+ * file itself. Exact paths go first: a name in any folder only places a path no group's exact
+ * path matches. Version 1 maps, without groups, are read as they are.
+ *
  * No dependencies, so the key page can bundle it as it is.
  */
 
-export const NAME_MAP_FORMAT = 'combray-names/1';
+export const NAME_MAP_FORMAT = 'combray-names/2';
+const FORMATS = new Set(['combray-names/1', NAME_MAP_FORMAT]);
 
 /** A key a node matches: the key itself, or a regular expression that finds it. */
 export type NameMatch = string | { regex: string; flags?: string };
 
+/** Files a group reads: a path of one match per step (`[]`: the upload itself), or a file name in any folder. */
+export type NameFileMatch = { p: NameMatch[] } | { n: NameMatch };
+
 export interface NameNode {
+  /** A file group: the files it reads. Its children are the files' content, matched without a key. */
+  g?: NameFileMatch[];
   /** The keys this node matches. Not for the items of a list or the keys of a map. */
   m?: NameMatch[];
   /** `[*]`: the items of a list; `{*}`: the keys of a map whose keys are data. */
@@ -37,7 +49,7 @@ export interface NameNode {
 }
 
 export interface NameMap {
-  format: typeof NAME_MAP_FORMAT;
+  format: typeof NAME_MAP_FORMAT | 'combray-names/1';
   root: NameNode;
 }
 
@@ -88,6 +100,21 @@ function matchOne(match: NameMatch, key: string): boolean {
   return re?.test(key) ?? false;
 }
 
+/** How many steps of a path, from `start`, are the file a group's match reads; undefined if it does not. */
+function fileSteps(match: NameFileMatch, path: readonly string[], start: number): number | undefined {
+  if ('p' in match) {
+    if (start + match.p.length > path.length) return undefined;
+    return match.p.every((m, j) => generalStep(path[start + j]!) === path[start + j] && matchOne(m, path[start + j]!)) ? match.p.length : undefined;
+  }
+  // The first step that is the file's name: folders hold no positions, files' content may.
+  for (let i = start; i < path.length; i++) {
+    const step = path[i]!;
+    if (generalStep(step) !== step) return undefined;
+    if (matchOne(match.n, step)) return i - start + 1;
+  }
+  return undefined;
+}
+
 /**
  * Every place a path goes in a name map: none when the map does not match it (the path is
  * deprecated), more than one when matches overlap. Works on general paths (`[*]`, `{*}`) and on
@@ -111,7 +138,21 @@ export function placements(map: NameMap | NameNode, path: readonly string[]): Pl
     }
     const step = path[i]!;
     const general = generalStep(step);
+    // File groups: exact paths first, else names in any folder; then the file's content.
+    const groups = (node.c ?? []).filter((c) => c.g !== undefined);
+    if (groups.length > 0) {
+      const hits = (exact: boolean) =>
+        groups.flatMap((g) => {
+          const lengths = g.g!.filter((m) => ('p' in m) === exact).flatMap((m) => fileSteps(m, path, i) ?? []);
+          return lengths.length > 0 ? [{ g, steps: Math.min(...lengths) }] : [];
+        });
+      const exact = hits(true);
+      for (const { g, steps } of exact.length > 0 ? exact : hits(false)) {
+        for (const file of g.c ?? []) visit(file, i + steps, rows, zip);
+      }
+    }
     for (const child of node.c ?? []) {
+      if (child.g !== undefined) continue;
       if (child.k !== undefined) {
         if (child.k !== general) continue;
         // The first item step below a side-by-side node tells its rows apart.
@@ -146,18 +187,26 @@ const NAME = /^[a-z][a-z0-9_]*$|^\{key\}$|^\{value\}$|^$/;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+const isMatch = (m: unknown): boolean =>
+  typeof m === 'string' || (isObject(m) && typeof m.regex === 'string' && (m.flags === undefined || (typeof m.flags === 'string' && /^[imsu]*$/.test(m.flags))));
+
 /** Check a name map from the server or a file. Anything unexpected is refused rather than guessed at. */
 export function parseNameMap(json: unknown): NameMap {
-  if (!isObject(json) || json.format !== NAME_MAP_FORMAT) throw new Error('not a name map');
+  if (!isObject(json) || !FORMATS.has(json.format as string)) throw new Error('not a name map');
   let nodes = 0;
   const check = (v: unknown, depth: number): void => {
     if (++nodes > MAX_NODES || depth > MAX_DEPTH) throw new Error('name map too large');
     if (!isObject(v)) throw new Error('invalid name map node');
     if (v.m !== undefined) {
+      if (!Array.isArray(v.m) || !v.m.every(isMatch)) throw new Error('invalid match in name map');
+    }
+    if (v.g !== undefined) {
       const ok =
-        Array.isArray(v.m) &&
-        v.m.every((m) => typeof m === 'string' || (isObject(m) && typeof m.regex === 'string' && (m.flags === undefined || (typeof m.flags === 'string' && /^[imsu]*$/.test(m.flags)))));
-      if (!ok) throw new Error('invalid match in name map');
+        json.format === NAME_MAP_FORMAT &&
+        depth === 1 &&
+        Array.isArray(v.g) &&
+        v.g.every((f) => isObject(f) && (Array.isArray(f.p) ? f.p.every(isMatch) && f.n === undefined : f.p === undefined && isMatch(f.n)));
+      if (!ok) throw new Error('invalid file group in name map');
     }
     if (v.k !== undefined && v.k !== '[*]' && v.k !== '{*}') throw new Error('invalid name map node');
     for (const key of ['t', 'f', 'l', 'z'] as const) {

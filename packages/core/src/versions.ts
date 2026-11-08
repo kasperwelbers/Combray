@@ -61,13 +61,28 @@ interface Donated {
   field?: string;
   /** Where its data is, as keys from the root: the same across versions. */
   keys: string;
-  /** The same as a path, for the name map. */
-  path: string[];
+  /** Raw paths its values may have, for the name map. */
+  paths: string[][];
   column?: ColumnDef;
   filter?: string;
 }
 
 const namesOf = (tree: ProjectNode, path: NodePath) => path.map((_, i) => getNode(tree, path.slice(0, i + 1))?.name ?? '');
+
+/**
+ * Raw paths a node's values could have, for the name map: the paths of the files its group reads
+ * (those written out in full), then the keys inside the file (ADR 0016).
+ */
+function rawPaths(tree: ProjectNode, path: NodePath): string[][] {
+  const group = getNode(tree, path.slice(0, 1));
+  const names = namesOf(tree, path);
+  if (group?.files === undefined) return [names];
+  const inner = names.slice(2);
+  return group.files.flatMap((m) => {
+    if ('path' in m) return m.path.every((s) => typeof s === 'string') ? [[...(m.path as string[]), ...inner]] : [];
+    return typeof m.name === 'string' ? [[m.name, ...inner]] : [];
+  });
+}
 
 /** The donated tables and fields of a platform, by `table` and `table/field`. */
 function donated(tree: ProjectNode): Map<string, Donated> {
@@ -85,12 +100,12 @@ function donated(tree: ProjectNode): Map<string, Donated> {
     out.set(name, {
       table: name,
       keys: path.join('/'),
-      path,
+      paths: rawPaths(tree, table.node),
       ...(table.filter?.length ? { filter: JSON.stringify(table.filter) } : {}),
     });
     for (const column of columns) {
       const at = namesOf(tree, column.at);
-      out.set(`${name}\u0000${column.id}`, { table: name, field: column.id, keys: at.join('/'), path: at, column });
+      out.set(`${name}\u0000${column.id}`, { table: name, field: column.id, keys: at.join('/'), paths: rawPaths(tree, column.at), column });
     }
   }
   return out;
@@ -121,7 +136,7 @@ export function platformChanges(platform: string, before: PlatformVersion, after
         if (was.field === undefined) tableRenames.set(was.table, moved.table);
         else if (tableRenames.get(was.table) === moved.table && moved.field === was.field) continue;
         out.push({ kind: 'safe', platform, change: 'renamed', ...at(was), to: moved.field === undefined ? moved.table : `${moved.table}/${moved.field}` });
-      } else if (was.field !== undefined && placements(names, was.path).length === 0) {
+      } else if (was.field !== undefined && was.paths.length > 0 && was.paths.every((p) => placements(names, p).length === 0)) {
         // Nothing in the new version matches where it was: earlier values there are deprecated.
         out.push({ kind: 'breaking', platform, change: 'deprecated', ...at(was) });
       } else out.push({ kind: 'narrowing', platform, change: 'no-longer-donated', ...at(was) });

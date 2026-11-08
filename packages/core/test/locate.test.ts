@@ -2,12 +2,16 @@ import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildTree,
   defaultRoot,
   findPatternProblem,
   locateRoot,
   readSpot,
   UPLOAD_LIMITS,
   UploadListing,
+  toConfig,
+  upgradeConfig,
+  type FileMatch,
   type ProjectNode,
   type TreeNode,
   type UploadFile,
@@ -84,10 +88,36 @@ function fileTree(): ProjectNode {
 
 const names = (tree: TreeNode) => (tree.kind === 'dir' ? tree.children.map((c) => c.name).sort() : []);
 
+/**
+ * A tree written as folders and files (as configurations were before file groups), with file
+ * groups: every file it configures is read by a group, at the paths its folders match.
+ */
+const withGroups = (tree: ProjectNode): ProjectNode =>
+  tree.children?.some((c) => c.files !== undefined) ? tree : buildTree(upgradeConfig(toConfig(tree))).tree;
+
+/** A tree with one group, `watch_history`, that reads these files and shows their titles. */
+const historyGroup = (files: FileMatch[]): ProjectNode =>
+  buildTree({
+    root: {
+      id: 'root',
+      kind: 'dir',
+      match: [],
+      children: [
+        {
+          id: 'g',
+          kind: 'dir',
+          match: ['watch_history'],
+          files,
+          children: [{ id: 'f', kind: 'list', match: [], children: [{ id: 'i', kind: 'map', match: ['[*]'], children: [{ id: 't', kind: 'value', match: ['title'], decision: 'show' }] }] }],
+        },
+      ],
+    },
+  }).tree;
+
 async function locate(files: Record<string, string | Uint8Array>, tree: ProjectNode, limits = UPLOAD_LIMITS) {
   const { list, reads } = upload(files);
   const listing = await UploadListing.open(list, limits);
-  return { result: await locateRoot(listing, tree), reads };
+  return { result: await locateRoot(listing, withGroups(tree)), reads };
 }
 
 describe('the upload is the root', () => {
@@ -136,12 +166,14 @@ describe('the upload is the root', () => {
   });
 
   it('merges the parts of a split archive', async () => {
+    const tree = takeoutTree();
+    tree.children![0]!.children![0]!.children!.push(node('list', ['search-history.json']));
     const { result } = await locate(
       {
         'takeout-001.zip': zip({ 'Takeout/YouTube/history/watch-history.json': WATCH }),
         'takeout-002.zip': zip({ 'Takeout/YouTube/history/search-history.json': '[]' }),
       },
-      takeoutTree({ newChildren: undefined }),
+      tree,
     );
     if (result.status !== 'found') throw new Error(result.status);
     expect(result.root.files.map((f) => f.path).sort()).toEqual([
@@ -166,8 +198,7 @@ describe('the upload is the root', () => {
 });
 
 describe('what is read from the root', () => {
-  it('skips ignored folders and unknown parts below a node that skips new children', async () => {
-    const tree = takeoutTree();
+  it('opens only the files a group reads', async () => {
     const { result, reads } = await locate(
       {
         'Takeout/YouTube/history/watch-history.json': WATCH,
@@ -175,28 +206,37 @@ describe('what is read from the root', () => {
         'Takeout/Drive/secret plans.txt': 'plans',
         'Takeout/YouTube/history/new-file.json': '[]',
       },
-      tree,
+      takeoutTree(),
     );
     if (result.status !== 'found') throw new Error(result.status);
-    // Drive is new below the root, which skips new children, and so does everything below it.
     expect(reads).toEqual(['Takeout/YouTube/history/watch-history.json']);
     expect(names(result.root.tree)).toEqual(['YouTube']);
-    // A node below can ask again.
-    tree.children![0]!.newChildren = 'ask';
-    const again = await locate(
-      { 'Takeout/YouTube/history/watch-history.json': WATCH, 'Takeout/YouTube/history/new-file.json': '[]' },
-      tree,
-    );
-    expect(again.reads.sort()).toEqual(['Takeout/YouTube/history/new-file.json', 'Takeout/YouTube/history/watch-history.json']);
   });
 
-  it('reads unknown parts where the tree asks about new children', async () => {
-    const { result, reads } = await locate(
-      { 'Takeout/YouTube/history/watch-history.json': WATCH, 'Takeout/Drive/notes.txt': 'notes' },
-      takeoutTree({ newChildren: undefined }),
-    );
+  it('finds a file by its name in any folder, and none when the name is in two folders', async () => {
+    const tree = historyGroup([{ name: 'watch-history.json' }]);
+    const moved = await locate({ 'Downloads/old stuff/watch-history.json': WATCH, 'Downloads/notes.txt': 'x' }, tree);
+    expect(moved.result.status).toBe('found');
+    expect(moved.reads).toEqual(['Downloads/old stuff/watch-history.json']);
+    // Which of the two was meant cannot be told: neither is read.
+    const twice = await locate({ 'export/a/watch-history.json': WATCH, 'export/b/watch-history.json': WATCH }, tree);
+    expect(twice.result.status).toBe('no-fit');
+    expect(twice.reads).toEqual([]);
+  });
+
+  it('reads a single file picked on its own by its name, never by an exact path alone', async () => {
+    const single = await locate({ 'watch-history.json': WATCH }, historyGroup([{ name: 'watch-history.json' }]));
+    if (single.result.status !== 'found') throw new Error(single.result.status);
+    expect(names(single.result.root.tree)).toEqual(['watch-history.json']);
+    const exact = await locate({ 'watch-history.json': WATCH }, historyGroup([{ path: ['YouTube', 'history', 'watch-history.json'] }]));
+    expect(exact.result.status).toBe('no-fit');
+  });
+
+  it('reads files split into parts by a pattern', async () => {
+    const tree = historyGroup([{ path: ['history', { regex: '^watch-history-\\d+\\.json$' }] }]);
+    const { result, reads } = await locate({ 'export/history/watch-history-1.json': WATCH, 'export/history/watch-history-2.json': WATCH }, tree);
     expect(result.status).toBe('found');
-    expect(reads).toContain('Takeout/Drive/notes.txt');
+    expect(reads.sort()).toEqual(['export/history/watch-history-1.json', 'export/history/watch-history-2.json']);
   });
 });
 
@@ -326,8 +366,9 @@ describe('required parts', () => {
     expect(reads).toEqual([]);
   });
 
-  it('inside an ignored folder are still read to check them', async () => {
+  it('of a group with nothing the study shows are still read to check them', async () => {
     const tree = takeoutTree();
+    delete tree.children![1]!.decision;
     tree.children![1]!.children![0]!.required = true;
     const { result, reads } = await locate(
       { 'Takeout/YouTube/history/watch-history.json': WATCH, 'Takeout/Mail/All mail.mbox': 'x' },

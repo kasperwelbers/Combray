@@ -20,10 +20,48 @@ export {
   isRegex,
   isItemNode,
   isKeysNode,
+  isGroup,
   SETTINGS,
   MAX_REGEX,
 } from './config';
-export type { ConfigNode, Match, NodeSettings, ProjectConfig } from './config';
+export type { ConfigNode, FileMatch, Match, NodeSettings, ProjectConfig } from './config';
+export {
+  CONTENT_ROOT,
+  ambiguousNames,
+  assignFiles,
+  contentFiles,
+  contentShape,
+  contentTree,
+  fileGroups,
+  fileMatches,
+  originalShapes,
+  shapeFiles,
+  treeFiles,
+  uploadTree,
+} from './files';
+export type { FilePath, GroupFiles, GroupsHolder } from './files';
+export {
+  GroupError,
+  addFileMatch,
+  anyFolderProblem,
+  copyGroupContent,
+  excludeFile,
+  groupKey,
+  groupsOf,
+  includeAll,
+  includeFile,
+  newGroupKey,
+  pathMatch,
+  removeFileMatch,
+  removeGroup,
+  renameGroup,
+  sameFileMatch,
+  seenFiles,
+  setAnyFolder,
+  setGroupRequired,
+  unseenMatches,
+} from './groups';
+export type { SeenFile } from './groups';
 export { isName, toName, typingName, defaultLabel, freeName, MAX_NAME } from './names';
 export { labelsOf, checkPlatformTexts, checkProjectTexts, checkTranslations, parseTextsFile, TextsError, TEXTS_FORMAT, LANGUAGE, APP_KEY } from './texts';
 export type { PlatformTexts, ProjectTexts, TableTexts, FieldTexts, TextsFile, Translations } from './texts';
@@ -37,6 +75,7 @@ export {
   buildTree,
   configTree,
   emptyConfig,
+  UPLOAD_GROUP,
   toConfig,
   materialise,
   remapPath,
@@ -96,6 +135,7 @@ export {
   configOf,
   parseStructureFile,
   parseImporterFile,
+  upgradeConfig,
   ProjectFileError,
   STRUCTURE_FORMAT,
   IMPORTER_FORMAT,
@@ -121,7 +161,7 @@ export type {
 } from './query';
 export { chartQuery, chartData } from './chart';
 export type { ChartSpec, ChartData, ChartPoint } from './chart';
-export { suggestCombines } from './suggest';
+export { suggestCombines, suggestGroups } from './suggest';
 export {
   UploadListing,
   locateRoot,
@@ -142,6 +182,6 @@ export type {
   Located,
   LocateResult,
 } from './locate';
-export type { CombineSuggestion } from './suggest';
+export type { CombineSuggestion, GroupSuggestion } from './suggest';
 export { DATA_VIEWS, QUESTION_KINDS, STORY_LIMITS, fillText, optionValue, parseStory, renameInStory, slideFromTemplate, storyQuestions, storyReferences, validAnswer } from './story';
 export type { Answer, DataBlock, DataViewKind, QuestionBlock, QuestionKind, Slide, SlideTemplate, Story, StoryBlock, StoryReference, StoryValues, TextBlock } from './story';

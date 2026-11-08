@@ -26,10 +26,16 @@ function decided() {
   return tree;
 }
 
-/** An importer file with these nodes below the root. */
-const importer = (children: object[], root: object = {}) => ({
-  format: 'combray-importer@2',
-  root: { id: 'root', kind: 'map', match: [], ...root, children },
+/** An importer file whose one group reads the upload, a JSON object with these nodes in it. */
+const importer = (children: object[], root: object = {}, group: object = {}) => ({
+  format: 'combray-importer@3',
+  root: {
+    id: 'root',
+    kind: 'dir',
+    match: [],
+    ...root,
+    children: [{ id: 'g', kind: 'dir', match: ['export'], files: [{ path: [] }], ...group, children: [{ id: 'f', kind: 'map', match: [], children }] }],
+  },
 });
 const leaf = (extra: object = {}) => ({ id: 'a', kind: 'value', match: ['a'], ...extra });
 
@@ -55,8 +61,17 @@ describe('project files', () => {
     expect(() => parseImporterFile(importer([leaf({ match: ['[*]', 'b'] })]))).toThrow('matches of their own');
     expect(() => parseImporterFile(importer([leaf(), leaf()]))).toThrow('used twice');
     expect(() => parseImporterFile(importer([leaf({ name: 'Not A Name' })]))).toThrow('lowercase');
-    expect(() => parseImporterFile({ ...importer([]), format: 'combray-importer@1' })).toThrow('combray-importer@2');
+    expect(() => parseImporterFile({ ...importer([]), format: 'combray-importer@1' })).toThrow('combray-importer@3');
     expect(() => parseImporterFile(importer([], { match: ['x'] }))).toThrow('has no match');
+    // File groups: a name, the files they read, and files matched by their kind.
+    expect(() => parseImporterFile(importer([], {}, { match: ['Watch history'] }))).toThrow('one name');
+    expect(() => parseImporterFile(importer([], {}, { files: undefined }))).toThrow('file groups only');
+    expect(() => parseImporterFile(importer([], {}, { files: [{ path: ['a'], name: 'b' }] }))).toThrow('{ path } or { name }');
+    expect(() => parseImporterFile(importer([], {}, { files: [{ name: { regex: '(' } }] }))).toThrow('not a valid regular expression');
+    expect(() => parseImporterFile(importer([leaf({ files: [] })]))).toThrow('only file groups');
+    const file = importer([]);
+    file.root.children[0]!.children[0]!.match = ['user_data.json'] as never[];
+    expect(() => parseImporterFile(file)).toThrow('matched by their kind');
   });
 
   it('accepts formats made of tokens only, so no values can travel in them', () => {
@@ -74,7 +89,7 @@ describe('project files', () => {
     const time = leaf({ transform: ['trim', { replace: { pattern: '^At ', with: '' } }], as: 'datetime', format: 'YYYY-MM-DD HH:mm:ss', role: 'date' });
     const rows = (extra: object = {}) => ({ id: 'rows', kind: 'map', match: ['[*]'], filter: [{ column: 'ad', test: { empty: true } }], ...extra });
     const list = (child: object) => ({ id: 'l', kind: 'list', match: ['l'], children: [child] });
-    expect(parseImporterFile(importer([time, list(rows())])).root.children).toHaveLength(2);
+    expect(parseImporterFile(importer([time, list(rows())])).root.children![0]!.children![0]!.children).toHaveLength(2);
     expect(() => parseImporterFile(importer([{ ...time, as: 'money' }]))).toThrow('unknown type');
     expect(() => parseImporterFile(importer([{ ...time, role: 'author' }]))).toThrow('unknown role');
     expect(() => parseImporterFile(importer([{ ...time, format: 'Marcel' }]))).toThrow('format');
@@ -98,6 +113,57 @@ describe('project files', () => {
     expect(() => parseImporterFile(importer([leaf({ find: ['Takeout'] })]))).toThrow('only the root');
     expect(() => parseImporterFile(importer([], { newChildren: 'never' }))).toThrow('ask or skip');
     expect(() => parseImporterFile(importer([leaf({ required: false })]))).toThrow('required');
+  });
+
+  it('reads configurations from before file groups, with a group for every file they configured', () => {
+    const old = {
+      format: 'combray-importer@2',
+      root: {
+        id: 'root',
+        kind: 'dir',
+        match: [],
+        find: ['Takeout'],
+        newChildren: 'skip',
+        children: [
+          {
+            id: 'yt',
+            kind: 'dir',
+            match: ['YouTube', 'YouTube en YouTube Music'],
+            newChildren: 'ask',
+            children: [
+              { id: 'json', kind: 'list', match: ['watch-history.json', 'kijkgeschiedenis.json'], name: 'watch_history', required: true, children: [{ id: 'rows', kind: 'map', match: ['[*]'] }] },
+              { id: 'html', kind: 'element', match: ['watch-history.html'], name: 'watch_history' },
+              { id: 'subs', kind: 'list', match: ['subscriptions.csv'] },
+            ],
+          },
+          { id: 'mail', kind: 'dir', match: ['Mail'], decision: 'ignore', children: [{ id: 'mbox', kind: 'blob', match: ['All mail.mbox'] }] },
+        ],
+      },
+    };
+    const parsed = parseImporterFile(old);
+    expect(parsed.format).toBe('combray-importer@3');
+    expect(parsed.root).toMatchObject({ kind: 'dir', find: ['Takeout'] });
+    expect(parsed.root.newChildren).toBeUndefined();
+    // The JSON and HTML history share a group (same table name, other kinds); ignored folders are left out.
+    expect(parsed.root.children!.map((g) => [g.match[0], g.files, g.required, g.children!.map((c) => [c.kind, c.match])])).toEqual([
+      [
+        'watch_history',
+        [
+          { path: ['YouTube', 'watch-history.json'] },
+          { path: ['YouTube', 'kijkgeschiedenis.json'] },
+          { path: ['YouTube en YouTube Music', 'watch-history.json'] },
+          { path: ['YouTube en YouTube Music', 'kijkgeschiedenis.json'] },
+          { path: ['YouTube', 'watch-history.html'] },
+          { path: ['YouTube en YouTube Music', 'watch-history.html'] },
+        ],
+        true,
+        [
+          ['list', []],
+          ['element', []],
+        ],
+      ],
+      ['subscriptions', [{ path: ['YouTube', 'subscriptions.csv'] }, { path: ['YouTube en YouTube Music', 'subscriptions.csv'] }], undefined, [['list', []]]],
+    ]);
   });
 
   it('keeps a header row on the rows of a table only, and undecided parts shown on the root only', () => {

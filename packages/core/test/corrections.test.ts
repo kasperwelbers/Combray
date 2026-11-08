@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyTextNames,
   buildTree,
+  contentTree,
   correctedShape,
   deriveRows,
   deriveTables,
@@ -14,6 +15,7 @@ import {
   textNamesOf,
   toConfig,
   unionShape,
+  uploadTree,
   type ProjectConfig,
   type ProjectNode,
   type Shape,
@@ -86,7 +88,7 @@ describe('texts that are names', () => {
       const tree = studioTree(page(entry));
       const project = treeOf(extractShape(tree));
       nodeAt(project, 'body', 'div.entry', '[*]').textNames = entry === odd ? 'pairs' : 'beside';
-      expect(applyTextNames(tree, project, () => true)).toEqual(tree);
+      expect(applyTextNames(tree, project, () => true)).toEqual(contentTree(tree, project));
     }
   });
 
@@ -108,9 +110,11 @@ describe('texts that are names', () => {
     expect(offered((i) => `<p>Visited ${i}</p>`)).toBeUndefined();
   });
 
-  it('changes nothing without a mark', () => {
+  it('changes nothing without a mark, but gives the content of the upload', () => {
     const tree = studioTree(page(PAIRS));
-    expect(applyTextNames(tree, treeOf(extractShape(tree)), () => true)).toBe(tree);
+    const project = treeOf(extractShape(tree));
+    expect(applyTextNames(tree, project, () => true)).toEqual(contentTree(tree, project));
+    expect(uploadTree(applyTextNames(tree, project, () => true))).toEqual({ ...tree, name: '' });
   });
 
   describe("on a participant's device", () => {
@@ -139,12 +143,13 @@ describe('texts that are names', () => {
     const tree = studioTree(page(PAIRS));
     const before = extractShape(tree);
     const { config, project } = marked(tree);
-    const after = extractShape(applyTextNames(tree, project, () => true));
+    // Read again through the mark, and put back as an upload, as the studio adds it to what was seen.
+    const after = extractShape(uploadTree(applyTextNames(tree, project, () => true)));
     const seen = correctedShape(config, unionShape([before, after])!);
     const entry = (s: Shape) => s.children![0]!.children![0]!.children![0]!;
     expect(entry(seen).children!.map((c) => c.name)).toEqual(['span', 'title', 'url']);
     // Laid over the corrected structures, the tree has no leftovers of the lists.
     expect(entryNames(buildTree(config, seen).tree)).toEqual(['span', 'title', 'url']);
-    expect(at(buildTree(config, seen).tree, 'body', 'div.entry', '[*]', 'url')).toHaveLength(4);
+    expect(at(buildTree(config, seen).tree, 'body', 'div.entry', '[*]', 'url')).toHaveLength(6); // the group, its file, then four steps
   });
 });

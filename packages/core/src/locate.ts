@@ -8,16 +8,20 @@
  * chosen root are read. Combray's limits on how much is looked at are fixed; researchers
  * cannot change them.
  *
+ * Which files are read is said by the project's file groups (ADR 0016): only files a group
+ * reads are opened, by their path or, for a name in any folder, by their name.
+ *
  * File and folder names are only compared here, on the participant's device. They are never
  * recorded in the tree or sent anywhere.
  */
 import { unzipSync } from 'fflate';
 
-import { closedNodes, isDecidable, matchesPosition, matchShape, type ProjectNode } from './decisions';
+import { isDecidable, matchShape, type ProjectNode } from './decisions';
 import { prepareTree } from './corrections';
+import { assignFiles, fileGroups, type FilePath, type GroupFiles } from './files';
 import { isNoise, mergeDirs, parseEntries, parseFile, type ParseOptions } from './parse';
 import { globMatch } from './path';
-import type { Shape } from './shape';
+import { screenName, type Shape } from './shape';
 import type { DirNode, TreeNode } from './tree';
 
 /** How much of an upload Combray looks at. Fixed: not a project setting. */
@@ -253,85 +257,67 @@ export async function defaultRoot(listing: UploadListing): Promise<Spot> {
 /** What a project tree says about matching uploads, worked out once. */
 interface TreeFacts {
   tree: ProjectNode;
-  /** Nodes with a show or donate decision at or below them, outside ignored parts. */
-  study: Set<ProjectNode>;
+  /** The file groups, in order, as `assignFiles` takes them. */
+  groups: GroupFiles[];
+  /** Per group: whether it has something the study shows or asks for, outside ignored parts. */
+  study: boolean[];
+  /** Per group: whether it is required, or holds a required part. */
+  required: boolean[];
   /** Leaves (and `{*}` nodes) with a show or donate decision, outside ignored parts. */
   studyLeaves: ProjectNode[];
-  required: ProjectNode[];
-  /** Nodes with a required node at or below them. */
-  holdsRequired: Set<ProjectNode>;
-  closed: Set<ProjectNode>;
+  /** Required nodes, groups and parts of files. */
+  requiredNodes: ProjectNode[];
+  /** Whether a group reads the upload itself, when it is one file. */
+  uploadFile: boolean;
 }
 
 function treeFacts(tree: ProjectNode): TreeFacts {
-  const study = new Set<ProjectNode>();
   const studyLeaves: ProjectNode[] = [];
-  const required: ProjectNode[] = [];
-  const holdsRequired = new Set<ProjectNode>();
+  const requiredNodes: ProjectNode[] = [];
   const visit = (node: ProjectNode, parentIgnored: boolean): { study: boolean; required: boolean } => {
     const ignored = parentIgnored || node.decision === 'ignore';
     const own = !ignored && isDecidable(node) && (node.decision === 'show' || node.decision === 'donate');
     if (own) studyLeaves.push(node);
-    if (node.required) required.push(node);
+    if (node.required) requiredNodes.push(node);
     let below = { study: own, required: node.required === true };
     for (const child of node.children ?? []) {
       const c = visit(child, ignored);
       below = { study: below.study || c.study, required: below.required || c.required };
     }
-    if (below.study) study.add(node);
-    if (below.required) holdsRequired.add(node);
     return below;
   };
-  visit(tree, false);
-  return { tree, study, studyLeaves, required, holdsRequired, closed: closedNodes(tree) };
+  const groupNodes = (tree.children ?? []).filter((c) => c.files !== undefined);
+  const below = groupNodes.map((g) => visit(g, tree.decision === 'ignore'));
+  const groups = fileGroups(tree);
+  return {
+    tree,
+    groups,
+    study: below.map((b) => b.study),
+    required: groupNodes.map((g) => g.required === true),
+    studyLeaves,
+    requiredNodes,
+    uploadFile: groups.some((g) => g.files.some((m) => 'path' in m && m.path.length === 0)),
+  };
 }
 
-/** The project node a file or folder name in a folder maps to (by any of its matches). */
-function childByName(node: ProjectNode, name: string, folder: boolean): ProjectNode | undefined {
-  const children = node.children ?? [];
-  if (folder) return children.find((c) => matchesPosition(node, c, 'dir', name));
-  // A file is any kind of node, by its name; an archive may also be a folder.
-  return children.find((c) => (c.kind !== 'dir' || isZip(name)) && matchesPosition(node, c, c.kind, name));
-}
-
-/** The project nodes along a path of folder and file names, as far as the tree knows them. */
-function walkNames(tree: ProjectNode, rel: string): ProjectNode[] {
-  const names = rel.split('/');
-  const out: ProjectNode[] = [];
-  let node = tree;
-  for (let i = 0; i < names.length; i++) {
-    const next = childByName(node, names[i]!, i < names.length - 1);
-    if (!next) break;
-    out.push(next);
-    node = next;
-  }
-  return out;
+/** The files below a folder as `assignFiles` takes them: their names from the folder, and screened. */
+function entriesOf(rels: string[]): FilePath[] {
+  return rels.map((rel) => {
+    const raw = rel.split('/');
+    return { raw, steps: raw.map(screenName) };
+  });
 }
 
 /**
- * A folder checked on names only. It fits when a file in it leads to something the study shows
- * or asks for, and every required folder or file is there. Required parts inside files are
+ * A folder checked on names only. It fits when a file in it is read by a group with something the
+ * study shows or asks for, and every required group reads a file. Required parts inside files are
  * checked once the root is read.
  */
 function folderFit(listing: UploadListing, facts: TreeFacts, folder: string): number {
-  if (facts.tree.kind !== 'dir') return 0;
-  const reached = new Set<ProjectNode>();
-  let hits = 0;
-  for (const { rel } of listing.under(folder)) {
-    const path = walkNames(facts.tree, rel);
-    for (const node of path) reached.add(node);
-    const last = path[path.length - 1];
-    if (path.length === rel.split('/').length && last && facts.study.has(last)) hits++;
-  }
-  const missing = facts.required.some((n) => !reached.has(n) && onNamesLevel(facts.tree, n));
+  const assigned = assignFiles(entriesOf(listing.under(folder).map((f) => f.rel)), facts.groups);
+  const hits = assigned.filter((g) => g !== undefined && facts.study[g]).length;
+  const missing = facts.required.some((required, g) => required && !assigned.includes(g));
   return missing ? 0 : hits;
-}
-
-/** Whether a node is a folder or a file: every node above it is a folder. */
-function onNamesLevel(tree: ProjectNode, target: ProjectNode): boolean {
-  const visit = (node: ProjectNode): boolean =>
-    (node.children ?? []).some((c) => c === target || (c.kind === 'dir' && visit(c)));
-  return visit(tree);
 }
 
 /** A root that was read. */
@@ -356,7 +342,7 @@ function prepare(tree: TreeNode, facts: TreeFacts): { prepared: TreeNode; shape:
 /** Whether a read root has every required part and something the study shows. */
 function contentFits(facts: TreeFacts, shape: Shape, checkStudy: boolean): boolean {
   const seen = matchShape(facts.tree, shape);
-  if (facts.required.some((n) => !seen.has(n))) return false;
+  if (facts.requiredNodes.some((n) => !seen.has(n))) return false;
   return !checkStudy || facts.studyLeaves.some((n) => seen.has(n));
 }
 
@@ -369,27 +355,12 @@ async function readFile(listing: UploadListing, path: string, options: ParseOpti
   return { tree, files: [{ path: name, bytes }] };
 }
 
-/**
- * Which files of a folder root are read. Without a project tree, all of them. With one, files
- * in ignored parts are left out (unless they hold a required part), and so are files the tree
- * does not know below a folder that skips new children.
- */
+/** Which files of a folder root are read: without a project tree, all of them; with one, the files its groups read. */
 function filesToRead(listing: UploadListing, folder: string, facts?: TreeFacts): { rel: string; file: Listed }[] {
   const all = listing.under(folder);
   if (!facts) return all;
-  return all.filter(({ rel }) => {
-    const names = rel.split('/');
-    let node = facts.tree;
-    let ignored = node.decision === 'ignore';
-    for (let i = 0; i < names.length; i++) {
-      const next = childByName(node, names[i]!, i < names.length - 1);
-      if (!next) return !ignored && !facts.closed.has(node);
-      ignored ||= next.decision === 'ignore';
-      if (ignored && !facts.holdsRequired.has(next)) return false;
-      node = next;
-    }
-    return true;
-  });
+  const assigned = assignFiles(entriesOf(all.map((f) => f.rel)), facts.groups);
+  return all.filter((_, i) => assigned[i] !== undefined);
 }
 
 async function readFolder(
@@ -437,7 +408,8 @@ interface Fit {
 
 /**
  * The best fitting level of an upload or of a candidate inside it. Folders are checked on
- * names; a file is opened and checked only when the tree's root is not a folder.
+ * names; a file is opened and checked only when a group reads the upload itself. (A single file
+ * picked on its own is the only file of the upload's folder, and fits by its name.)
  */
 async function bestLevel(
   listing: UploadListing,
@@ -450,10 +422,10 @@ async function bestLevel(
     if (spot.kind === 'folder') {
       const score = folderFit(listing, facts, spot.path);
       if (score > (best?.score ?? 0)) best = { start, spot, score };
-    } else if (facts.tree.kind !== 'dir' && !best) {
+    } else if (facts.uploadFile && !best) {
       const file = await readFile(listing, spot.path, options);
       const read = { ...file, ...prepare(file.tree, facts) };
-      const fits = read.tree.kind === facts.tree.kind && contentFits(facts, read.shape, true);
+      const fits = contentFits(facts, read.shape, true);
       if (fits) best = { start, spot, score: 1, read };
     }
   }
