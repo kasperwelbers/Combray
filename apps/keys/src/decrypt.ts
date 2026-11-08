@@ -3,7 +3,7 @@
  * and dropped right after; plaintext exists only in this page's memory until the researcher
  * saves the export (docs/key-design.md#5-analysing-fetch-on-use).
  */
-import { type Cell, type DonationPayload, decodePayload, openDonation, sealedFromJson } from '@combray/seal';
+import { type Cell, type DonationPayload, type NameMap, decodePayload, openDonation, parseNameMap, sealedFromJson } from '@combray/seal';
 
 import { type DonationList, type SealedDonationKey, api } from './api';
 
@@ -42,7 +42,7 @@ export async function openAll(
     try {
       const envelope = await api.bytes(`/projects/${projectId}/donations/${d.id}`);
       const { payload } = await openDonation(envelope, sealedFromJson(key), projectSeed, { projectId, donationId: d.id });
-      opened.push({ id: d.id, day: d.day, payload: decodePayload(payload) });
+      opened.push({ id: d.id, day: d.day, payload: await decodePayload(payload) });
     } catch (e) {
       failed.push({ id: d.id, reason: e instanceof Error ? e.message : String(e) });
     }
@@ -66,82 +66,26 @@ export function csvCell(value: Cell): string {
 const toLine = (cells: Cell[]) => cells.map(csvCell).join(',');
 const toFile = (lines: Cell[][]) => lines.map(toLine).join('\r\n') + '\r\n';
 
-/** The cell for a field of a row: its value, or all of them as JSON when the field is a list. */
-const joined = (values: Cell[] | undefined): Cell =>
-  values === undefined || values.length === 0 ? null : values.length === 1 ? values[0]! : JSON.stringify(values);
-
 /**
- * One CSV per table across all donations: the donated values pivoted into rows, with the
- * donation id, its day and the row number in front (and, for nested tables, the row they are in).
- * A field read in a converted way that was donated as in the file too gets a second column.
+ * The name maps of the project's newest published version, by platform (upload point): what the
+ * export places donated values with (`export.ts`). Platforms without one (or a map that does not
+ * check out) are left out: their values keep the names they were donated with.
  */
-export function toCsv(opened: Opened[]): Map<string, { name: string; csv: string }> {
-  interface Table {
-    name: string;
-    fields: Map<string, string>;
-    withRaw: Set<string>;
-    nested: boolean;
-    rows: Map<string, { donation: string; day: string; row: number; parent?: number; values: Map<string, Cell[]>; raw: Map<string, Cell[]> }>;
-  }
-  const tables = new Map<string, Table>();
-  for (const d of opened) {
-    for (const t of d.payload.tables) {
-      const table = tables.get(t.id) ?? { name: t.name, fields: new Map(), withRaw: new Set(), nested: false, rows: new Map() };
-      for (const f of t.fields) if (!table.fields.has(f.id)) table.fields.set(f.id, f.name);
-      tables.set(t.id, table);
-    }
-    for (const v of d.payload.values) {
-      const table = tables.get(v.table);
-      if (!table) continue;
-      if (!table.fields.has(v.field)) table.fields.set(v.field, v.field);
-      if (v.parent) table.nested = true;
-      if (v.raw !== undefined) table.withRaw.add(v.field);
-      const key = `${d.id}\u0000${v.row}`;
-      const row = table.rows.get(key) ?? { donation: d.id, day: d.day, row: v.row, ...(v.parent ? { parent: v.parent.row } : {}), values: new Map(), raw: new Map() };
-      row.values.set(v.field, [...(row.values.get(v.field) ?? []), v.value]);
-      if (v.raw !== undefined) row.raw.set(v.field, [...(row.raw.get(v.field) ?? []), v.raw]);
-      table.rows.set(key, row);
+export async function newestNameMaps(projectId: string): Promise<{ version?: number; maps: Map<string, NameMap> }> {
+  const maps = new Map<string, NameMap>();
+  const { versions } = await api.get<{ versions: { version: number }[] }>(`/projects/${projectId}/versions`);
+  const newest = versions.reduce<number | undefined>((n, v) => (n === undefined || v.version > n ? v.version : n), undefined);
+  if (newest === undefined) return { maps };
+  const { config } = await api.get<{ config: { uploads?: { id: string; importer?: { names?: unknown } }[] } }>(`/projects/${projectId}/versions/${newest}`);
+  for (const upload of config.uploads ?? []) {
+    if (upload.importer?.names === undefined) continue;
+    try {
+      maps.set(upload.id, parseNameMap(upload.importer.names));
+    } catch {
+      // A map that does not check out places nothing: names stay as donated.
     }
   }
-  const out = new Map<string, { name: string; csv: string }>();
-  for (const [id, t] of tables) {
-    const fields = [...t.fields.keys()];
-    const header: Cell[] = ['donation', 'day', 'row', ...(t.nested ? ['in row'] : [])];
-    for (const f of fields) {
-      header.push(t.fields.get(f)!);
-      if (t.withRaw.has(f)) header.push(`${t.fields.get(f)!} (as in the file)`);
-    }
-    const lines = [...t.rows.values()].map((r) => {
-      const cells: Cell[] = [r.donation, r.day, r.row, ...(t.nested ? [r.parent ?? null] : [])];
-      for (const f of fields) {
-        cells.push(joined(r.values.get(f)));
-        if (t.withRaw.has(f)) cells.push(joined(r.raw.get(f)));
-      }
-      return cells;
-    });
-    out.set(id, { name: t.name, csv: toFile([header, ...lines]) });
-  }
-  return out;
-}
-
-/** Every donated value, one per line, with where it was in the participant's files. */
-export function valuesCsv(opened: Opened[]): string {
-  const header: Cell[] = ['donation', 'day', 'table', 'row', 'parent table', 'parent row', 'field', 'path', 'value', 'as in the file'];
-  const lines = opened.flatMap((d) =>
-    d.payload.values.map((v): Cell[] => [
-      d.id,
-      d.day,
-      v.table,
-      v.row,
-      v.parent?.table ?? null,
-      v.parent?.row ?? null,
-      v.field,
-      v.path.join('/'),
-      v.value,
-      v.raw ?? null,
-    ]),
-  );
-  return toFile([header, ...lines]);
+  return { version: newest, maps };
 }
 
 /** One row per donation: its day, the project version it was made with, and the participant's language. */

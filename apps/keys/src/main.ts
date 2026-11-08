@@ -24,7 +24,8 @@ import {
 } from '@combray/seal';
 
 import { type Me, type Member, type Project, type ProjectSummary, type Site, ApiError, api, projectName } from './api';
-import { answersCsv, consentCsv, donationsCsv, openAll, questionsCsv, safeFileName, toCsv, valuesCsv } from './decrypt';
+import { answersCsv, consentCsv, donationsCsv, newestNameMaps, openAll, questionsCsv, safeFileName } from './decrypt';
+import { exportDonations } from './export';
 import { zipFiles } from './zip';
 import { action, download, h, message, show } from './dom';
 import { authenticate, passkeysAvailable, register, signInWithPasskey } from './passkey';
@@ -666,21 +667,34 @@ async function donationsBlock(project: Project, seed: Uint8Array): Promise<HTMLE
   const list = await api.get<{ donations: { id: string }[]; withdrawn: { id: string }[] }>(`/projects/${project.id}/donations`);
   const status = h('p', { role: 'status' });
   const withdrawId = h('input', { id: `withdraw-${project.id}`, autocomplete: 'off' });
+  const deprecated = h('input', { type: 'checkbox', id: `deprecated-${project.id}` }) as HTMLInputElement;
+  const original = h('input', { type: 'checkbox', id: `original-${project.id}` }) as HTMLInputElement;
   return h(
     'div',
     {},
     h('h3', {}, 'Donations'),
     h('p', {}, `${list.donations.length} donation(s), ${list.withdrawn.length} withdrawn.`),
     list.donations.length > 0 &&
+      h(
+        'p',
+        { class: 'meta' },
+        'Every value is exported under the names of the newest published version, found by where it was in the participant’s files. Values are never read again: each keeps the reading of the version its donation was made with, and every row says which version that was. Values at places the newest version no longer matches are deprecated.',
+      ),
+    list.donations.length > 0 && h('p', { class: 'check' }, deprecated, h('label', { for: `deprecated-${project.id}` }, ' Include deprecated values (in values.csv, marked, under the names they were donated with)')),
+    list.donations.length > 0 && h('p', { class: 'check' }, original, h('label', { for: `original-${project.id}` }, ' Include the table and field each value was donated as (in values.csv)')),
+    list.donations.length > 0 &&
       action('Open and download', async () => {
         const result = await openAll(project.id, seed, (done, total) => (status.textContent = `Opening ${done} of ${total}…`));
+        const names = await newestNameMaps(project.id);
+        const exported = exportDonations(result.opened, names.maps, { deprecated: deprecated.checked, original: original.checked });
         const base = safeFileName(project.id);
         // One zip: browsers stop a page that starts many downloads at once.
         const files: { name: string; text: string }[] = [];
-        // Tables are named after their names, which is how stories and analyses refer to them (ADR 0013).
-        for (const [id, t] of toCsv(result.opened)) files.push({ name: `table-${safeFileName(id)}.csv`, text: t.csv });
+        // One file per platform and table, by the names stories and analyses use (ADR 0013, 0015).
+        for (const t of exported.tables.values()) files.push({ name: `${safeFileName(t.platform)}-${safeFileName(t.name)}.csv`, text: t.csv });
         files.push({ name: 'donations.csv', text: donationsCsv(result.opened) });
-        files.push({ name: 'values.csv', text: valuesCsv(result.opened) });
+        files.push({ name: 'values.csv', text: exported.values });
+        files.push({ name: 'fields.csv', text: exported.fields });
         const answers = answersCsv(result.opened);
         if (answers) files.push({ name: 'answers.csv', text: answers });
         const questions = questionsCsv(result.opened);
@@ -690,7 +704,12 @@ async function donationsBlock(project: Project, seed: Uint8Array): Promise<HTMLE
         files.push({ name: 'donations.json', text: JSON.stringify(result.opened, null, 2) });
         download(`${base}-donations.zip`, zipFiles(files), 'application/zip');
         status.textContent =
-          `Opened ${result.opened.length} donation(s).` + (result.failed.length ? ` ${result.failed.length} could not be opened: ${result.failed.map((f) => `${f.id} (${f.reason})`).join(', ')}.` : '');
+          `Opened ${result.opened.length} donation(s)` +
+          (names.version !== undefined ? `, named as in version ${names.version}.` : '.') +
+          (exported.deprecated.count > 0
+            ? ` ${exported.deprecated.count} value(s) were deprecated${exported.deprecated.leftOut > 0 ? ' and left out' : ''}.`
+            : '') +
+          (result.failed.length ? ` ${result.failed.length} could not be opened: ${result.failed.map((f) => `${f.id} (${f.reason})`).join(', ')}.` : '');
       }),
     status,
     h(

@@ -1,6 +1,8 @@
+import type { DonationEntry, NameMap } from '@combray/seal';
 import { describe, expect, it } from 'vitest';
 
-import { answersCsv, consentCsv, csvCell, donationsCsv, type Opened, questionsCsv, safeFileName, toCsv, valuesCsv } from '../src/decrypt';
+import { answersCsv, consentCsv, csvCell, donationsCsv, type Opened, questionsCsv, safeFileName } from '../src/decrypt';
+import { exportDonations } from '../src/export';
 import { assertionJson, creationOptions, registrationJson } from '../src/passkey';
 import { crc32, zipFiles } from '../src/zip';
 import { unzip } from './unzip';
@@ -8,11 +10,91 @@ import { unzip } from './unzip';
 const donation = (id: string, payload: Partial<Opened['payload']> = {}, answers?: Record<string, string>): Opened => ({
   id,
   day: '2026-11-01',
-  payload: { format: 'combray-donation/1', tables: [], values: [], ...payload, ...(answers ? { answers } : {}) },
+  payload: { format: 'combray-donation/2', entries: [], values: [], ...payload, ...(answers ? { answers } : {}) },
 });
 
-const watch = { id: 't', name: 'Watch', fields: [{ id: 'title', name: 'Title' }] };
-const value = (row: number, field: string, v: string, more: object = {}) => ({ table: 't', row, field, path: ['w.json', `[${row}]`, field], value: v, ...more });
+// A history with nested channels and tags, as donated with version 1.
+const entries: DonationEntry[] = [
+  { platform: 'yt', path: ['w.json', '[*]', 'title'], table: 'watch', field: 'title', rows: [{ table: 'watch', steps: 2 }], as: 'text' },
+  { platform: 'yt', path: ['w.json', '[*]', 'subs', '[*]', 'name'], table: 'channels', field: 'name', rows: [{ table: 'watch', steps: 2 }, { table: 'channels', steps: 4 }] },
+  { platform: 'yt', path: ['w.json', '[*]', 'tags', '[*]'], table: 'watch_tags', field: 'tags', rows: [{ table: 'watch', steps: 2 }, { table: 'watch_tags', steps: 4 }] },
+  { platform: 'yt', path: ['w.json', '[*]', 'time'], table: 'watch', field: 'time', rows: [{ table: 'watch', steps: 2 }] },
+];
+const v1 = (id: string, values: Opened['payload']['values']) => donation(id, { version: 1, entries, values });
+
+// The newest version calls the history `videos` and its title `video`, and no longer matches `time`.
+const newest: NameMap = {
+  format: 'combray-names/1',
+  root: {
+    c: [
+      {
+        m: ['w.json'],
+        c: [
+          {
+            k: '[*]',
+            t: 'videos',
+            c: [
+              { m: ['title'], f: 'video' },
+              { m: ['subs'], c: [{ k: '[*]', t: 'channels', c: [{ m: ['name'], f: 'name' }] }] },
+              { m: ['tags'], c: [{ k: '[*]', f: 'tags', l: 'videos_tags' }] },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+describe('the export', () => {
+  const opened = [
+    v1('d1', [
+      [0, [0], 'one', 'Watched one'],
+      [0, [1], 'two'],
+      [1, [0, 0], 'Proust'],
+      [1, [0, 1], 'Odette'],
+      [2, [1, 0], 'tea'],
+      [3, [0], '2024-03-01'],
+    ]),
+    v1('d2', [[0, [0], 'three']]),
+  ];
+
+  it('places values under the newest names, in relational tables with the ids of the rows they are in', () => {
+    const out = exportDonations(opened, new Map([['yt', newest]]));
+    expect([...out.tables.keys()]).toEqual(['yt-videos', 'yt-channels', 'yt-videos_tags']);
+    expect(out.tables.get('yt-videos')!.csv).toBe(
+      '.donation,.day,.version,.id,video,video (as in the file)\r\n' + 'd1,2026-11-01,1,1,one,Watched one\r\n' + 'd1,2026-11-01,1,2,two,\r\n' + 'd2,2026-11-01,1,1,three,\r\n',
+    );
+    expect(out.tables.get('yt-channels')!.csv).toBe('.donation,.day,.version,.id,.videos_id,name\r\nd1,2026-11-01,1,1,1,Proust\r\nd1,2026-11-01,1,2,1,Odette\r\n');
+    expect(out.tables.get('yt-videos_tags')!.csv).toBe('.donation,.day,.version,.id,.videos_id,tags\r\nd1,2026-11-01,1,1,2,tea\r\n');
+    // The time is deprecated: nothing in the newest version matches it, so it is left out.
+    expect(out.values).not.toContain('2024-03-01');
+    expect(out.deprecated).toEqual({ count: 1, leftOut: 1 });
+    expect(out.fields).toContain('yt,videos,video,1,text\r\n');
+  });
+
+  it('gives deprecated values and the names values were donated as, when asked', () => {
+    const out = exportDonations(opened, new Map([['yt', newest]]), { deprecated: true, original: true });
+    const lines = out.values.split('\r\n');
+    expect(lines[0]).toBe('donation,day,version,platform,table,field,row,path,value,as in the file,deprecated,donated table,donated field');
+    expect(lines).toContain('d1,2026-11-01,1,yt,videos,video,1,w.json/[0]/title,one,Watched one,false,watch,title');
+    expect(lines).toContain('d1,2026-11-01,1,yt,watch,time,,w.json/[0]/time,2024-03-01,,true,watch,time');
+    expect(out.deprecated).toEqual({ count: 1, leftOut: 0 });
+    // Deprecated values stay out of the tables.
+    expect([...out.tables.values()].map((t) => t.csv).join('')).not.toContain('2024-03-01');
+  });
+
+  it('keeps the names values were donated with when there is no name map', () => {
+    const out = exportDonations(opened, new Map());
+    expect([...out.tables.keys()]).toEqual(['yt-watch', 'yt-channels', 'yt-watch_tags']);
+    expect(out.tables.get('yt-watch')!.csv.split('\r\n')[0]).toBe('.donation,.day,.version,.id,title,title (as in the file),time');
+    expect(out.deprecated.count).toBe(0);
+  });
+
+  it('neutralises formulas in the long list', () => {
+    const out = exportDonations([v1('d1', [[0, [0], '=one']])], new Map([['yt', newest]]));
+    expect(out.values.split('\r\n')[1]).toBe("d1,2026-11-01,1,yt,videos,video,1,w.json/[0]/title,'=one,");
+  });
+});
 
 describe('CSV export', () => {
   it('neutralises spreadsheet formulas and quotes when needed', () => {
@@ -30,43 +112,6 @@ describe('CSV export', () => {
   it('lists each donation with the project version it was made with', () => {
     const csv = donationsCsv([donation('d1', { version: 3, consent: { language: 'nl', statements: [] } }), donation('d2')]);
     expect(csv).toBe('donation,day,version,language\r\nd1,2026-11-01,3,nl\r\nd2,2026-11-01,,\r\n');
-  });
-
-  it('pivots values into one table across donations, with fields added later and raw values', () => {
-    const out = toCsv([
-      donation('d1', { tables: [watch], values: [value(0, 'title', 'one'), value(1, 'title', 'two')] }),
-      donation('d2', {
-        tables: [{ ...watch, fields: [{ id: 'channel', name: 'Channel' }, { id: 'title', name: 'Title' }] }],
-        values: [value(0, 'channel', 'c'), value(0, 'title', 'three', { raw: 'Watched three' })],
-      }),
-    ]);
-    expect(out.get('t')!.csv).toBe(
-      'donation,day,row,Title,Title (as in the file),Channel\r\n' +
-        'd1,2026-11-01,0,one,,\r\n' +
-        'd1,2026-11-01,1,two,,\r\n' +
-        'd2,2026-11-01,0,three,Watched three,c\r\n',
-    );
-  });
-
-  it('keeps nested rows with the row they are in, and lists as JSON', () => {
-    const out = toCsv([
-      donation('d1', {
-        tables: [watch, { id: 'c', name: 'Channels', fields: [{ id: 'name', name: 'Name' }] }],
-        values: [
-          value(0, 'title', 'one'),
-          { table: 'c', row: 0, parent: { table: 't', row: 0 }, field: 'name', path: [], value: 'Proust' },
-          { table: 'c', row: 0, parent: { table: 't', row: 0 }, field: 'name', path: [], value: 'Odette' },
-        ],
-      }),
-    ]);
-    expect(out.get('c')!.csv).toBe('donation,day,row,in row,Name\r\nd1,2026-11-01,0,0,"[""Proust"",""Odette""]"\r\n');
-  });
-
-  it('lists every value with its path in long format', () => {
-    const csv = valuesCsv([donation('d1', { tables: [watch], values: [value(0, 'title', '=one', { raw: 'x' })] })]);
-    expect(csv).toBe(
-      'donation,day,table,row,parent table,parent row,field,path,value,as in the file\r\nd1,2026-11-01,t,0,,,title,w.json/[0]/title,\'=one,x\r\n',
-    );
   });
 
   it('writes one answers row per donation', () => {
