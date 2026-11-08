@@ -46,15 +46,22 @@ describe('changes between published versions', () => {
     expect(versionChanges(version(tree), new Map())).toEqual([{ kind: 'narrowing', platform: 'takeout', change: 'platform-removed' }]);
   });
 
-  it('are breaking when a donated field is renamed or read another way', () => {
+  it('are safe when a donated field is renamed (earlier donations follow), breaking when it is read another way', () => {
     const tree = first();
     const renamed = rebuild(renameNode(tree, at(tree, 'watched', '[*]', 'title'), 'video').tree, shape);
-    expect(changes(tree, renamed)).toEqual([{ kind: 'breaking', change: 'renamed', table: 'watched', field: 'title', to: 'watched/video' }]);
+    expect(changes(tree, renamed)).toEqual([{ kind: 'safe', change: 'renamed', table: 'watched', field: 'title', to: 'watched/video' }]);
     // A renamed table: one change, not one per field.
     const table = rebuild(renameNode(tree, at(tree, 'watched'), 'watch_history').tree, shape);
-    expect(changes(tree, table)).toEqual([{ kind: 'breaking', change: 'renamed', table: 'watched', to: 'watch_history' }]);
+    expect(changes(tree, table)).toEqual([{ kind: 'safe', change: 'renamed', table: 'watched', to: 'watch_history' }]);
     const read = rebuild(patchNode(tree, at(tree, 'watched', '[*]', 'time'), { as: 'datetime' }), shape);
     expect(changes(tree, read)).toEqual([{ kind: 'breaking', change: 'read-differently', table: 'watched', field: 'time' }]);
+  });
+
+  it('are breaking when a donated path is no longer matched at all: earlier values there are deprecated', () => {
+    const tree = first();
+    // The title is matched under another key only: nothing matches where earlier titles were.
+    const moved = rebuild(patchNode(tree, at(tree, 'watched', '[*]', 'title'), { match: ['heading'] }), shape);
+    expect(changes(tree, moved)).toContainEqual({ kind: 'breaking', change: 'deprecated', table: 'watched', field: 'title' });
   });
 
   it('take another date format to try after the first as safe', () => {

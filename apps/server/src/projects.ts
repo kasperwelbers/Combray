@@ -73,7 +73,7 @@ export function checkParticipant(project: Project, id: string | undefined | null
 
 export type Localized = string | Record<string, string>;
 
-export type ProjectError = 'not_found' | 'conflict' | 'invalid';
+export type ProjectError = 'not_found' | 'conflict' | 'invalid' | 'unnamed';
 
 export class ProjectFailure extends Error {
   readonly error: ProjectError;
@@ -547,9 +547,17 @@ export class Projects {
     if (changes(this.db.delete(testPackages).where(this.isTestPackage(id, platform, pkg)).run()) === 0) fail('not_found');
   }
 
-  /** Copy the draft to the live version. Returns the new version number. */
+  /**
+   * Copy the draft to the live version. Returns the new version number. Refused while a platform's
+   * importer lists donated tables that are named only by structure (`unnamed`, which the studio
+   * works out when it saves): exports are read by those names (ADR 0015).
+   */
   publish(id: string): number {
     const summary = this.draft(id);
+    for (const p of summary.platforms) {
+      const importer = this.platform(id, p.id).importer as { unnamed?: unknown } | null;
+      if (Array.isArray(importer?.unnamed) && importer.unnamed.length > 0) fail('unnamed');
+    }
     const story = this.story(id);
     const texts = this.texts(id);
     const live = {

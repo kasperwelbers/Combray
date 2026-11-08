@@ -7,7 +7,11 @@
  * records what the data looked like, and the seen structures are never changed by it. In the
  * browser they are laid over each other (`buildTree`).
  */
+import { parseNameMap, type NameMap } from '@combray/seal/names';
+
+import { buildTree } from './decisions';
 import { isFormat, MAX_FORMATS } from './formats';
+import { nameMap, structureOnlyTables } from './nameMap';
 import {
   regexProblem,
   ROLES,
@@ -35,6 +39,13 @@ export interface ImporterFile {
   format: typeof IMPORTER_FORMAT;
   name?: Localized;
   root: ConfigNode;
+  /**
+   * Derived from the configuration over the seen structures when the studio saves it, for the
+   * key page (ADR 0015): the name map that places donated paths under this version's names, and
+   * the shown tables whose name is only structure (publishing is refused while there are any).
+   */
+  names?: NameMap;
+  unnamed?: string[];
 }
 
 export class ProjectFileError extends Error {
@@ -48,9 +59,13 @@ export function structureFile(root: Shape): StructureFile {
   return { format: STRUCTURE_FORMAT, root };
 }
 
-/** The importer file of a configuration. */
-export function importerFile(config: ProjectConfig, name?: Localized): ImporterFile {
-  return { format: IMPORTER_FORMAT, ...(name !== undefined ? { name } : {}), root: config.root };
+/** The importer file of a configuration; with the seen structures, with its name map too. */
+export function importerFile(config: ProjectConfig, name?: Localized, seen?: Shape): ImporterFile {
+  const out: ImporterFile = { format: IMPORTER_FORMAT, ...(name !== undefined ? { name } : {}), root: config.root };
+  if (seen === undefined) return out;
+  const tree = buildTree(config, seen).tree;
+  const unnamed = structureOnlyTables(tree);
+  return { ...out, names: nameMap(tree), ...(unnamed.length > 0 ? { unnamed } : {}) };
 }
 
 export const configOf = (file: ImporterFile): ProjectConfig => ({ root: file.root });
@@ -237,5 +252,13 @@ export function parseImporterFile(json: unknown): ImporterFile {
   check(isObject(json) && json.format === IMPORTER_FORMAT, `not a ${IMPORTER_FORMAT} file`);
   if (json.name !== undefined) checkLocalized(json.name, 'name');
   checkNode(json.root, 'root', { nodes: 0 }, 0, true);
+  if (json.names !== undefined) {
+    try {
+      parseNameMap(json.names);
+    } catch (e) {
+      throw new ProjectFileError(`names: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (json.unnamed !== undefined) check(Array.isArray(json.unnamed) && json.unnamed.every((n) => typeof n === 'string'), 'unnamed must be a list of names');
   return json as unknown as ImporterFile;
 }

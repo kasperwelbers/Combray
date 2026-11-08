@@ -273,12 +273,15 @@ export interface StudioDraft {
 /**
  * The workspace draft as files: the seen structures, and the configuration. The structures are
  * saved (and published) with the configuration's corrections over them, so keys the researcher
- * says are data never reach participants; the packages kept with the platform keep theirs.
+ * says are data never reach participants; the packages kept with the platform keep theirs. The
+ * importer file also gets the name map, made over those same structures (ADR 0015).
  */
 export function toFiles(draft: StudioDraft): { structure: StructureFile; importer: ImporterFile } {
+  const seen = draft.seen ? correctedShape(draft.config, draft.seen) : { kind: draft.config.root.kind, name: '' };
   return {
-    structure: structureFile(draft.seen ? correctedShape(draft.config, draft.seen) : { kind: draft.config.root.kind, name: '' }),
-    importer: importerFile(draft.config),
+    structure: structureFile(seen),
+    // With the name map the key page places donations by, and the tables that still need a name.
+    importer: importerFile(draft.config, undefined, seen),
   };
 }
 

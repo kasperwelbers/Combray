@@ -526,7 +526,7 @@ async function publishBlock(id: string, refresh: () => Promise<void>): Promise<H
       {},
       status,
       draft.published
-        ? ' The draft has changes participants do not see yet. The studio lists what they change for donations; check it, then publish. Donations already made keep the version they were made with.'
+        ? ' The draft has changes participants do not see yet. The studio lists what they change for donations; check it, then publish. Donations already made keep their values as read with the version they were made with; exports give them the newest names.'
         : ' The draft has changes participants do not see yet. Check them in the studio, then publish.',
     ),
     action(draft.published ? 'Publish the changes' : 'Publish the project', async () => {

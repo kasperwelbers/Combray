@@ -32,6 +32,8 @@ function describe(status: number, code: string): string {
       return 'You are the only researcher with access to some of your projects.';
     case 'conflict':
       return 'This was already done, or conflicts with what is there.';
+    case 'unnamed_tables':
+      return 'Some donated tables are still called by their HTML structure. Give them a name in the studio first: exports use those names.';
     default:
       return `The server answered ${status} (${code}).`;
   }

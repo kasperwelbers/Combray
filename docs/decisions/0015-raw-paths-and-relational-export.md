@@ -36,7 +36,7 @@ Donations were already a long list of values, each with the path of real keys it
 11. **Side by side.** A researcher can read an object whose children are lists as one table, the lists side by side (`engagement` with `liked_by` and `shared_by`): row *i* holds item *i* of each list. Lists of different lengths leave the rest of the row empty; nothing is repeated. This changes only how the rows are grouped, never the paths. By default each list is a table of its own.
 12. **Every row is known by its path.** The export numbers the rows of each table per donation (`.id`), and gives every row the id of the row it is in, for every table up (`.tweets_id`). Tables with the same name from different places in the files are one table, their rows apart.
 13. **Table names stay flat**, unique per platform (`tweet_comments`, not `tweets.comments`). The name is the id and the path holds the structure; the parent ids in the export show the structure where it is analysed.
-14. **Tables need a real name.** A shown or donated table may keep the name its key gives, but a name that is only HTML structure (`div_mdl_cell`) or position is refused on publish.
+14. **Donated tables need a real name.** A table may keep the name its key or file gives, but while a donated table is called by HTML structure (`div_mdl_cell`) or a position, publishing is refused.
 
 ### Donating
 

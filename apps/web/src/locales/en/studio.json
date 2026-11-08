@@ -679,23 +679,24 @@
   "formatsInOrder": "Tried in this order: the first format that reads a value is used.",
   "changes": {
     "title": "What publishing changes for donations, compared with version {{version}}",
-    "intro": "Donations already made keep the version they were made with. These changes apply to donations made after you publish.",
+    "intro": "Donations already made keep their values as read with the version they were made with. Their names follow: exports place every donated value under the newest names, by where it was in the files. These changes apply from when you publish.",
     "kind": {
       "breaking": "Breaking",
       "narrowing": "Narrowing",
       "safe": "Safe"
     },
     "kindHelp": {
-      "breaking": "Earlier and later donations will differ for the same data: under another name, or read another way. Combine them in your analysis, by the version each donation records.",
+      "breaking": "Earlier and later donations differ: the same data is read another way (each row records its version), or earlier values sit where nothing is matched any more. Those are deprecated: exports leave them out unless asked for.",
       "narrowing": "Less is asked from now on. Earlier donations have more than later ones.",
-      "safe": "More is asked, or more is read. Earlier donations simply lack it."
+      "safe": "More is asked or read, or the same under another name. Earlier donations follow new names, and simply lack what is new."
     },
     "change": {
       "platform-added": "{{what}}: a new platform.",
       "platform-removed": "{{what}}: no longer asked for.",
       "added": "{{what}} is now asked to be donated.",
       "no-longer-donated": "{{what}} is no longer asked to be donated.",
-      "renamed": "{{what}} is renamed to {{to}}.",
+      "renamed": "{{what}} is renamed to {{to}}, in earlier donations too.",
+      "deprecated": "{{what}}: nothing matches where it was any more, so earlier values there are deprecated.",
       "read-differently": "{{what}} is read differently than before.",
       "more-formats": "{{what}} tries another date format when the earlier ones do not fit.",
       "filter-added": "{{what}}: a filter now leaves rows out.",

@@ -11,9 +11,8 @@
 import { NAME_MAP_FORMAT, type NameMap, type NameNode } from '@combray/seal/names';
 
 import { isItemNode, isKeysNode } from './config';
-import type { NodePath, ProjectNode } from './decisions';
-import { isLeaf } from './decisions';
-import { pathKey, treeNames, type TreeNames } from './derive';
+import { getNode, isLeaf, type NodePath, type ProjectNode } from './decisions';
+import { deriveTables, pathKey, treeNames, type TreeNames } from './derive';
 import { COLLAPSED_NAME, ITEM_NAME } from './shape';
 
 /** The table a list of plain values becomes in the export: `tweets_hashtags`, `record_tags` for loose ones. */
@@ -48,7 +47,8 @@ export function nameMap(root: ProjectNode): NameMap {
         out.f = field.id;
         // A list of plain values outside a side-by-side table: a table of its own in the export.
         const own = names.tables[field.table];
-        const sideBySide = own !== undefined && own.rows.length > 0 && getName(root, own.rows) !== ITEM_NAME && getName(root, own.rows) !== COLLAPSED_NAME;
+        const rows = own && own.rows.length > 0 ? getNode(root, own.rows)?.name : undefined;
+        const sideBySide = rows !== undefined && rows !== ITEM_NAME && rows !== COLLAPSED_NAME;
         if (node.name === ITEM_NAME && !sideBySide) out.l = listTable(own?.id ?? '', field.id);
       }
     } else {
@@ -61,8 +61,24 @@ export function nameMap(root: ProjectNode): NameMap {
   return { format: NAME_MAP_FORMAT, root: visit(root, []) ?? {} };
 }
 
-function getName(root: ProjectNode, path: NodePath): string | undefined {
-  let node: ProjectNode | undefined = root;
-  for (const id of path) node = node?.children?.find((c) => c.id === id);
-  return node?.name;
+/**
+ * Tables participants are asked to donate whose name says nothing but structure: given by an
+ * HTML element (`div_mdl_cell`), a position or an attribute, not by a key, a file or the
+ * researcher. Publishing is refused while there are any (ADR 0015): exports are read by name.
+ */
+export function structureOnlyTables(root: ProjectNode): string[] {
+  const names = treeNames(root);
+  const shown = new Set(deriveTables(root).flatMap((t) => (t.state === 'donate' ? [t.id] : [])));
+  const out = new Set<string>();
+  for (const table of names.tables) {
+    if (table.own || table.rows.length === 0 || !shown.has(table.id)) continue;
+    const source = table.source ? getNode(root, table.source) : undefined;
+    const parent = table.source ? getNode(root, table.source.slice(0, -1)) : undefined;
+    const name = source?.name ?? '';
+    // An HTML file names its tables; the elements inside it do not.
+    const inMarkup = parent !== undefined && parent.kind === 'element';
+    const markup = (source?.kind === 'element' || source?.kind === 'list') && inMarkup;
+    if (!source || table.source!.length === 0 || markup || /^[#@]/.test(name)) out.add(table.id);
+  }
+  return [...out];
 }

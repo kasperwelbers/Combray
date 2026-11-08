@@ -64,7 +64,7 @@ export function storeError(e: unknown): never {
     throw fail(status, code);
   }
   if (e instanceof ProjectFailure) {
-    const map = { not_found: [404, 'no_such_project'], conflict: [409, 'conflict'], invalid: [400, 'invalid'] } as const;
+    const map = { not_found: [404, 'no_such_project'], conflict: [409, 'conflict'], invalid: [400, 'invalid'], unnamed: [409, 'unnamed_tables'] } as const;
     const [status, code] = map[e.error];
     throw fail(status, code);
   }

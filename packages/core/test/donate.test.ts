@@ -125,7 +125,7 @@ describe('donationValues', () => {
     const page = (cells: string) => normalizeTree(parseMarkup('page.html', `<html><body><div class="post"><p class="title">A</p>${cells}</div></body></html>`));
     const two = page('<div class="like">x</div><div class="like">y</div>');
     const one = page('<div class="like">z</div>');
-    let tree = keyedTree(unionShape([extractShape(two), extractShape(one)]));
+    let tree = keyedTree(unionShape([extractShape(two), extractShape(one)])!);
     tree = setDecision(tree, at(tree, 'html', 'body', 'div.post', 'div.like', '[*]', '#text[0]'), 'donate');
     tree = setDecision(tree, at(tree, 'html', 'body', 'div.post', 'p.title', '#text[0]'), 'donate');
     const fromOne = donationValues(one, tree, deriveTables(tree));
