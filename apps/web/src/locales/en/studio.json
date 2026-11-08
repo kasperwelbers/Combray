@@ -704,6 +704,10 @@
       "filter-removed": "{{what}}: a filter was taken away, so more rows are donated."
     }
   },
+  "unnamed": {
+    "title": "Name these tables before publishing",
+    "intro": "These donated tables are called by their HTML structure. Exports use table names, so give each a name of its own in the platform’s tree; the key page publishes once they have one."
+  },
   "texts": {
     "intro": "Everything participants read besides the story and the consent texts, in each of the project’s languages: the labels of tables and fields, and the app’s own texts where you want your own words. Export it all, story and consent included, as one file to translate, by hand or with an AI, and read the translated file back in.",
     "save": "Save texts",
