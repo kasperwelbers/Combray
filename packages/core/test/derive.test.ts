@@ -8,7 +8,6 @@ import {
   groupTables,
   jsonToTree,
   KEY_COLUMN,
-  localize,
   outline,
   setDecision,
   toConfig,
