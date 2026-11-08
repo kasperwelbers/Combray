@@ -125,9 +125,23 @@ export interface FileManifest {
   size: number;
 }
 
-/** Rows the participant left out of their donation, by `DonationRow.key`. Encrypted. */
+/**
+ * What the participant left out of their donation (ADR 0015): rows by their hash
+ * (`DonationRow.key`), and texts. One item, a `LeftOutItem`. Encrypted.
+ */
 export interface LeftOutManifest {
   type: 'left-out';
+}
+
+/** Everything with this text is left out: in one table (by its name), or in all. */
+export interface LeaveOutRule {
+  table?: string;
+  text: string;
+}
+
+export interface LeftOutItem {
+  rows: string[];
+  rules: LeaveOutRule[];
 }
 
 /** A donation that was sent, with what is needed to withdraw it. Encrypted. */
@@ -374,14 +388,18 @@ export interface DonationOverview {
   /** Rows in the donation, and rows left out. */
   rows: number;
   leftOut: number;
+  /** The texts left out, in the order they were added, with the rows each finds now. */
+  rules: (LeaveOutRule & { tableName?: Localized; count: number })[];
 }
 
 /** A row of the donation, for review. */
 export interface DonationRow {
-  /** Stable while the uploads and the study's settings stay the same. */
+  /** What the row is (its hash): the same after a new upload of the same files or a new version. */
   key: string;
   cells: Record<string, string[]>;
   leftOut: boolean;
+  /** Left out because it contains a text that is left out (put it back by taking the text off). */
+  byText: boolean;
   /** Left out because the row it is in was. */
   withParent: boolean;
 }
@@ -465,9 +483,14 @@ export interface DataApi {
   donationRows(tableId: string, query: string, offset: number, limit: number): Promise<Page<DonationRow>>;
   /** Leave rows out of the donation, or put them back. Remembered on this device. */
   leaveOut(keys: string[], out: boolean): Promise<DonationOverview>;
-  /** Leave out every row of a table (or of all tables) that contains the text. Returns how many. */
+  /**
+   * Leave out every row of a table (or of all tables) that contains the text, in the text and in
+   * the values as they are in the files, now and in later uploads. Returns how many rows it finds.
+   */
   leaveOutMatching(tableId: string | undefined, query: string): Promise<{ count: number; overview: DonationOverview }>;
-  /** Put every left-out row back. */
+  /** Take a left-out text off again, by its place in `DonationOverview.rules`. */
+  removeRule(index: number): Promise<DonationOverview>;
+  /** Put every left-out row back, and take every text off. */
   putBackAll(): Promise<DonationOverview>;
   /**
    * Encrypt the reviewed donation to the study's key and send it. `pin` is the key fingerprint

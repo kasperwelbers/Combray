@@ -3,6 +3,7 @@
   "intro": "Kies het zipbestand dat je van een platform hebt gedownload (zoals Google Takeout of TikTok), een map, of losse bestanden. Alles wordt alleen op deze computer gelezen en bewaard.",
   "titleFor": "Je {{name}}-gegevens toevoegen",
   "introFor": "Kies het zipbestand of de map die je van {{name}} hebt gedownload. We openen alleen wat bij je {{name}}-export hoort, en alles wordt alleen op deze computer gelezen en bewaard.",
+  "replaces": "Voeg je opnieuw {{name}}-gegevens toe, dan vervangen die wat je eerder toevoegde. Wat je hebt weggelaten, blijft weggelaten.",
   "yourData": "gegevens",
   "chooseFiles": "Bestanden kiezen",
   "chooseFolder": "Een map kiezen",

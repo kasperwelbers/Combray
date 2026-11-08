@@ -19,7 +19,8 @@ type Problem = Exclude<ImportResult['status'], 'done' | 'choose'> | 'failed';
 
 /**
  * Adding data for one platform: one uploader per upload point
- * (docs/tree-decisions.md#finding-the-export-in-an-upload). When more than one place in the
+ * (docs/tree-decisions.md#finding-the-export-in-an-upload), and one upload: a new one replaces the
+ * one before (ADR 0015). When more than one place in the
  * upload fits, the participant chooses; paths are shown here only and never stored.
  */
 export function ImportCard({ point, disabled, onBusy, onDone }: Props) {
@@ -69,6 +70,7 @@ export function ImportCard({ point, disabled, onBusy, onDone }: Props) {
     <section className="card" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`}>{point ? t('import.titleFor', { name }) : t('import.title')}</h2>
       <p>{point ? t('import.introFor', { name }) : t('import.intro')}</p>
+      {point && <p className="meta">{t('import.replaces', { name })}</p>}
       {choice ? (
         <fieldset className="panel-group">
           <legend>{t('import.choose.title', { name })}</legend>
